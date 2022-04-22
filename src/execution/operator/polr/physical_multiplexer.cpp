@@ -7,7 +7,6 @@
 
 namespace duckdb {
 
-// TODO: Parametrize AdaptiveUnion with some Multiplexer hook so that it can report back the duration per path
 PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p)
     : PhysicalOperator(PhysicalOperatorType::MULTIPLEXER, move(types), estimated_cardinality),
       path_count(path_count_p) {
@@ -21,6 +20,7 @@ public:
 		path_end_timestamps.resize(path_count);
 		path_weights = vector<double>(path_count, 1.0 / path_count);
 		chunk_offset = 0;
+		last_path_run_updated = 0;
 		all_paths_initialized = false;
 	}
 
@@ -29,6 +29,8 @@ public:
 	// Note: begin timestamp can be > end. If so, the path has not been fully executed yet.
 	vector<idx_t> path_begin_timestamps;
 	vector<idx_t> path_end_timestamps;
+
+	idx_t last_path_run_updated;
 
 	// Path weights sum should be = 1
 	vector<double> path_weights;
@@ -46,8 +48,12 @@ public:
 	void UpdatePathWeight(idx_t path_idx, idx_t tuple_count) {
 		const auto now = std::chrono::system_clock::now();
 		path_end_timestamps[path_idx] = now.time_since_epoch().count();
-		input_tuple_count_per_path[path_idx] +=
-		    tuple_count; // TODO: This may be called multiple times for the same path
+
+		// Only update the number of tuples once
+		if (path_begin_timestamps[path_idx] != last_path_run_updated) {
+			last_path_run_updated = path_begin_timestamps[path_idx];
+			input_tuple_count_per_path[path_idx] += tuple_count;
+		}
 
 		// TODO: Update weights according to POLR formula now AFTER each path has been followed once
 	}
