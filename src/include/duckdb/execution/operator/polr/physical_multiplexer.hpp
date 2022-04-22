@@ -17,6 +17,7 @@ public:
 	PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p);
 
 	idx_t path_count;
+
 public:
 	unique_ptr<OperatorState> GetOperatorState(ClientContext &context) const override;
 
@@ -27,7 +28,7 @@ public:
 		return false; // TODO: Switch to parallel op once we have a stable prototype
 	}
 	bool RequiresCache() const override {
-		return false; return false; // TODO: Maybe we do want this at some point
+		return false; // TODO: Maybe we do want this at some point
 	}
 
 	string ParamsToString() const override;

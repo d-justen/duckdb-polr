@@ -24,7 +24,7 @@ unique_ptr<OperatorState> PhysicalAdaptiveUnion::GetOperatorState(ClientContext 
 }
 
 OperatorResultType PhysicalAdaptiveUnion::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-                                                  GlobalOperatorState &gstate_p,OperatorState &state_p) const {
+                                                  GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	context.thread.update_path_weight();
 	chunk.Append(input, true);
 
