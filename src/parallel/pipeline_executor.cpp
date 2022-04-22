@@ -1,4 +1,5 @@
 #include "duckdb/parallel/pipeline_executor.hpp"
+
 #include "duckdb/main/client_context.hpp"
 
 namespace duckdb {
@@ -264,15 +265,21 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			// we went back to the source: we need more input
 			return OperatorResultType::NEED_MORE_INPUT;
 		} else {
-			auto &prev_chunk =
-			    current_intermediate == initial_idx + 1 ? input : *intermediate_chunks[current_intermediate - 1];
+			auto *prev_chunk =
+			    current_intermediate == initial_idx + 1 ? &input : &*intermediate_chunks[current_intermediate - 1];
 			auto operator_idx = current_idx - 1;
 			auto current_operator = pipeline.operators[operator_idx];
+
+			// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
+			if (operator_idx > 0 && pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
+				RunPath(*prev_chunk);
+				prev_chunk = &*adaptive_union_chunk;
+			}
 
 			// if current_idx > source_idx, we pass the previous' operators output through the Execute of the current
 			// operator
 			StartOperator(current_operator);
-			auto result = current_operator->Execute(context, prev_chunk, current_chunk, *current_operator->op_state,
+			auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
 			                                        *intermediate_states[current_intermediate - 1]);
 			EndOperator(current_operator, &current_chunk);
 			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
@@ -334,6 +341,47 @@ void PipelineExecutor::EndOperator(PhysicalOperator *op, DataChunk *chunk) {
 
 	if (chunk) {
 		chunk->Verify();
+	}
+}
+
+void PipelineExecutor::RunPath(DataChunk &chunk) {
+	idx_t current_path = context.thread.current_path_idx;
+	adaptive_union_chunk->Reset();
+
+	stack<idx_t> in_process_joins;
+	idx_t current_idx = 0;
+
+	while (true) {
+		if (!in_process_joins.empty()) {
+			current_idx = in_process_joins.top();
+			in_process_joins.pop();
+		}
+
+		for (idx_t i = current_idx; i < pipeline.join_paths[current_path].size(); i++) {
+			auto &prev_chunk = i == 0 ? chunk : *join_intermediate_chunks[i - 1];
+			auto &current_chunk = *join_intermediate_chunks[i];
+			auto &current_operator = pipeline.joins[pipeline.join_paths[current_path][i]];
+
+			current_chunk.Reset();
+
+			StartOperator(current_operator);
+			auto result = current_operator->Execute(context, prev_chunk, current_chunk, *current_operator->op_state,
+			                                        *join_intermediate_states[i]);
+			EndOperator(current_operator, &current_chunk);
+
+			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
+				in_process_joins.push(i);
+			}
+		}
+
+		StartOperator(pipeline.adaptive_union);
+		pipeline.adaptive_union->Execute(context, *join_intermediate_chunks.back(), *adaptive_union_chunk,
+		                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);
+		EndOperator(pipeline.adaptive_union, &*adaptive_union_chunk);
+
+		if (in_process_joins.empty()) {
+			break;
+		}
 	}
 }
 

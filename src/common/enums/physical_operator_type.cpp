@@ -117,6 +117,10 @@ string PhysicalOperatorToString(PhysicalOperatorType type) {
 		return "INOUT_FUNCTION";
 	case PhysicalOperatorType::CREATE_TYPE:
 		return "CREATE_TYPE";
+	case PhysicalOperatorType::MULTIPLEXER:
+		return "MULTIPLEXER";
+	case PhysicalOperatorType::ADAPTIVE_UNION:
+		return "ADAPTIVE_UNION";
 	case PhysicalOperatorType::INVALID:
 		break;
 	}

@@ -50,6 +50,9 @@ public:
 	//! This flushes profiler states
 	void PullFinalize();
 
+	//! POLR related
+	void RunPath(DataChunk &chunk);
+
 private:
 	//! The pipeline to process
 	Pipeline &pipeline;
@@ -62,6 +65,13 @@ private:
 	vector<unique_ptr<DataChunk>> intermediate_chunks;
 	//! Intermediate states for the operators
 	vector<unique_ptr<OperatorState>> intermediate_states;
+
+	//! POLR related
+	// TODO: Initialize these
+	vector<unique_ptr<DataChunk>> join_intermediate_chunks;
+	vector<unique_ptr<OperatorState>> join_intermediate_states;
+	unique_ptr<DataChunk> adaptive_union_chunk;
+	unique_ptr<OperatorState> adaptive_union_state;
 
 	//! The local source state
 	unique_ptr<LocalSourceState> local_source_state;

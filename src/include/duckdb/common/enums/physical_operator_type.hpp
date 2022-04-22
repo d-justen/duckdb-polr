@@ -93,7 +93,13 @@ enum class PhysicalOperatorType : uint8_t {
 	EXPORT,
 	SET,
 	LOAD,
-	INOUT_FUNCTION
+	INOUT_FUNCTION,
+
+	// -----------------------------
+	// POLR
+	// -----------------------------
+	MULTIPLEXER,
+	ADAPTIVE_UNION
 };
 
 string PhysicalOperatorToString(PhysicalOperatorType type);
