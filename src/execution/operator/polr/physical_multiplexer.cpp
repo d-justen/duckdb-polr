@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <map>
 
 namespace duckdb {
 
@@ -19,6 +20,7 @@ public:
 		path_begin_timestamps.resize(path_count);
 		path_end_timestamps.resize(path_count);
 		path_weights = vector<double>(path_count, 1.0 / path_count);
+		ns_per_tuple = vector<double>(path_count, -1);
 		chunk_offset = 0;
 		last_path_run_updated = 0;
 		all_paths_initialized = false;
@@ -34,6 +36,7 @@ public:
 
 	// Path weights sum should be = 1
 	vector<double> path_weights;
+	vector<double> ns_per_tuple;
 
 	// If we only emitted a slice of the current chunk, we set this offset
 	idx_t chunk_offset;
@@ -47,7 +50,7 @@ public:
 	// Maybe this can even be called by the executor after running the path??
 	void UpdatePathWeight(idx_t path_idx, idx_t tuple_count) {
 		const auto now = std::chrono::system_clock::now();
-		path_end_timestamps[path_idx] = now.time_since_epoch().count();
+		path_end_timestamps[path_idx] = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 
 		// Only update the number of tuples once
 		if (path_begin_timestamps[path_idx] != last_path_run_updated) {
@@ -55,7 +58,34 @@ public:
 			input_tuple_count_per_path[path_idx] += tuple_count;
 		}
 
+		ns_per_tuple[path_idx] = (path_end_timestamps[path_idx] - static_cast<double>(path_begin_timestamps[path_idx]))
+		                         / input_tuple_count_per_path[path_idx];
+
 		// TODO: Update weights according to POLR formula now AFTER each path has been followed once
+		if (all_paths_initialized) {
+			std::map<double, idx_t> sorted_performance_idxs;
+
+			for (idx_t i = 0; i < ns_per_tuple.size(); i++) {
+				sorted_performance_idxs.emplace(ns_per_tuple[i], i);
+			}
+
+			const double best_performance = sorted_performance_idxs.begin()->first;
+			const double performance_target = best_performance * (1 + regret_budget);
+
+			for (auto it = sorted_performance_idxs.rbegin(); it != sorted_performance_idxs.rend() - 1; ++it) {
+				auto faster_path = it + 1;
+				auto slower_path = it;
+
+				double target = faster_path->first * (1 + regret_budget);
+				double slower_path_weight = (faster_path->first - target) / (faster_path->first - slower_path->first);
+				double faster_path_weight = 1 - slower_path_weight;
+
+				// TODO: Next, update the next faster path with the last two ones combined
+				// Save target as last_target outside of the loop
+				// Apply old path weight * new path weight on all slower paths
+			}
+		}
+
 	}
 };
 
@@ -83,7 +113,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 					state.all_paths_initialized = true;
 				}
 
-				state.path_begin_timestamps[i] = std::chrono::system_clock::now().time_since_epoch().count();
+				state.path_begin_timestamps[i] = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 				if (state.chunk_offset == input.size()) {
 					return OperatorResultType::NEED_MORE_INPUT;
@@ -123,7 +153,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 
 	context.thread.current_path_input_tuple_count = output_tuple_count;
 	state.path_begin_timestamps[context.thread.current_path_idx] =
-	    std::chrono::system_clock::now().time_since_epoch().count();
+	    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
 	if (has_remaining_tuples) {
 		state.chunk_offset += output_tuple_count;
