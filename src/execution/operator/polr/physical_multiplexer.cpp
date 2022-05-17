@@ -47,12 +47,14 @@ public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
 	}
 
-	// Maybe this can even be called by the executor after running the path??
 	void UpdatePathWeight(idx_t path_idx, idx_t tuple_count) {
 		const auto now = std::chrono::system_clock::now();
 		path_end_timestamps[path_idx] = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
 
-		// Only update the number of tuples once
+		// UpdatePathWeight might be called multiple times for the same path. Therefore, we only want to set the input
+		// tuple count once. However, this breaks if we run a path with multiple chunks, as it doesn't register the
+		// new tuples then.
+		// TODO: Make sure UpdatePathWeight gets called exactly once per path run, so that we don't have to deal with this
 		if (path_begin_timestamps[path_idx] != last_path_run_updated) {
 			last_path_run_updated = path_begin_timestamps[path_idx];
 			input_tuple_count_per_path[path_idx] += tuple_count;
@@ -61,28 +63,34 @@ public:
 		ns_per_tuple[path_idx] = (path_end_timestamps[path_idx] - static_cast<double>(path_begin_timestamps[path_idx]))
 		                         / input_tuple_count_per_path[path_idx];
 
-		// TODO: Update weights according to POLR formula now AFTER each path has been followed once
+		// After all paths are initialized (i.e. they were run once), we want to update the path weights
 		if (all_paths_initialized) {
+			// Order ns_per_tuples ascending by emplacing them in an (ordered) map, with the time per tuple as key
+			// and path index as value
 			std::map<double, idx_t> sorted_performance_idxs;
 
 			for (idx_t i = 0; i < ns_per_tuple.size(); i++) {
 				sorted_performance_idxs.emplace(ns_per_tuple[i], i);
 			}
 
-			const double best_performance = sorted_performance_idxs.begin()->first;
-			const double performance_target = best_performance * (1 + regret_budget);
+			// Implementation of Bottom-up bounded regret
+			// Initialize path weights with 1, so that we can multiply the inits with new path weights
+			path_weights = std::vector<double>(ns_per_tuple.size(), 1);
+			double bottom = sorted_performance_idxs.rbegin()->first;
 
-			for (auto it = sorted_performance_idxs.rbegin(); it != sorted_performance_idxs.rend() - 1; ++it) {
-				auto faster_path = it + 1;
-				auto slower_path = it;
+			for (auto it = std::next(sorted_performance_idxs.rbegin(), 1); it != sorted_performance_idxs.rend(); ++it) {
+				double next_bottom = it->first * (1 + regret_budget);
+				double path_weight_bottom = (it->first - next_bottom) / (it->first - bottom);
 
-				double target = faster_path->first * (1 + regret_budget);
-				double slower_path_weight = (faster_path->first - target) / (faster_path->first - slower_path->first);
-				double faster_path_weight = 1 - slower_path_weight;
+				// Multiply slower paths backwards with the bottom path weight
+				for (auto it2 = std::prev(it, 1); it2 != sorted_performance_idxs.rbegin(); --it2) {
+					path_weights[it2->second] *= path_weight_bottom;
+				}
 
-				// TODO: Next, update the next faster path with the last two ones combined
-				// Save target as last_target outside of the loop
-				// Apply old path weight * new path weight on all slower paths
+				// Set weight of the current path
+				path_weights[it->second] = 1 - path_weight_bottom;
+
+				bottom = next_bottom;
 			}
 		}
 
