@@ -132,19 +132,40 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		}
 	}
 
-	// TODO: Clever way to decide on one path and how many tuples should go there
-	// For now we choose the highest weighted path and send as many tuples as possible
-	context.thread.current_path_idx =
-	    std::max_element(state.path_weights.begin(), state.path_weights.end()) - state.path_weights.begin();
-	idx_t output_tuple_count = input.size() - state.chunk_offset;
+	idx_t processed_tuple_count = std::accumulate(state.input_tuple_count_per_path.cbegin(),
+	                                              state.input_tuple_count_per_path.cend(), 0);
 
-	bool has_remaining_tuples = state.chunk_offset + output_tuple_count < input.size();
-	if (state.chunk_offset == 0 && !has_remaining_tuples) {
-		chunk.Reference(input);
+	idx_t next_path_idx = -1;
+	double sent_to_path_ratio = std::numeric_limits<double>::max();
+	double max_weight = 0;
+	bool next_path_has_max_weight = false;
+
+	for (idx_t i = 0; i < state.path_weights.size(); ++i) {
+		const double current_ratio = (state.input_tuple_count_per_path[i] / processed_tuple_count) / state.path_weights[i];
+		if (current_ratio < sent_to_path_ratio) {
+			next_path_idx = i;
+			sent_to_path_ratio = current_ratio;
+
+			// Let's send more tuples, if we happen to choose the fastest path -> mark it here first
+			if (state.path_weights[i] > max_weight) {
+				max_weight = state.path_weights[i];
+				next_path_has_max_weight = true;
+			} else {
+				next_path_has_max_weight = false;
+			}
+		}
+	}
+
+	idx_t output_tuple_count = 0;
+	// We want to process the whole chunk if we are on the fastest path
+	if (next_path_has_max_weight) {
+		output_tuple_count = input.size() - state.chunk_offset;
 	} else {
-		// Set to remaining input tuple count if output_tuple_count > remainder
-		output_tuple_count = has_remaining_tuples ? output_tuple_count : input.size() - state.chunk_offset;
+		output_tuple_count = std::min(input.size() - state.chunk_offset,
+		                              static_cast<idx_t>(processed_tuple_count * state.path_weights[next_path_idx] - state.input_tuple_count_per_path[next_path_idx]));
+	}
 
+	if (input.size() - state.chunk_offset > 0) {
 		SelectionVector sel;
 		sel.Initialize(output_tuple_count);
 
@@ -155,15 +176,16 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		chunk.Slice(input, sel, output_tuple_count);
 	}
 
+	context.thread.current_path_idx = next_path_idx;
+	context.thread.current_path_input_tuple_count = output_tuple_count;
 	context.thread.update_path_weight = [&]() {
 		state.UpdatePathWeight(context.thread.current_path_idx, context.thread.current_path_input_tuple_count);
 	};
 
-	context.thread.current_path_input_tuple_count = output_tuple_count;
 	state.path_begin_timestamps[context.thread.current_path_idx] =
 	    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 
-	if (has_remaining_tuples) {
+	if (input.size() - state.chunk_offset - output_tuple_count > 0) {
 		state.chunk_offset += output_tuple_count;
 		return OperatorResultType::HAVE_MORE_OUTPUT;
 	} else {

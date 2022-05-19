@@ -380,6 +380,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		EndOperator(pipeline.adaptive_union, &*adaptive_union_chunk);
 
 		if (in_process_joins.empty()) {
+			context.thread.update_path_weight();
 			break;
 		}
 	}
