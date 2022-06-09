@@ -474,6 +474,15 @@ void Executor::BuildPipelines(PhysicalOperator *op, Pipeline *current) {
 			pipeline_child = op->children[1].get();
 			// on the LHS (probe child), the operator becomes a regular operator
 			current->operators.push_back(op);
+
+			// TODO(d-justen): THIS is where we fill the pipeline's join vectors
+			// If client_context->polr
+			//   Do not push back op
+			//   Check if operators already contain a multiplexer
+			//   If not, push back multiplexer
+			//   Same for adaptive union
+			//   ...?
+
 			if (op->IsSource()) {
 				// FULL or RIGHT outer join
 				// schedule a scan of the node as a child pipeline
