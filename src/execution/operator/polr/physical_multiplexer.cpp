@@ -69,7 +69,6 @@ public:
 			// and path index as value
 			std::map<double, idx_t> sorted_performance_idxs;
 
-			sorted_performance_idxs.reserve(ns_per_tuple.size());
 			for (idx_t i = 0; i < ns_per_tuple.size(); i++) {
 				sorted_performance_idxs.emplace(ns_per_tuple[i], i);
 			}
