@@ -54,7 +54,7 @@ public:
 		// UpdatePathWeight might be called multiple times for the same path. Therefore, we only want to set the input
 		// tuple count once. However, this breaks if we run a path with multiple chunks, as it doesn't register the
 		// new tuples then.
-		// TODO: Make sure UpdatePathWeight gets called exactly once per path run, so that we don't have to deal with this
+		// FIXME: Make sure UpdatePathWeight gets called exactly once per path run, so that we don't have to deal with this
 		if (path_begin_timestamps[path_idx] != last_path_run_updated) {
 			last_path_run_updated = path_begin_timestamps[path_idx];
 			input_tuple_count_per_path[path_idx] += tuple_count;
@@ -69,6 +69,7 @@ public:
 			// and path index as value
 			std::map<double, idx_t> sorted_performance_idxs;
 
+			sorted_performance_idxs.reserve(ns_per_tuple.size());
 			for (idx_t i = 0; i < ns_per_tuple.size(); i++) {
 				sorted_performance_idxs.emplace(ns_per_tuple[i], i);
 			}
