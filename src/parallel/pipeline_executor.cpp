@@ -2,10 +2,41 @@
 
 #include "duckdb/main/client_context.hpp"
 
+#include <iostream>
+
 namespace duckdb {
 
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread) {
+
+	if (pipeline.source) std::cout << "source: " << pipeline.source->GetName() << std::endl;
+	std::cout << "ops:" << std::endl;
+
+	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
+		std::cout << "\t[" << i << "] " << pipeline.operators[i]->GetName() << std::endl;
+	}
+
+	if (pipeline.sink) std::cout << "sink: " << pipeline.sink->GetName() << std::endl << std::endl;
+
+	if (context.client.enable_polr) {
+		pipeline.BuildPOLRPaths();
+
+		if (!pipeline.joins.empty()) {
+			for (idx_t i = 0; i < pipeline.joins.size(); i++) {
+				auto chunk = make_unique<DataChunk>();
+				chunk->Initialize(pipeline.joins[i]->GetTypes());
+				join_intermediate_chunks.push_back(move(chunk));
+
+				join_intermediate_states.push_back(pipeline.joins[i]->GetOperatorState(context.client));
+			}
+
+			adaptive_union_chunk = make_unique<DataChunk>();
+			adaptive_union_chunk->Initialize(pipeline.joins.back()->GetTypes());
+
+			adaptive_union_state = pipeline.adaptive_union->GetOperatorState(context.client);
+		}
+	}
+
 	D_ASSERT(pipeline.source_state);
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 	if (pipeline.sink) {
@@ -73,12 +104,6 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 }
 
 void PipelineExecutor::Execute() {
-	std::cout << "Execute a pipeline, source_cardinality: " << pipeline.source->estimated_cardinality << ", source: " << pipeline.source->GetName() <<
-	    ", sink: " << pipeline.sink->GetName() << std::endl;
-	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
-		std::cout << i << ": " << static_cast<int>(pipeline.operators[i]->type);
-	}
-
 	Execute(NumericLimits<idx_t>::Maximum());
 }
 

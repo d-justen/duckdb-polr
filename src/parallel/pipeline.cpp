@@ -261,6 +261,18 @@ void Pipeline::BuildPOLRPaths() {
 		    make_unique<PhysicalAdaptiveUnion>(joins.back()->types, joins.back()->estimated_cardinality));
 
 		adaptive_union = static_cast<PhysicalAdaptiveUnion *>(joins.front()->children.back().get());
+
+		join_paths = {{0, 1}, {1, 0}};
+
+		std::cout << "Built POLR paths." << std::endl;
+		if (source) std::cout << "source: " << source->GetName() << std::endl;
+		std::cout << "ops:" << std::endl;
+
+		for (idx_t i = 0; i < operators.size(); i++) {
+			std::cout << "\t[" << i << "] " << operators[i]->GetName() << std::endl;
+		}
+
+		if (sink) std::cout << "sink: " << sink->GetName() << std::endl << std::endl;
 	}
 }
 

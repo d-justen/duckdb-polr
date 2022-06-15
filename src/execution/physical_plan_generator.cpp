@@ -5,6 +5,8 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/planner/expression/bound_function_expression.hpp"
 
+#include <iostream>
+
 namespace duckdb {
 
 class DependencyExtractor : public LogicalOperatorVisitor {
@@ -46,6 +48,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(unique_ptr<Logica
 	// then create the main physical plan
 	profiler.StartPhase("create_plan");
 	auto plan = CreatePlan(*op);
+	std::cout << plan->ToString() << std::endl;
 	profiler.EndPhase();
 	return plan;
 }

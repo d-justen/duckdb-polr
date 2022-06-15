@@ -81,6 +81,8 @@ public:
 	//! The client configuration
 	ClientConfig config;
 
+	//! Enable POLR
+	bool enable_polr = false;
 public:
 	DUCKDB_API Transaction &ActiveTransaction() {
 		return transaction.ActiveTransaction();

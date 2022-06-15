@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <map>
+#include <iostream>
 
 namespace duckdb {
 
@@ -103,12 +104,14 @@ unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ClientContext &c
 
 OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                 GlobalOperatorState &gstate_p, OperatorState &state_p) const {
+	std::cout << "Starting multiplexer..." << std::endl;
 	auto &state = (MultiplexerState &)state_p;
 
 	// Initialize each path with one tuple to get initial weights
 	if (!state.all_paths_initialized) {
 		for (idx_t i = 0; i < state.path_begin_timestamps.size(); i++) {
 			if (state.path_begin_timestamps[i] == 0) {
+				std::cout << "Initializing path " << i << std::endl;
 				context.thread.current_path_idx = i;
 
 				SelectionVector sel(1);
@@ -122,7 +125,6 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 				}
 
 				state.path_begin_timestamps[i] = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-
 				if (state.chunk_offset == input.size()) {
 					return OperatorResultType::NEED_MORE_INPUT;
 				} else {
