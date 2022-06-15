@@ -38,8 +38,8 @@ int main() {
 	PhysicalTableScan scan(types, TableScanFunction::GetFunction(), make_unique<TableScanBindData>(table),
 	                               {0, 1}, {"a, b"}, make_unique<TableFilterSet>(), 1000);
 
-	auto& executor = context->GetExecutor();
-	executor.Initialize(&scan);
+	//auto& executor = context->GetExecutor();
+	//executor.Initialize(&scan);
 	// executor->ExecuteTask();*/
 
 

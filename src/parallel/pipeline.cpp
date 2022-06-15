@@ -1,5 +1,7 @@
 #include "duckdb/parallel/pipeline.hpp"
 
+#include <iostream>
+
 #include "duckdb/common/printer.hpp"
 #include "duckdb/execution/executor.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -18,6 +20,7 @@
 
 #include "duckdb/common/algorithm.hpp"
 #include "duckdb/common/tree_renderer.hpp"
+#include "duckdb/execution/operator/polr/physical_multiplexer.hpp"
 
 namespace duckdb {
 
@@ -222,6 +225,43 @@ vector<PhysicalOperator *> Pipeline::GetOperators() const {
 		result.push_back(sink);
 	}
 	return result;
+}
+
+void Pipeline::BuildPOLRPaths() {
+	vector<idx_t> hash_join_idxs;
+
+	for (idx_t i = 0; i < operators.size(); i++) {
+		if (operators[i]->type == PhysicalOperatorType::HASH_JOIN) {
+			// We only want joins that directly follow each other
+			if (hash_join_idxs.empty() || hash_join_idxs.back() == i-1) {
+				hash_join_idxs.push_back(i);
+			}
+			else {
+				break;
+			}
+		}
+	}
+
+	// TODO: Support more than two joins
+	if (hash_join_idxs.size() == 2) {
+		// Fill join paths
+		for (auto hash_join_idx : hash_join_idxs) {
+			joins.push_back(static_cast<PhysicalHashJoin *>(operators[hash_join_idx]));
+		}
+
+		// Remove joins from operator vector
+		operators.erase(operators.begin() + hash_join_idxs.front(), operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
+
+		// Fill in multiplexer
+		// TODO: Let something else own this multiplexer
+		joins.front()->children.push_back(make_unique<PhysicalMultiplexer>(joins.front()->types, joins.front()->estimated_cardinality, 2));
+		operators.insert(operators.begin() + hash_join_idxs.front(), joins.front()->children.back().get());
+
+		joins.front()->children.push_back(
+		    make_unique<PhysicalAdaptiveUnion>(joins.back()->types, joins.back()->estimated_cardinality));
+
+		adaptive_union = static_cast<PhysicalAdaptiveUnion *>(joins.front()->children.back().get());
+	}
 }
 
 } // namespace duckdb

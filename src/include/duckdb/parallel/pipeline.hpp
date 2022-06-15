@@ -61,6 +61,9 @@ public:
 		return sink;
 	}
 
+	//! POLR related
+	void BuildPOLRPaths();
+
 private:
 	//! Whether or not the pipeline has been readied
 	bool ready;

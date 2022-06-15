@@ -73,6 +73,12 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 }
 
 void PipelineExecutor::Execute() {
+	std::cout << "Execute a pipeline, source_cardinality: " << pipeline.source->estimated_cardinality << ", source: " << pipeline.source->GetName() <<
+	    ", sink: " << pipeline.sink->GetName() << std::endl;
+	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
+		std::cout << i << ": " << static_cast<int>(pipeline.operators[i]->type);
+	}
+
 	Execute(NumericLimits<idx_t>::Maximum());
 }
 
