@@ -251,6 +251,7 @@ OperatorResultType PhysicalHashJoin::Execute(ExecutionContext &context, DataChun
 	// perform the actual probe
 	state.scan_structure = sink.hash_table->Probe(state.join_keys);
 	state.scan_structure->Next(state.join_keys, input, chunk);
+
 	return OperatorResultType::HAVE_MORE_OUTPUT;
 }
 

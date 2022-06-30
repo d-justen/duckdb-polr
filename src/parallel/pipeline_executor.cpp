@@ -304,6 +304,8 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
 			if (operator_idx > 0 && pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
 				RunPath(*prev_chunk);
+				std::cout << "Finished path run" << std::endl;
+				std::cout << adaptive_union_chunk->size() << " output tuples" << std::endl;
 				prev_chunk = &*adaptive_union_chunk;
 			}
 
@@ -379,40 +381,59 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 	idx_t current_path = context.thread.current_path_idx;
 	adaptive_union_chunk->Reset();
 
+	std::cout << "Running path " << current_path << std::endl;
+
 	stack<idx_t> in_process_joins;
 	idx_t current_idx = 0;
 
+	// this loop never ends :(
 	while (true) {
-		if (!in_process_joins.empty()) {
-			current_idx = in_process_joins.top();
-			in_process_joins.pop();
+		auto *prev_chunk = current_idx == 0 ? &chunk : &*join_intermediate_chunks[current_idx - 1];
+		auto &current_chunk = *join_intermediate_chunks[current_idx];
+		auto current_operator = pipeline.joins[pipeline.join_paths[current_path][current_idx]];
+		current_chunk.Reset();
+
+		std::cout << "Execute join #" << current_idx << std::endl;
+		StartOperator(current_operator);
+		auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
+		                                        *join_intermediate_states[current_idx]);
+		EndOperator(current_operator, &current_chunk);
+
+		if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
+			// more data remains in this operator
+			// push in-process marker
+			in_process_joins.push(current_idx);
 		}
 
-		for (idx_t i = current_idx; i < pipeline.join_paths[current_path].size(); i++) {
-			auto &prev_chunk = i == 0 ? chunk : *join_intermediate_chunks[i - 1];
-			auto &current_chunk = *join_intermediate_chunks[i];
-			auto &current_operator = pipeline.joins[pipeline.join_paths[current_path][i]];
+		current_chunk.Verify();
+		// CacheChunk(current_chunk, operator_idx);
 
-			current_chunk.Reset();
-
-			StartOperator(current_operator);
-			auto result = current_operator->Execute(context, prev_chunk, current_chunk, *current_operator->op_state,
-			                                        *join_intermediate_states[i]);
-			EndOperator(current_operator, &current_chunk);
-
-			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
-				in_process_joins.push(i);
+		if (current_chunk.size() == 0) {
+			// no output from this operator!
+			if (!in_process_joins.empty()) {
+				current_idx = in_process_joins.top();
+				in_process_joins.pop();
+				continue;
 			}
-		}
+		} else {
+			// we got output! continue to the next operator
+			current_idx++;
+			if (current_idx > pipeline.joins.size()) {
+				std::cout << "Execute adaptive union" << std::endl;
+				StartOperator(pipeline.adaptive_union);
+				pipeline.adaptive_union->Execute(context, *join_intermediate_chunks.back(), *adaptive_union_chunk,
+				                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);
+				EndOperator(pipeline.adaptive_union, &*adaptive_union_chunk);
 
-		StartOperator(pipeline.adaptive_union);
-		pipeline.adaptive_union->Execute(context, *join_intermediate_chunks.back(), *adaptive_union_chunk,
-		                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);
-		EndOperator(pipeline.adaptive_union, &*adaptive_union_chunk);
-
-		if (in_process_joins.empty()) {
-			context.thread.update_path_weight();
-			break;
+				if (!in_process_joins.empty()) {
+					current_idx = in_process_joins.top();
+					in_process_joins.pop();
+					continue;
+				} else {
+					// TODO Update weights here
+					break;
+				}
+			}
 		}
 	}
 }

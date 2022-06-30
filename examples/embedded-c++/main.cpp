@@ -32,9 +32,11 @@ int main() {
 		context->Query("INSERT INTO table_c VALUES (" + std::to_string(i) + ", " + std::to_string(i + static_cast<idx_t>(3.99 * table_base_size)) + ")", false);
 	}
 
-	std::cout << "\x1B[2J\x1B[H";
+	context->Query("COPY table_a TO 'table_a.csv' (HEADER, DELIMITER ',')", false);
+	context->Query("COPY table_b TO 'table_b.csv' (HEADER, DELIMITER ',')", false);
+	context->Query("COPY table_c TO 'table_c.csv' (HEADER, DELIMITER ',')", false);
 
-	context->enable_polr = true;
+	context->enable_polr = false;
 
 	auto result = context->Query("SELECT * FROM table_a, table_b, table_c WHERE table_a.a_a = table_b.b_a AND table_a.a_b = table_c.c_b", false);
 	result->Print();

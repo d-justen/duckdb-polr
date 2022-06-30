@@ -181,6 +181,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	context.thread.current_path_idx = next_path_idx;
 	context.thread.current_path_input_tuple_count = output_tuple_count;
 	context.thread.update_path_weight = [&]() {
+		std::cout << "in lambda now..." << std::endl;
 		state.UpdatePathWeight(context.thread.current_path_idx, context.thread.current_path_input_tuple_count);
 	};
 
