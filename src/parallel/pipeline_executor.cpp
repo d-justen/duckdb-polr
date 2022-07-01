@@ -18,7 +18,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 
 	if (pipeline.sink) std::cout << "sink: " << pipeline.sink->GetName() << std::endl << std::endl;
 
-	if (context.client.enable_polr) {
+	if (context.client.config.enable_polr) {
 		pipeline.BuildPOLRPaths();
 
 		if (!pipeline.joins.empty()) {
@@ -386,14 +386,13 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 	stack<idx_t> in_process_joins;
 	idx_t current_idx = 0;
 
-	// this loop never ends :(
 	while (true) {
+		std::cout << i++ << std::endl;
 		auto *prev_chunk = current_idx == 0 ? &chunk : &*join_intermediate_chunks[current_idx - 1];
 		auto &current_chunk = *join_intermediate_chunks[current_idx];
 		auto current_operator = pipeline.joins[pipeline.join_paths[current_path][current_idx]];
 		current_chunk.Reset();
 
-		std::cout << "Execute join #" << current_idx << std::endl;
 		StartOperator(current_operator);
 		auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
 		                                        *join_intermediate_states[current_idx]);
@@ -414,11 +413,13 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 				current_idx = in_process_joins.top();
 				in_process_joins.pop();
 				continue;
+			} else {
+				break;
 			}
 		} else {
 			// we got output! continue to the next operator
 			current_idx++;
-			if (current_idx > pipeline.joins.size()) {
+			if (current_idx >= pipeline.joins.size()) {
 				std::cout << "Execute adaptive union" << std::endl;
 				StartOperator(pipeline.adaptive_union);
 				pipeline.adaptive_union->Execute(context, *join_intermediate_chunks.back(), *adaptive_union_chunk,
@@ -430,12 +431,14 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 					in_process_joins.pop();
 					continue;
 				} else {
-					// TODO Update weights here
 					break;
 				}
 			}
 		}
 	}
+
+	// TODO Or update the weights here?
+	// thread.update_path_weight();
 }
 
 } // namespace duckdb

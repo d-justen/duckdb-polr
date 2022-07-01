@@ -53,6 +53,9 @@ struct ClientConfig {
 	//! elements)
 	idx_t perfect_ht_threshold = 12;
 
+	//! Enable POLR
+	bool enable_polr = false;
+
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;
 

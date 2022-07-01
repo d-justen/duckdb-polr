@@ -107,6 +107,11 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	std::cout << "Starting multiplexer..." << std::endl;
 	auto &state = (MultiplexerState &)state_p;
 
+	// TODO move this
+	if (state.path_begin_timestamps[0] != 0) {
+		state.UpdatePathWeight(context.thread.current_path_idx, context.thread.current_path_input_tuple_count);
+	}
+
 	// Initialize each path with one tuple to get initial weights
 	if (!state.all_paths_initialized) {
 		for (idx_t i = 0; i < state.path_begin_timestamps.size(); i++) {
