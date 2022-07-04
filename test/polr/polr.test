@@ -11,8 +11,11 @@ CREATE TABLE table_b AS SELECT * FROM read_csv_auto('test/polr/data/table_b.csv'
 statement ok
 CREATE TABLE table_c AS SELECT * FROM read_csv_auto('test/polr/data/table_c.csv')
 
-# statement ok
-# PRAGMA enable_polr
+statement ok
+PRAGMA enable_polr
+
+statement ok
+PRAGMA disable_profiling
 
 # row-wise
 query IIIIII

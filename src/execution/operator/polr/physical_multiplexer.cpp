@@ -148,6 +148,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	bool next_path_has_max_weight = false;
 
 	for (idx_t i = 0; i < state.path_weights.size(); ++i) {
+		std::cout << "path " << i << ": " << state.path_weights[i] << "\t|\t";
 		const double current_ratio = (state.input_tuple_count_per_path[i] / processed_tuple_count) / state.path_weights[i];
 		if (current_ratio < sent_to_path_ratio) {
 			next_path_idx = i;
@@ -162,6 +163,8 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 			}
 		}
 	}
+
+	std::cout << std::endl;
 
 	idx_t output_tuple_count = 0;
 	// We want to process the whole chunk if we are on the fastest path

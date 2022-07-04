@@ -387,15 +387,16 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 	idx_t current_idx = 0;
 
 	while (true) {
-		std::cout << i++ << std::endl;
 		auto *prev_chunk = current_idx == 0 ? &chunk : &*join_intermediate_chunks[current_idx - 1];
 		auto &current_chunk = *join_intermediate_chunks[current_idx];
-		auto current_operator = pipeline.joins[pipeline.join_paths[current_path][current_idx]];
 		current_chunk.Reset();
+
+		auto current_operator = pipeline.joins[pipeline.join_paths[current_path][current_idx]];
+		auto &current_state = join_intermediate_states[pipeline.join_paths[current_path][current_idx]];
 
 		StartOperator(current_operator);
 		auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
-		                                        *join_intermediate_states[current_idx]);
+		                                        *current_state);
 		EndOperator(current_operator, &current_chunk);
 
 		if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
