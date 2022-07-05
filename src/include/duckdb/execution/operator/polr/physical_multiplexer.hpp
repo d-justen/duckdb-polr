@@ -24,6 +24,9 @@ public:
 	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
+	void FinalizePathRun(OperatorState &state_p) const;
+	idx_t GetCurrentPathIndex(OperatorState &state_p) const;
+
 	bool ParallelOperator() const override {
 		return false; // TODO: Switch to parallel op once we have a stable prototype
 	}

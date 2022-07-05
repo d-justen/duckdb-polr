@@ -253,33 +253,19 @@ void Pipeline::BuildPOLRPaths() {
 		operators.erase(operators.begin() + hash_join_idxs.front(), operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
 
 		// Fill in multiplexer
-		// TODO: Let something else own this multiplexer
-		// TODO: Check types again. Do they have to change if the order changes?
 		auto prev_types = joins.front()->children[0]->GetTypes();
 
-		auto multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->estimated_cardinality, 2);
+		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality, 2);
 		multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
-		joins.front()->children.push_back(move(multiplexer));
+		multiplexer_idx = hash_join_idxs.front();
+		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
 
-		operators.insert(operators.begin() + hash_join_idxs.front(), joins.front()->children.back().get());
-
-		joins.front()->children.push_back(
-		    make_unique<PhysicalAdaptiveUnion>(joins.back()->types, joins.back()->estimated_cardinality));
-
-		adaptive_union = static_cast<PhysicalAdaptiveUnion *>(joins.front()->children.back().get());
+		adaptive_union = make_unique<PhysicalAdaptiveUnion>(joins.back()->types, joins.back()->estimated_cardinality);
 		adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
 		join_paths = {{0, 1}, {1, 0}};
 
 		std::cout << "Built POLR paths." << std::endl;
-		if (source) std::cout << "source: " << source->GetName() << std::endl;
-		std::cout << "ops:" << std::endl;
-
-		for (idx_t i = 0; i < operators.size(); i++) {
-			std::cout << "\t[" << i << "] " << operators[i]->GetName() << std::endl;
-		}
-
-		if (sink) std::cout << "sink: " << sink->GetName() << std::endl << std::endl;
 	}
 }
 

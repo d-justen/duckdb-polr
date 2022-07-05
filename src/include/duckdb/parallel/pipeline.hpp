@@ -11,6 +11,7 @@
 #include "duckdb/common/unordered_set.hpp"
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/execution/operator/polr/physical_adaptive_union.hpp"
+#include "duckdb/execution/operator/polr/physical_multiplexer.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/parallel/parallel_state.hpp"
@@ -75,7 +76,9 @@ private:
 	//! POLR related
 	vector<PhysicalHashJoin *> joins;
 	vector<vector<idx_t>> join_paths; // e.g., [2, 0, 1] -> joins[2], then joins[0], then joins[1]
-	PhysicalAdaptiveUnion *adaptive_union;
+	idx_t multiplexer_idx;
+	std::unique_ptr<PhysicalMultiplexer> multiplexer;
+	std::unique_ptr<PhysicalAdaptiveUnion> adaptive_union;
 
 	//! The sink (i.e. destination) for data; this is e.g. a hash table to-be-built
 	PhysicalOperator *sink;

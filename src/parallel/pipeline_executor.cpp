@@ -8,16 +8,7 @@ namespace duckdb {
 
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread) {
-
-	if (pipeline.source) std::cout << "source: " << pipeline.source->GetName() << std::endl;
-	std::cout << "ops:" << std::endl;
-
-	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
-		std::cout << "\t[" << i << "] " << pipeline.operators[i]->GetName() << std::endl;
-	}
-
-	if (pipeline.sink) std::cout << "sink: " << pipeline.sink->GetName() << std::endl << std::endl;
-
+	// TODO: Move this another place as one pipeline has multiple pipeline executors
 	if (context.client.config.enable_polr) {
 		pipeline.BuildPOLRPaths();
 
@@ -25,14 +16,13 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			for (idx_t i = 0; i < pipeline.joins.size(); i++) {
 				auto chunk = make_unique<DataChunk>();
 				chunk->Initialize(pipeline.joins[i]->GetTypes());
-				join_intermediate_chunks.push_back(move(chunk));
 
+				join_intermediate_chunks.push_back(move(chunk));
 				join_intermediate_states.push_back(pipeline.joins[i]->GetOperatorState(context.client));
 			}
 
 			adaptive_union_chunk = make_unique<DataChunk>();
 			adaptive_union_chunk->Initialize(pipeline.joins.back()->GetTypes());
-
 			adaptive_union_state = pipeline.adaptive_union->GetOperatorState(context.client);
 		}
 	}
@@ -52,6 +42,11 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		chunk->Initialize(prev_operator->GetTypes());
 		intermediate_chunks.push_back(move(chunk));
 		intermediate_states.push_back(current_operator->GetOperatorState(context.client));
+
+		if (i == pipeline.multiplexer_idx) {
+			multiplexer_state = &*intermediate_states.back();
+		}
+
 		if (pipeline.sink && !pipeline.sink->SinkOrderMatters() && current_operator->RequiresCache()) {
 			auto &cache_types = current_operator->GetTypes();
 			bool can_cache = true;
@@ -299,6 +294,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			auto *prev_chunk =
 			    current_intermediate == initial_idx + 1 ? &input : &*intermediate_chunks[current_intermediate - 1];
 			auto operator_idx = current_idx - 1;
+
 			auto current_operator = pipeline.operators[operator_idx];
 
 			// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
@@ -378,7 +374,7 @@ void PipelineExecutor::EndOperator(PhysicalOperator *op, DataChunk *chunk) {
 }
 
 void PipelineExecutor::RunPath(DataChunk &chunk) {
-	idx_t current_path = context.thread.current_path_idx;
+	idx_t current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
 	adaptive_union_chunk->Reset();
 
 	std::cout << "Running path " << current_path << std::endl;
@@ -406,6 +402,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		}
 
 		current_chunk.Verify();
+		// TODO: HashJoins require chunk caching!
 		// CacheChunk(current_chunk, operator_idx);
 
 		if (current_chunk.size() == 0) {
@@ -422,10 +419,10 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 			current_idx++;
 			if (current_idx >= pipeline.joins.size()) {
 				std::cout << "Execute adaptive union" << std::endl;
-				StartOperator(pipeline.adaptive_union);
+				StartOperator(&*pipeline.adaptive_union);
 				pipeline.adaptive_union->Execute(context, *join_intermediate_chunks.back(), *adaptive_union_chunk,
 				                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);
-				EndOperator(pipeline.adaptive_union, &*adaptive_union_chunk);
+				EndOperator(&*pipeline.adaptive_union, &*adaptive_union_chunk);
 
 				if (!in_process_joins.empty()) {
 					current_idx = in_process_joins.top();
@@ -438,8 +435,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		}
 	}
 
-	// TODO Or update the weights here?
-	// thread.update_path_weight();
+	pipeline.multiplexer->FinalizePathRun(*multiplexer_state);
 }
 
 } // namespace duckdb
