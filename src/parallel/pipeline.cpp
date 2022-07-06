@@ -1,7 +1,5 @@
 #include "duckdb/parallel/pipeline.hpp"
 
-#include <iostream>
-
 #include "duckdb/common/printer.hpp"
 #include "duckdb/execution/executor.hpp"
 #include "duckdb/main/client_context.hpp"
@@ -264,8 +262,6 @@ void Pipeline::BuildPOLRPaths() {
 		adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
 		join_paths = {{0, 1}, {1, 0}};
-
-		std::cout << "Built POLR paths." << std::endl;
 	}
 }
 

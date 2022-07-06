@@ -46,7 +46,7 @@ public:
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
 	bool ParallelOperator() const override {
-		return false;
+		return true;
 	}
 
 	bool RequiresCache() const override {

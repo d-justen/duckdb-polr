@@ -33,6 +33,9 @@
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/execution/column_binding_resolver.hpp"
 
+#include <chrono>
+#include <iostream>
+
 namespace duckdb {
 
 struct ActiveQueryContext {
@@ -613,6 +616,8 @@ unique_ptr<QueryResult> ClientContext::Query(unique_ptr<SQLStatement> statement,
 }
 
 unique_ptr<QueryResult> ClientContext::Query(const string &query, bool allow_stream_result) {
+	const auto begin = std::chrono::system_clock::now();
+
 	auto lock = LockContext();
 
 	string error;
@@ -649,6 +654,12 @@ unique_ptr<QueryResult> ClientContext::Query(const string &query, bool allow_str
 			last_result = last_result->next.get();
 		}
 	}
+
+	const auto end = std::chrono::system_clock::now();
+	const double duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end-begin).count();
+	std::cout << "Query: " << query << std::endl;
+	std::cout << "Duration: " << duration_ms << " ms" << std::endl;
+
 	return result;
 }
 

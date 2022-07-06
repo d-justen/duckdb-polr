@@ -80,6 +80,7 @@ public:
 
 	//! The client configuration
 	ClientConfig config;
+
 public:
 	DUCKDB_API Transaction &ActiveTransaction() {
 		return transaction.ActiveTransaction();

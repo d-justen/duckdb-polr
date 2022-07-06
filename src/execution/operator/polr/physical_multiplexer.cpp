@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <chrono>
 #include <map>
-#include <iostream>
 
 namespace duckdb {
 
@@ -17,27 +16,20 @@ public:
 	MultiplexerState(idx_t path_count) {
 		ticks_per_tuple.resize(path_count);
 		input_tuple_count_per_path.resize(path_count);
-		path_weights = vector<double>(path_count, 1.0 / path_count);
-		ns_per_tuple = vector<double>(path_count, -1);
 	}
 
 	idx_t num_paths_initialized = 0;
 
 	// To be set before running the path
 	idx_t chunk_offset = 0;
-	idx_t current_path_idx = -1;
-	idx_t current_path_tuple_count = -1;
+	idx_t current_path_idx;
+	idx_t current_path_tuple_count = 0;
 	std::chrono::time_point<std::chrono::system_clock> current_path_begin;
 
 	// To be set after running the path
 	vector<double> ticks_per_tuple;
 	idx_t num_tuples_processed = 0;
 	vector<idx_t> input_tuple_count_per_path;
-
-	// TODO: Do we even need these?
-	// Path weights sum should be = 1
-	vector<double> path_weights;
-	vector<double> ns_per_tuple;
 
 	// If we only emitted a slice of the current chunk, we set this offset
 	const double regret_budget = 0.2;
@@ -54,15 +46,11 @@ unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ClientContext &c
 
 OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                 GlobalOperatorState &gstate_p, OperatorState &state_p) const {
-	std::cout << "Starting multiplexer..." << std::endl;
 	auto &state = (MultiplexerState &)state_p;
 
 	// Initialize each path with one tuple to get initial weights
 	if (state.num_paths_initialized < path_count) {
 		idx_t next_path_idx = state.num_paths_initialized;
-
-				std::cout << "Initializing path " << next_path_idx << std::endl;
-
 		        idx_t remaining_input_tuples = input.size() - state.chunk_offset;
 		        idx_t tuple_count = remaining_input_tuples > state.init_tuple_count ? state.init_tuple_count : remaining_input_tuples;
 
@@ -113,11 +101,8 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	double max_weight = 0;
 	bool next_path_has_max_weight = false;
 
-	// TODO Show ratios
-
 	for (idx_t i = 0; i < path_weights.size(); ++i) {
 		const double current_ratio = (static_cast<double>(state.input_tuple_count_per_path[i]) / state.num_tuples_processed) / path_weights[i];
-		std::cout << "path ratio" << i << ": " << current_ratio << "\t|\t";
 		if (current_ratio < sent_to_path_ratio) {
 			next_path_idx = i;
 			sent_to_path_ratio = current_ratio;
@@ -131,8 +116,6 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 			}
 		}
 	}
-
-	std::cout << std::endl;
 
 	idx_t output_tuple_count = 0;
 	// We want to process the whole chunk if we are on the fastest path

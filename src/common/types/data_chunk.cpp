@@ -21,7 +21,7 @@
 
 namespace duckdb {
 
-DataChunk::DataChunk() : count(0), capacity(STANDARD_VECTOR_SIZE) {
+DataChunk::DataChunk() : capacity(STANDARD_VECTOR_SIZE), count(0) {
 }
 
 DataChunk::~DataChunk() {

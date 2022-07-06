@@ -1,8 +1,5 @@
 #include "duckdb/parallel/pipeline_executor.hpp"
-
 #include "duckdb/main/client_context.hpp"
-
-#include <iostream>
 
 namespace duckdb {
 
@@ -300,8 +297,6 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
 			if (operator_idx > 0 && pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
 				RunPath(*prev_chunk);
-				std::cout << "Finished path run" << std::endl;
-				std::cout << adaptive_union_chunk->size() << " output tuples" << std::endl;
 				prev_chunk = &*adaptive_union_chunk;
 			}
 
@@ -378,8 +373,6 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 	context.thread.current_join_path = &pipeline.join_paths[current_path];
 	adaptive_union_chunk->Reset();
 
-	std::cout << "Running path " << current_path << std::endl;
-
 	stack<idx_t> in_process_joins;
 	idx_t current_idx = 0;
 
@@ -419,7 +412,6 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 			// we got output! continue to the next operator
 			current_idx++;
 			if (current_idx >= pipeline.joins.size()) {
-				std::cout << "Execute adaptive union" << std::endl;
 				StartOperator(&*pipeline.adaptive_union);
 				pipeline.adaptive_union->Execute(context, *join_intermediate_chunks.back(), *adaptive_union_chunk,
 				                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);

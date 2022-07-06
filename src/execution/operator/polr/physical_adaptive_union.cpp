@@ -9,9 +9,8 @@
 
 namespace duckdb {
 
-// TODO: Parametrize AdaptiveUnion with some Multiplexer hook so that it can report back the duration per path
 PhysicalAdaptiveUnion::PhysicalAdaptiveUnion(vector<LogicalType> types, idx_t estimated_cardinality)
-    : PhysicalOperator(PhysicalOperatorType::MULTIPLEXER, move(types), estimated_cardinality) {
+    : PhysicalOperator(PhysicalOperatorType::ADAPTIVE_UNION, move(types), estimated_cardinality) {
 }
 
 class AdaptiveUnionState : public OperatorState {

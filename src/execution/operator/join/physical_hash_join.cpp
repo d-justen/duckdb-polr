@@ -1,4 +1,3 @@
-#include <iostream>
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
@@ -252,7 +251,6 @@ OperatorResultType PhysicalHashJoin::Execute(ExecutionContext &context, DataChun
 	// perform the actual probe
 	state.scan_structure = sink.hash_table->Probe(state.join_keys);
 	state.scan_structure->Next(state.join_keys, input, chunk);
-
 	return OperatorResultType::HAVE_MORE_OUTPUT;
 }
 
