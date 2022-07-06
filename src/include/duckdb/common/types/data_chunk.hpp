@@ -136,11 +136,12 @@ public:
 	//! export data chunk as a arrow struct array that can be imported as arrow record batch
 	DUCKDB_API void ToArrowArray(ArrowArray *out_array);
 
+	//! The amount of tuples that can be stored in the data chunk
+	idx_t capacity;
+
 private:
 	//! The amount of tuples stored in the data chunk
 	idx_t count;
-	//! The amount of tuples that can be stored in the data chunk
-	idx_t capacity;
 	//! Vector caches, used to store data when ::Initialize is called
 	vector<VectorCache> vector_caches;
 };

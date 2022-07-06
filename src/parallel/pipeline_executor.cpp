@@ -375,6 +375,7 @@ void PipelineExecutor::EndOperator(PhysicalOperator *op, DataChunk *chunk) {
 
 void PipelineExecutor::RunPath(DataChunk &chunk) {
 	idx_t current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
+	context.thread.current_join_path = &pipeline.join_paths[current_path];
 	adaptive_union_chunk->Reset();
 
 	std::cout << "Running path " << current_path << std::endl;

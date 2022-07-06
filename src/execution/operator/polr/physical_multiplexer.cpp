@@ -1,7 +1,5 @@
 #include "duckdb/execution/operator/polr/physical_multiplexer.hpp"
 
-#include "duckdb/parallel/thread_context.hpp"
-
 #include <algorithm>
 #include <chrono>
 #include <map>
