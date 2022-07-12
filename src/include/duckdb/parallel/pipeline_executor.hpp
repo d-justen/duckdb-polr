@@ -67,7 +67,7 @@ private:
 	vector<unique_ptr<OperatorState>> intermediate_states;
 
 	//! POLR related
-	vector<unique_ptr<DataChunk>> join_intermediate_chunks;
+	vector<vector<unique_ptr<DataChunk>>> join_intermediate_chunks;
 	vector<unique_ptr<OperatorState>> join_intermediate_states;
 	OperatorState* multiplexer_state;
 	unique_ptr<DataChunk> adaptive_union_chunk;

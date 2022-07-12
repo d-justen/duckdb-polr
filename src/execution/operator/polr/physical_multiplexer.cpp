@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <map>
+#include <iostream>
 
 namespace duckdb {
 
@@ -75,7 +76,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 
 	// Order ticks_per_tuples ascending by emplacing them in an (ordered) map, with the time per tuple as key
 	// and path index as value
-	std::map<double, idx_t> sorted_performance_idxs;
+	std::multimap<double, idx_t> sorted_performance_idxs;
 	for (idx_t i = 0; i < state.ticks_per_tuple.size(); i++) {
 		sorted_performance_idxs.emplace(state.ticks_per_tuple[i], i);
 	}
@@ -86,6 +87,11 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	for (auto it = std::next(sorted_performance_idxs.rbegin(), 1); it != sorted_performance_idxs.rend(); ++it) {
 		double next_bottom = it->first * (1 + state.regret_budget);
 		double path_weight_bottom = (it->first - next_bottom) / (it->first - bottom);
+		D_ASSERT(path_weight_bottom > 0);
+		// TODO: this is faulty. Find a way to calculate a weight for a, b, c so that a > b > c
+		if (path_weight_bottom > 0.5) {
+			path_weight_bottom = 1 - path_weight_bottom;
+		}
 		// Multiply slower paths backwards with the bottom path weight
 		auto it2 = sorted_performance_idxs.rbegin();
 		for (it2 = sorted_performance_idxs.rbegin(); it2 != it; it2++) {
@@ -96,13 +102,14 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		bottom = next_bottom;
 	}
 
-	idx_t next_path_idx = -1;
+	idx_t next_path_idx = 0;
 	double sent_to_path_ratio = std::numeric_limits<double>::max();
 	double max_weight = 0;
 	bool next_path_has_max_weight = false;
 
 	for (idx_t i = 0; i < path_weights.size(); ++i) {
 		const double current_ratio = (static_cast<double>(state.input_tuple_count_per_path[i]) / state.num_tuples_processed) / path_weights[i];
+
 		if (current_ratio < sent_to_path_ratio) {
 			next_path_idx = i;
 			sent_to_path_ratio = current_ratio;
@@ -116,17 +123,21 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 			}
 		}
 	}
-
 	idx_t output_tuple_count = 0;
 	// We want to process the whole chunk if we are on the fastest path
 	if (next_path_has_max_weight) {
 		output_tuple_count = input.size() - state.chunk_offset;
 	} else {
-		output_tuple_count = std::min(input.size() - state.chunk_offset,
+		// For now, we only send whole chunks
+		output_tuple_count = input.size() - state.chunk_offset;
+		/* output_tuple_count = std::min(input.size() - state.chunk_offset,
 		                              static_cast<idx_t>(state.num_tuples_processed * path_weights[next_path_idx] - state.input_tuple_count_per_path[next_path_idx]));
-	}
+		*/
+    }
 
-	if (input.size() - state.chunk_offset > 0) {
+	if (state.chunk_offset == 0 && output_tuple_count == input.size()) {
+		chunk.Reference(input);
+	} else if (input.size() - state.chunk_offset > 0) {
 		SelectionVector sel;
 		sel.Initialize(output_tuple_count);
 
@@ -169,5 +180,14 @@ idx_t PhysicalMultiplexer::GetCurrentPathIndex(OperatorState &state_p) const {
 	auto &state = (MultiplexerState &)state_p;
 	return state.current_path_idx;
 }
+
+void PhysicalMultiplexer::PrintStatistics(OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+	std::cout << "Input tuple counts per path\n";
+	for (idx_t i = 0; i < state.input_tuple_count_per_path.size(); i++) {
+		std::cout << i << ": " << state.input_tuple_count_per_path[i] << "\n";
+	}
+}
+
 
 } // namespace duckdb

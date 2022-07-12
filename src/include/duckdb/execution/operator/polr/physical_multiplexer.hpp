@@ -35,6 +35,7 @@ public:
 	}
 
 	string ParamsToString() const override;
+	void PrintStatistics(OperatorState &state) const;
 };
 
 } // namespace duckdb

@@ -1,3 +1,4 @@
+#include <iostream>
 #include "duckdb/parallel/pipeline.hpp"
 
 #include "duckdb/common/printer.hpp"
@@ -225,7 +226,9 @@ vector<PhysicalOperator *> Pipeline::GetOperators() const {
 	return result;
 }
 
+// FIXME: Right now this is being called many times in parallel
 void Pipeline::BuildPOLRPaths() {
+	if (operators.empty()) return;
 	vector<idx_t> hash_join_idxs;
 
 	for (idx_t i = 0; i < operators.size(); i++) {
@@ -240,8 +243,7 @@ void Pipeline::BuildPOLRPaths() {
 		}
 	}
 
-	// TODO: Support more than two joins
-	if (hash_join_idxs.size() == 2) {
+	if (hash_join_idxs.size() >= 2) {
 		// Fill join paths
 		for (auto hash_join_idx : hash_join_idxs) {
 			joins.push_back(static_cast<PhysicalHashJoin *>(operators[hash_join_idx]));
@@ -251,9 +253,12 @@ void Pipeline::BuildPOLRPaths() {
 		operators.erase(operators.begin() + hash_join_idxs.front(), operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
 
 		// Fill in multiplexer
-		auto prev_types = joins.front()->children[0]->GetTypes();
+		idx_t num_join_paths = 1;
+		idx_t n = joins.size();
+		while (n > 1) num_join_paths *= n--;
 
-		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality, 2);
+		auto prev_types = joins.front()->children[0]->GetTypes();
+		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality, num_join_paths);
 		multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
 		multiplexer_idx = hash_join_idxs.front();
 		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
@@ -261,7 +266,15 @@ void Pipeline::BuildPOLRPaths() {
 		adaptive_union = make_unique<PhysicalAdaptiveUnion>(joins.back()->types, joins.back()->estimated_cardinality);
 		adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
-		join_paths = {{0, 1}, {1, 0}};
+		vector<idx_t> join_order_permutations(joins.size());
+
+		for (idx_t i = 0; i < join_order_permutations.size(); i++) {
+			join_order_permutations[i] = i;
+		}
+
+		do {
+			join_paths.push_back(join_order_permutations);
+		} while (std::next_permutation(join_order_permutations.begin(), join_order_permutations.end()));
 	}
 }
 
