@@ -12,14 +12,16 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			for (idx_t i = 0; i < pipeline.join_paths.size(); i++) {
 				vector<LogicalType> types;
 				types.reserve(pipeline.joins.back()->GetTypes().size());
-				auto& multiplexer_types = pipeline.multiplexer->GetTypes();
+				auto &multiplexer_types = pipeline.multiplexer->GetTypes();
 				types.insert(types.cend(), multiplexer_types.cbegin(), multiplexer_types.cend());
 
-				auto& current_join_path = pipeline.join_paths[i];
+				auto &current_join_path = pipeline.join_paths[i];
 				join_intermediate_chunks[i].reserve(current_join_path.size());
 
 				for (idx_t j = 0; j < current_join_path.size(); j++) {
-					auto& build_types = pipeline.joins[current_join_path[j]]->build_types; // TODO: check if this is the new types that come with the join
+					auto &build_types =
+					    pipeline.joins[current_join_path[j]]
+					        ->build_types; // TODO: check if this is the new types that come with the join
 					types.insert(types.cend(), build_types.cbegin(), build_types.cend());
 
 					auto chunk = make_unique<DataChunk>();
@@ -29,7 +31,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 				}
 			}
 
-			for (auto& join : pipeline.joins) {
+			for (auto &join : pipeline.joins) {
 				join_intermediate_states.push_back(join->GetOperatorState(context.client));
 			}
 
@@ -408,8 +410,8 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		auto &current_state = join_intermediate_states[pipeline.join_paths[current_path][current_idx]];
 
 		StartOperator(current_operator);
-		auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
-		                                        *current_state);
+		auto result =
+		    current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state, *current_state);
 		EndOperator(current_operator, &current_chunk);
 
 		if (result == OperatorResultType::HAVE_MORE_OUTPUT) {

@@ -52,26 +52,27 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	// Initialize each path with one tuple to get initial weights
 	if (state.num_paths_initialized < path_count) {
 		idx_t next_path_idx = state.num_paths_initialized;
-		        idx_t remaining_input_tuples = input.size() - state.chunk_offset;
-		        idx_t tuple_count = remaining_input_tuples > state.init_tuple_count ? state.init_tuple_count : remaining_input_tuples;
+		idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+		idx_t tuple_count =
+		    remaining_input_tuples > state.init_tuple_count ? state.init_tuple_count : remaining_input_tuples;
 
-		        SelectionVector sel(tuple_count);
-		        for (idx_t i = 0; i < tuple_count; i++) {
-			        sel.set_index(i, state.chunk_offset + i);
-		        }
-				chunk.Slice(input, sel, tuple_count);
+		SelectionVector sel(tuple_count);
+		for (idx_t i = 0; i < tuple_count; i++) {
+			sel.set_index(i, state.chunk_offset + i);
+		}
+		chunk.Slice(input, sel, tuple_count);
 
-		        state.num_paths_initialized++;
-				state.chunk_offset += tuple_count;
-		        state.current_path_idx = next_path_idx;
-		        state.current_path_tuple_count = tuple_count;
-				state.current_path_begin = std::chrono::system_clock::now();
+		state.num_paths_initialized++;
+		state.chunk_offset += tuple_count;
+		state.current_path_idx = next_path_idx;
+		state.current_path_tuple_count = tuple_count;
+		state.current_path_begin = std::chrono::system_clock::now();
 
-				if (state.chunk_offset == input.size()) {
-					return OperatorResultType::NEED_MORE_INPUT;
-				} else {
-					return OperatorResultType::HAVE_MORE_OUTPUT;
-				}
+		if (state.chunk_offset == input.size()) {
+			return OperatorResultType::NEED_MORE_INPUT;
+		} else {
+			return OperatorResultType::HAVE_MORE_OUTPUT;
+		}
 	}
 
 	// Order ticks_per_tuples ascending by emplacing them in an (ordered) map, with the time per tuple as key
@@ -108,7 +109,8 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	bool next_path_has_max_weight = false;
 
 	for (idx_t i = 0; i < path_weights.size(); ++i) {
-		const double current_ratio = (static_cast<double>(state.input_tuple_count_per_path[i]) / state.num_tuples_processed) / path_weights[i];
+		const double current_ratio =
+		    (static_cast<double>(state.input_tuple_count_per_path[i]) / state.num_tuples_processed) / path_weights[i];
 
 		if (current_ratio < sent_to_path_ratio) {
 			next_path_idx = i;
@@ -131,9 +133,10 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		// For now, we only send whole chunks
 		output_tuple_count = input.size() - state.chunk_offset;
 		/* output_tuple_count = std::min(input.size() - state.chunk_offset,
-		                              static_cast<idx_t>(state.num_tuples_processed * path_weights[next_path_idx] - state.input_tuple_count_per_path[next_path_idx]));
+		                              static_cast<idx_t>(state.num_tuples_processed * path_weights[next_path_idx] -
+		   state.input_tuple_count_per_path[next_path_idx]));
 		*/
-    }
+	}
 
 	if (state.chunk_offset == 0 && output_tuple_count == input.size()) {
 		chunk.Reference(input);
@@ -170,7 +173,8 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p) const {
 
 	const auto now = std::chrono::system_clock::now();
 	const auto processing_duration = (now - state.current_path_begin).count();
-	state.ticks_per_tuple[state.current_path_idx] = processing_duration / static_cast<double>(state.current_path_tuple_count);
+	state.ticks_per_tuple[state.current_path_idx] =
+	    processing_duration / static_cast<double>(state.current_path_tuple_count);
 
 	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
 	state.num_tuples_processed += state.current_path_tuple_count;
@@ -188,6 +192,5 @@ void PhysicalMultiplexer::PrintStatistics(OperatorState &state_p) const {
 		std::cout << i << ": " << state.input_tuple_count_per_path[i] << "\n";
 	}
 }
-
 
 } // namespace duckdb

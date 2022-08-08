@@ -239,10 +239,9 @@ void Pipeline::BuildPOLRPaths() {
 	for (idx_t i = 0; i < operators.size(); i++) {
 		if (operators[i]->type == PhysicalOperatorType::HASH_JOIN) {
 			// We only want joins that directly follow each other
-			if (hash_join_idxs.empty() || hash_join_idxs.back() == i-1) {
+			if (hash_join_idxs.empty() || hash_join_idxs.back() == i - 1) {
 				hash_join_idxs.push_back(i);
-			}
-			else {
+			} else {
 				break;
 			}
 		}
@@ -259,22 +258,25 @@ void Pipeline::BuildPOLRPaths() {
 		}
 
 		// Remove joins from operator vector
-		operators.erase(operators.begin() + hash_join_idxs.front(), operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
+		operators.erase(operators.begin() + hash_join_idxs.front(),
+		                operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
 
 		// Fill in multiplexer
 		idx_t num_join_paths = 1;
 		idx_t n = joins.size();
-		while (n > 1) num_join_paths *= n--;
+		while (n > 1)
+			num_join_paths *= n--;
 
 		auto prev_types = joins.front()->children[0]->GetTypes();
-		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality, num_join_paths);
+		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
+		                                               num_join_paths);
 		multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
 		multiplexer_idx = hash_join_idxs.front();
 		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
 
-		adaptive_union = make_unique<PhysicalAdaptiveUnion>(joins.back()->types, multiplexer->types.size(),
-		                                                    move(num_columns_per_join),
-		                                                    joins.back()->estimated_cardinality);
+		adaptive_union =
+		    make_unique<PhysicalAdaptiveUnion>(joins.back()->types, multiplexer->types.size(),
+		                                       move(num_columns_per_join), joins.back()->estimated_cardinality);
 		adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
 		vector<idx_t> join_order_permutations(joins.size());

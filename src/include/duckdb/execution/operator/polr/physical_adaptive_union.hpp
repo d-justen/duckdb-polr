@@ -14,8 +14,8 @@ namespace duckdb {
 
 class PhysicalAdaptiveUnion : public PhysicalOperator {
 public:
-	PhysicalAdaptiveUnion(vector<LogicalType> types, idx_t num_columns_from_left_p, vector<idx_t>
-	    num_columns_per_join_p, idx_t estimated_cardinality);
+	PhysicalAdaptiveUnion(vector<LogicalType> types, idx_t num_columns_from_left_p,
+	                      vector<idx_t> num_columns_per_join_p, idx_t estimated_cardinality);
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ClientContext &context) const override;

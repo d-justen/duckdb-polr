@@ -656,7 +656,7 @@ unique_ptr<QueryResult> ClientContext::Query(const string &query, bool allow_str
 	}
 
 	const auto end = std::chrono::system_clock::now();
-	const double duration_ms = std::chrono::duration_cast<std::chrono::microseconds>(end-begin).count();
+	const double duration_ms = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
 	std::cout << "Query: " << query << std::endl;
 	std::cout << "Duration: " << duration_ms << " microseconds" << std::endl;
 
