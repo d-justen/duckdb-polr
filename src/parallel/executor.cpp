@@ -123,10 +123,6 @@ void Executor::SchedulePipeline(const shared_ptr<Pipeline> &pipeline, event_map_
 	auto pipeline_finish_event = make_shared<PipelineFinishEvent>(pipeline);
 	auto pipeline_complete_event = make_shared<PipelineCompleteEvent>(pipeline->executor, complete_pipeline);
 
-	if (context.config.enable_polr) {
-		pipeline->BuildPOLRPaths(); // TODO: Find better place to do this, but operators are in reverse order before this point
-	}
-
 	PipelineEventStack stack;
 	stack.pipeline_event = pipeline_event.get();
 	stack.pipeline_finish_event = pipeline_finish_event.get();

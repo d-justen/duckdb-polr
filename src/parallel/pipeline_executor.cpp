@@ -29,9 +29,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 				}
 			}
 
-			for (idx_t i = 0; i < pipeline.joins.size(); i++) {
-				join_intermediate_states.push_back(pipeline.joins[i]->GetOperatorState(context.client));
-				thread.join_build_types.push_back(pipeline.joins[i]->build_types);
+			for (auto& join : pipeline.joins) {
+				join_intermediate_states.push_back(join->GetOperatorState(context.client));
 			}
 
 			adaptive_union_chunk = make_unique<DataChunk>();

@@ -24,7 +24,6 @@ public:
 	OperatorProfiler profiler;
 	//! The next POLR path to choose
 	vector<idx_t> *current_join_path;
-	vector<vector<LogicalType>> join_build_types;
 };
 
 } // namespace duckdb

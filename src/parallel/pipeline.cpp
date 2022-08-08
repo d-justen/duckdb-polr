@@ -184,6 +184,10 @@ void Pipeline::Ready() {
 	ready = true;
 	std::reverse(operators.begin(), operators.end());
 	Reset();
+
+	if (executor.context.config.enable_polr) {
+		BuildPOLRPaths();
+	}
 }
 
 void Pipeline::Finalize(Event &event) {
@@ -226,11 +230,12 @@ vector<PhysicalOperator *> Pipeline::GetOperators() const {
 	return result;
 }
 
-// FIXME: Right now this is being called many times in parallel
 void Pipeline::BuildPOLRPaths() {
-	if (operators.empty()) return;
-	vector<idx_t> hash_join_idxs;
+	if (operators.empty()) {
+		return;
+	}
 
+	vector<idx_t> hash_join_idxs;
 	for (idx_t i = 0; i < operators.size(); i++) {
 		if (operators[i]->type == PhysicalOperatorType::HASH_JOIN) {
 			// We only want joins that directly follow each other
@@ -244,9 +249,13 @@ void Pipeline::BuildPOLRPaths() {
 	}
 
 	if (hash_join_idxs.size() >= 2) {
+		vector<idx_t> num_columns_per_join;
+		num_columns_per_join.reserve(hash_join_idxs.size());
+
 		// Fill join paths
 		for (auto hash_join_idx : hash_join_idxs) {
 			joins.push_back(static_cast<PhysicalHashJoin *>(operators[hash_join_idx]));
+			num_columns_per_join.push_back(joins.back()->types.size());
 		}
 
 		// Remove joins from operator vector
@@ -263,7 +272,9 @@ void Pipeline::BuildPOLRPaths() {
 		multiplexer_idx = hash_join_idxs.front();
 		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
 
-		adaptive_union = make_unique<PhysicalAdaptiveUnion>(joins.back()->types, joins.back()->estimated_cardinality);
+		adaptive_union = make_unique<PhysicalAdaptiveUnion>(joins.back()->types, multiplexer->types.size(),
+		                                                    move(num_columns_per_join),
+		                                                    joins.back()->estimated_cardinality);
 		adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
 		vector<idx_t> join_order_permutations(joins.size());
