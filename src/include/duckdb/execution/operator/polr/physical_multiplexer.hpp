@@ -28,10 +28,10 @@ public:
 	idx_t GetCurrentPathIndex(OperatorState &state_p) const;
 
 	bool ParallelOperator() const override {
-		return false; // TODO: Switch to parallel op once we have a stable prototype
+		return true;
 	}
 	bool RequiresCache() const override {
-		return false; // TODO: Maybe we do want this at some point
+		return false;
 	}
 
 	string ParamsToString() const override;

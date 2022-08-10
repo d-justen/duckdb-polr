@@ -24,7 +24,7 @@ public:
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
 	bool ParallelOperator() const override {
-		return false; // TODO: Switch to parallel op once we have a stable prototype
+		return true;
 	}
 	bool RequiresCache() const override {
 		return false; // TODO: Maybe we do want this at some point

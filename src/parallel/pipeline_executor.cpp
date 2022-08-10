@@ -399,15 +399,16 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 	adaptive_union_chunk->Reset();
 
 	stack<idx_t> in_process_joins;
-	idx_t current_idx = 0;
+	idx_t path_idx = 0;
 
 	while (true) {
-		auto *prev_chunk = current_idx == 0 ? &chunk : &*join_intermediate_chunks[current_path][current_idx - 1];
-		auto &current_chunk = *join_intermediate_chunks[current_path][current_idx];
+		auto *prev_chunk = path_idx == 0 ? &chunk : &*join_intermediate_chunks[current_path][path_idx - 1];
+		auto &current_chunk = *join_intermediate_chunks[current_path][path_idx];
 		current_chunk.Reset();
 
-		auto current_operator = pipeline.joins[pipeline.join_paths[current_path][current_idx]];
-		auto &current_state = join_intermediate_states[pipeline.join_paths[current_path][current_idx]];
+		idx_t join_idx = pipeline.join_paths[current_path][path_idx];
+		auto current_operator = pipeline.joins[join_idx];
+		auto &current_state = join_intermediate_states[join_idx];
 
 		StartOperator(current_operator);
 		auto result =
@@ -417,17 +418,17 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 			// more data remains in this operator
 			// push in-process marker
-			in_process_joins.push(current_idx);
+			in_process_joins.push(path_idx);
 		}
 
 		current_chunk.Verify();
-		// TODO: HashJoins require chunk caching!
-		// CacheChunk(current_chunk, operator_idx);
+		// TODO: Implement chunk caching for better performance
+		// CachePOLRChunk(current_chunk, join_idx);
 
 		if (current_chunk.size() == 0) {
 			// no output from this operator!
 			if (!in_process_joins.empty()) {
-				current_idx = in_process_joins.top();
+				path_idx = in_process_joins.top();
 				in_process_joins.pop();
 				continue;
 			} else {
@@ -435,15 +436,20 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 			}
 		} else {
 			// we got output! continue to the next operator
-			current_idx++;
-			if (current_idx >= pipeline.joins.size()) {
+			path_idx++;
+			if (path_idx >= pipeline.joins.size()) {
+				DataChunk tmp_adaptive_union_chunk;
+				tmp_adaptive_union_chunk.Initialize(adaptive_union_chunk->GetTypes());
+
 				StartOperator(&*pipeline.adaptive_union);
-				pipeline.adaptive_union->Execute(context, current_chunk, *adaptive_union_chunk,
+				pipeline.adaptive_union->Execute(context, current_chunk, tmp_adaptive_union_chunk,
 				                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);
 				EndOperator(&*pipeline.adaptive_union, &*adaptive_union_chunk);
 
+				adaptive_union_chunk->Append(tmp_adaptive_union_chunk, true);
+
 				if (!in_process_joins.empty()) {
-					current_idx = in_process_joins.top();
+					path_idx = in_process_joins.top();
 					in_process_joins.pop();
 					continue;
 				} else {
