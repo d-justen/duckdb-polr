@@ -33,7 +33,7 @@ public:
 
 	// If we only emitted a slice of the current chunk, we set this offset
 	const double regret_budget = 0.2;
-	const idx_t init_tuple_count = 1;
+	const idx_t init_tuple_count = 8;
 
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
@@ -84,8 +84,16 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	std::vector<double> path_weights(state.intermediates_per_input_tuple.size(), 1);
 	double bottom = sorted_performance_idxs.rbegin()->first;
 	for (auto it = std::next(sorted_performance_idxs.rbegin(), 1); it != sorted_performance_idxs.rend(); ++it) {
+		// path_weights could be the same, so lets introduce noise
+		if (it->first == bottom) {
+			bottom += 0.0001;
+		}
+
 		double next_bottom = it->first * (1 + state.regret_budget);
 		double path_weight_bottom = (it->first - next_bottom) / (it->first - bottom);
+		if (path_weight_bottom <= 0) {
+			(void) path_weight_bottom;
+		}
 		D_ASSERT(path_weight_bottom > 0);
 		// TODO: this is faulty. Find a way to calculate a weight for a, b, c so that a > b > c
 		if (path_weight_bottom > 0.5) {
@@ -168,8 +176,17 @@ string PhysicalMultiplexer::ParamsToString() const {
 void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_intermediates) const {
 	auto &state = (MultiplexerState &)state_p;
 
-	state.intermediates_per_input_tuple[state.current_path_idx] =
-	    num_intermediates + 1 / static_cast<double>(state.current_path_tuple_count);
+	// TODO: intermediates_per_input_tuple can be 0. is there a better way than +1?
+	double intermediates_per_input_tuple =
+	    (num_intermediates + 1) / static_cast<double>(state.current_path_tuple_count);
+
+	if (state.num_paths_initialized == path_count) {
+		// Rolling average
+		state.intermediates_per_input_tuple[state.current_path_idx] *= 0.5;
+		state.intermediates_per_input_tuple[state.current_path_idx] += 0.5 * intermediates_per_input_tuple;
+	} else {
+		state.intermediates_per_input_tuple[state.current_path_idx] = intermediates_per_input_tuple;
+	}
 
 	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
 	state.num_tuples_processed += state.current_path_tuple_count;

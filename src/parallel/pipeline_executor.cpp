@@ -110,11 +110,11 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 	}
 	PushFinalize();
 
-#ifdef DEBUG
+// #ifdef DEBUG
 	if (pipeline.multiplexer) {
 		pipeline.multiplexer->PrintStatistics(*multiplexer_state);
 	}
-#endif
+// #endif
 
 	return true;
 }
