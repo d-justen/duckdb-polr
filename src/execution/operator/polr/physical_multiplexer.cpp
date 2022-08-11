@@ -15,7 +15,7 @@ PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estima
 class MultiplexerState : public OperatorState {
 public:
 	MultiplexerState(idx_t path_count) {
-		ticks_per_tuple.resize(path_count);
+		intermediates_per_input_tuple.resize(path_count);
 		input_tuple_count_per_path.resize(path_count);
 	}
 
@@ -25,10 +25,9 @@ public:
 	idx_t chunk_offset = 0;
 	idx_t current_path_idx;
 	idx_t current_path_tuple_count = 0;
-	std::chrono::time_point<std::chrono::system_clock> current_path_begin;
 
 	// To be set after running the path
-	vector<double> ticks_per_tuple;
+	vector<double> intermediates_per_input_tuple;
 	idx_t num_tuples_processed = 0;
 	vector<idx_t> input_tuple_count_per_path;
 
@@ -66,7 +65,6 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		state.chunk_offset += tuple_count;
 		state.current_path_idx = next_path_idx;
 		state.current_path_tuple_count = tuple_count;
-		state.current_path_begin = std::chrono::system_clock::now();
 
 		if (state.chunk_offset == input.size()) {
 			return OperatorResultType::NEED_MORE_INPUT;
@@ -78,12 +76,12 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	// Order ticks_per_tuples ascending by emplacing them in an (ordered) map, with the time per tuple as key
 	// and path index as value
 	std::multimap<double, idx_t> sorted_performance_idxs;
-	for (idx_t i = 0; i < state.ticks_per_tuple.size(); i++) {
-		sorted_performance_idxs.emplace(state.ticks_per_tuple[i], i);
+	for (idx_t i = 0; i < state.intermediates_per_input_tuple.size(); i++) {
+		sorted_performance_idxs.emplace(state.intermediates_per_input_tuple[i], i);
 	}
 	// Implementation of Bottom-up bounded regret
 	// Initialize path weights with 1, so that we can multiply the inits with new path weights
-	std::vector<double> path_weights(state.ticks_per_tuple.size(), 1);
+	std::vector<double> path_weights(state.intermediates_per_input_tuple.size(), 1);
 	double bottom = sorted_performance_idxs.rbegin()->first;
 	for (auto it = std::next(sorted_performance_idxs.rbegin(), 1); it != sorted_performance_idxs.rend(); ++it) {
 		double next_bottom = it->first * (1 + state.regret_budget);
@@ -153,7 +151,6 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 
 	state.current_path_idx = next_path_idx;
 	state.current_path_tuple_count = output_tuple_count;
-	state.current_path_begin = std::chrono::system_clock::now();
 
 	if (input.size() - state.chunk_offset - output_tuple_count > 0) {
 		state.chunk_offset += output_tuple_count;
@@ -168,13 +165,11 @@ string PhysicalMultiplexer::ParamsToString() const {
 	return "";
 }
 
-void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p) const {
+void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_intermediates) const {
 	auto &state = (MultiplexerState &)state_p;
 
-	const auto now = std::chrono::system_clock::now();
-	const auto processing_duration = (now - state.current_path_begin).count();
-	state.ticks_per_tuple[state.current_path_idx] =
-	    processing_duration / static_cast<double>(state.current_path_tuple_count);
+	state.intermediates_per_input_tuple[state.current_path_idx] =
+	    num_intermediates + 1 / static_cast<double>(state.current_path_tuple_count);
 
 	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
 	state.num_tuples_processed += state.current_path_tuple_count;

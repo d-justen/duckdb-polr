@@ -398,27 +398,33 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 	context.thread.current_join_path = &pipeline.join_paths[current_path];
 	adaptive_union_chunk->Reset();
 
+	auto tmp_adaptive_union_chunk = make_unique<DataChunk>();
+	tmp_adaptive_union_chunk->Initialize(adaptive_union_chunk->GetTypes());
+
 	stack<idx_t> in_process_joins;
-	idx_t path_idx = 0;
+	idx_t local_join_idx = 0;
+	idx_t num_intermediates = 0;
 
 	while (true) {
-		auto *prev_chunk = path_idx == 0 ? &chunk : &*join_intermediate_chunks[current_path][path_idx - 1];
-		auto &current_chunk = *join_intermediate_chunks[current_path][path_idx];
+		auto *prev_chunk = local_join_idx == 0 ? &chunk : &*join_intermediate_chunks[current_path][local_join_idx - 1];
+		auto &current_chunk = *join_intermediate_chunks[current_path][local_join_idx];
 		current_chunk.Reset();
 
-		idx_t join_idx = pipeline.join_paths[current_path][path_idx];
-		auto current_operator = pipeline.joins[join_idx];
-		auto &current_state = join_intermediate_states[join_idx];
+		idx_t global_join_idx = pipeline.join_paths[current_path][local_join_idx];
+		auto current_operator = pipeline.joins[global_join_idx];
+		auto &current_state = join_intermediate_states[global_join_idx];
 
 		StartOperator(current_operator);
 		auto result =
 		    current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state, *current_state);
 		EndOperator(current_operator, &current_chunk);
 
+		num_intermediates += current_chunk.size();
+
 		if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 			// more data remains in this operator
 			// push in-process marker
-			in_process_joins.push(path_idx);
+			in_process_joins.push(local_join_idx);
 		}
 
 		current_chunk.Verify();
@@ -428,7 +434,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		if (current_chunk.size() == 0) {
 			// no output from this operator!
 			if (!in_process_joins.empty()) {
-				path_idx = in_process_joins.top();
+				local_join_idx = in_process_joins.top();
 				in_process_joins.pop();
 				continue;
 			} else {
@@ -436,20 +442,18 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 			}
 		} else {
 			// we got output! continue to the next operator
-			path_idx++;
-			if (path_idx >= pipeline.joins.size()) {
-				DataChunk tmp_adaptive_union_chunk;
-				tmp_adaptive_union_chunk.Initialize(adaptive_union_chunk->GetTypes());
-
+			local_join_idx++;
+			if (local_join_idx >= pipeline.joins.size()) {
 				StartOperator(&*pipeline.adaptive_union);
-				pipeline.adaptive_union->Execute(context, current_chunk, tmp_adaptive_union_chunk,
+				pipeline.adaptive_union->Execute(context, current_chunk, *tmp_adaptive_union_chunk,
 				                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);
 				EndOperator(&*pipeline.adaptive_union, &*adaptive_union_chunk);
 
-				adaptive_union_chunk->Append(tmp_adaptive_union_chunk, true);
+				adaptive_union_chunk->Append(*tmp_adaptive_union_chunk, true);
+				tmp_adaptive_union_chunk->Reset();
 
 				if (!in_process_joins.empty()) {
-					path_idx = in_process_joins.top();
+					local_join_idx = in_process_joins.top();
 					in_process_joins.pop();
 					continue;
 				} else {
@@ -459,7 +463,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		}
 	}
 
-	pipeline.multiplexer->FinalizePathRun(*multiplexer_state);
+	pipeline.multiplexer->FinalizePathRun(*multiplexer_state, num_intermediates);
 }
 
 } // namespace duckdb
