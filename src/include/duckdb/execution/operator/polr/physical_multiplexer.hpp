@@ -14,9 +14,11 @@ namespace duckdb {
 
 class PhysicalMultiplexer : public PhysicalOperator {
 public:
-	PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p);
+	PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p,
+	                    double regret_budget_p = 0.2);
 
 	idx_t path_count;
+	double regret_budget;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ClientContext &context) const override;
@@ -36,6 +38,9 @@ public:
 
 	string ParamsToString() const override;
 	void PrintStatistics(OperatorState &state) const;
+
+private:
+	void CalculateJoinPathWeights(const vector<double> &join_path_costs, vector<double> &path_weights) const;
 };
 
 } // namespace duckdb

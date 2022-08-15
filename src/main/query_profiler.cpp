@@ -190,6 +190,17 @@ void QueryProfiler::Initialize(PhysicalOperator *root_op) {
 	}
 	this->query_requires_profiling = false;
 	this->root = CreateTree(root_op);
+
+	if (context.config.enable_polr) {
+		multiplexer_node = make_unique<TreeNode>();
+		multiplexer_node->type = PhysicalOperatorType::MULTIPLEXER;
+		multiplexer_node->name = "Multiplexer";
+
+		adaptive_union_node = make_unique<TreeNode>();
+		adaptive_union_node->type = PhysicalOperatorType::ADAPTIVE_UNION;
+		adaptive_union_node->name = "AdaptiveUnion";
+	}
+
 	if (!query_requires_profiling) {
 		// query does not require profiling: disable profiling for this query
 		this->running = false;
@@ -272,6 +283,18 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 	}
 	for (auto &node : profiler.timings) {
 		auto entry = tree_map.find(node.first);
+
+		if (entry == tree_map.end()) {
+			if (context.config.enable_polr) {
+				auto &polr_node =
+				    node.first->type == PhysicalOperatorType::MULTIPLEXER ? multiplexer_node : adaptive_union_node;
+				polr_node->info.time += node.second.time;
+				polr_node->info.elements += node.second.elements;
+
+				continue;
+			}
+		}
+
 		D_ASSERT(entry != tree_map.end());
 
 		entry->second->info.time += node.second.time;
@@ -359,6 +382,23 @@ void QueryProfiler::ToStream(std::ostream &ss, bool print_optimizer_output) cons
 	ss << "││" + DrawPadded(total_time, TOTAL_BOX_WIDTH - 4) + "││\n";
 	ss << "│└───────────────────────────────────┘│\n";
 	ss << "└─────────────────────────────────────┘\n";
+
+	if (context.config.enable_polr) {
+		ss << "┌─────────────────────────────────────┐\n";
+		ss << "│┌───────────────────────────────────┐│\n";
+		string mpx_time = "Multiplexer: " + RenderTiming(multiplexer_node->info.time);
+		ss << "││" + DrawPadded(mpx_time, TOTAL_BOX_WIDTH - 4) + "││\n";
+		ss << "│└───────────────────────────────────┘│\n";
+		ss << "└─────────────────────────────────────┘\n";
+
+		ss << "┌─────────────────────────────────────┐\n";
+		ss << "│┌───────────────────────────────────┐│\n";
+		string au_time = "Adpt. Union: " + RenderTiming(adaptive_union_node->info.time);
+		ss << "││" + DrawPadded(au_time, TOTAL_BOX_WIDTH - 4) + "││\n";
+		ss << "│└───────────────────────────────────┘│\n";
+		ss << "└─────────────────────────────────────┘\n";
+	}
+
 	// print phase timings
 	if (print_optimizer_output) {
 		bool has_previous_phase = false;

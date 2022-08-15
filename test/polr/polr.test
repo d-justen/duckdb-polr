@@ -12,9 +12,6 @@ statement ok
 CREATE TABLE table_c AS SELECT * FROM read_csv_auto('test/polr/data/table_c.csv')
 
 statement ok
-PRAGMA disable_profiling
-
-statement ok
 SET disabled_optimizers TO 'join_order'
 
 # row-wise

@@ -98,9 +98,6 @@ COPY date FROM 'test/ssb/data/date.tbl'
 statement ok
 SET disabled_optimizers TO 'join_order'
 
-statement ok
-PRAGMA disable_profiling
-
 # q2.1.1
 statement ok
 SELECT SUM(LO_REVENUE), D_YEAR, P_BRAND

@@ -7,9 +7,10 @@
 
 namespace duckdb {
 
-PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p)
-    : PhysicalOperator(PhysicalOperatorType::MULTIPLEXER, move(types), estimated_cardinality),
-      path_count(path_count_p) {
+PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p,
+                                         double regret_budget_p)
+    : PhysicalOperator(PhysicalOperatorType::MULTIPLEXER, move(types), estimated_cardinality), path_count(path_count_p),
+      regret_budget(regret_budget_p) {
 }
 
 class MultiplexerState : public OperatorState {
@@ -31,8 +32,6 @@ public:
 	idx_t num_tuples_processed = 0;
 	vector<idx_t> input_tuple_count_per_path;
 
-	// If we only emitted a slice of the current chunk, we set this offset
-	const double regret_budget = 0.2;
 	const idx_t init_tuple_count = 8;
 
 public:
@@ -73,41 +72,8 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		}
 	}
 
-	// Order ticks_per_tuples ascending by emplacing them in an (ordered) map, with the time per tuple as key
-	// and path index as value
-	std::multimap<double, idx_t> sorted_performance_idxs;
-	for (idx_t i = 0; i < state.intermediates_per_input_tuple.size(); i++) {
-		sorted_performance_idxs.emplace(state.intermediates_per_input_tuple[i], i);
-	}
-	// Implementation of Bottom-up bounded regret
-	// Initialize path weights with 1, so that we can multiply the inits with new path weights
-	std::vector<double> path_weights(state.intermediates_per_input_tuple.size(), 1);
-	double bottom = sorted_performance_idxs.rbegin()->first;
-	for (auto it = std::next(sorted_performance_idxs.rbegin(), 1); it != sorted_performance_idxs.rend(); ++it) {
-		// path_weights could be the same, so lets introduce noise
-		if (it->first == bottom) {
-			bottom += 0.0001;
-		}
-
-		double next_bottom = it->first * (1 + state.regret_budget);
-		double path_weight_bottom = (it->first - next_bottom) / (it->first - bottom);
-		if (path_weight_bottom <= 0) {
-			(void) path_weight_bottom;
-		}
-		D_ASSERT(path_weight_bottom > 0);
-		// TODO: this is faulty. Find a way to calculate a weight for a, b, c so that a > b > c
-		if (path_weight_bottom > 0.5) {
-			path_weight_bottom = 1 - path_weight_bottom;
-		}
-		// Multiply slower paths backwards with the bottom path weight
-		auto it2 = sorted_performance_idxs.rbegin();
-		for (it2 = sorted_performance_idxs.rbegin(); it2 != it; it2++) {
-			path_weights[it2->second] *= path_weight_bottom;
-		}
-		// Set weight of the current path
-		path_weights[it->second] = 1 - path_weight_bottom;
-		bottom = next_bottom;
-	}
+	vector<double> path_weights;
+	CalculateJoinPathWeights(state.intermediates_per_input_tuple, path_weights);
 
 	idx_t next_path_idx = 0;
 	double sent_to_path_ratio = std::numeric_limits<double>::max();
@@ -131,6 +97,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 			}
 		}
 	}
+
 	idx_t output_tuple_count = 0;
 	// We want to process the whole chunk if we are on the fastest path
 	if (next_path_has_max_weight) {
@@ -166,6 +133,55 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	} else {
 		state.chunk_offset = 0;
 		return OperatorResultType::NEED_MORE_INPUT;
+	}
+}
+
+void PhysicalMultiplexer::CalculateJoinPathWeights(const vector<double> &join_path_costs,
+                                                   vector<double> &path_weights) const {
+	// Order join path costs ascending by emplacing them in an (ordered) map, with the time per tuple as key
+	// and path index as value
+	std::multimap<double, idx_t> sorted_performance_idxs;
+	for (idx_t i = 0; i < join_path_costs.size(); i++) {
+		sorted_performance_idxs.emplace(join_path_costs[i], i);
+	}
+
+	// Implementation of Bottom-up bounded regret
+	// Initialize path weights with 1, so that we can multiply the inits with new path weights
+	path_weights.resize(join_path_costs.size(), 1);
+
+	double cost_bottom = sorted_performance_idxs.rbegin()->first;
+	for (auto it = std::next(sorted_performance_idxs.rbegin(), 1); it != sorted_performance_idxs.rend(); ++it) {
+		const double cost_next = it->first;
+
+		// path_weights could be the same, so lets introduce noise
+		if (cost_next == cost_bottom) {
+			cost_bottom += 0.001;
+		}
+
+		double cost_target = cost_next * (1 + regret_budget);
+
+		// The target cost (cost_a * (1 + regret_budget)) must be lower than (cost_a + cost_b) / 2 so
+		// that path_a gets a lower weight assigned than path_b
+		double cost_avg = (cost_next + cost_bottom) / 2;
+		if (cost_target >= cost_avg) {
+			cost_target = 0.6 * cost_next + 0.4 * cost_bottom;
+		}
+
+		const double path_weight_bottom = (cost_next - cost_target) / (cost_next - cost_bottom);
+
+		D_ASSERT(path_weight_bottom > 0);
+		D_ASSERT(path_weight_bottom < 0.5);
+
+		// Multiply slower paths backwards with the bottom path weight
+		auto it2 = sorted_performance_idxs.rbegin();
+		for (it2 = sorted_performance_idxs.rbegin(); it2 != it; it2++) {
+			const idx_t join_idx = it2->second;
+			path_weights[join_idx] *= path_weight_bottom;
+		}
+		// Set weight of the current path
+		const idx_t join_idx = it->second;
+		path_weights[join_idx] = 1 - path_weight_bottom;
+		cost_bottom = cost_target;
 	}
 }
 

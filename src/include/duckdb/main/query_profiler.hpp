@@ -166,8 +166,8 @@ public:
 
 	DUCKDB_API void Initialize(PhysicalOperator *root);
 
-	DUCKDB_API string ToString(bool print_optimizer_output = false) const;
-	DUCKDB_API void ToStream(std::ostream &str, bool print_optimizer_output = false) const;
+	DUCKDB_API string ToString(bool print_optimizer_output = true) const;
+	DUCKDB_API void ToStream(std::ostream &str, bool print_optimizer_output = true) const;
 	DUCKDB_API void Print();
 
 	DUCKDB_API string ToJSON() const;
@@ -200,6 +200,10 @@ private:
 	TreeMap tree_map;
 	//! Whether or not we are running as part of a explain_analyze query
 	bool is_explain_analyze;
+
+	//! POLR ops
+	unique_ptr<TreeNode> multiplexer_node;
+	unique_ptr<TreeNode> adaptive_union_node;
 
 public:
 	const TreeMap &GetTreeMap() const {
