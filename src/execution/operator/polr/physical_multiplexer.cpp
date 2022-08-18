@@ -104,11 +104,10 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		output_tuple_count = input.size() - state.chunk_offset;
 	} else {
 		// For now, we only send whole chunks
-		output_tuple_count = input.size() - state.chunk_offset;
-		/* output_tuple_count = std::min(input.size() - state.chunk_offset,
-		                              static_cast<idx_t>(state.num_tuples_processed * path_weights[next_path_idx] -
-		   state.input_tuple_count_per_path[next_path_idx]));
-		*/
+		// output_tuple_count = input.size() - state.chunk_offset;
+		output_tuple_count = std::min(input.size() - state.chunk_offset,
+		                              static_cast<idx_t>(std::ceil(state.num_tuples_processed * path_weights[next_path_idx] -
+		   state.input_tuple_count_per_path[next_path_idx])));
 	}
 
 	if (state.chunk_offset == 0 && output_tuple_count == input.size()) {
