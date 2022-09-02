@@ -476,6 +476,7 @@ void Executor::BuildPipelines(PhysicalOperator *op, Pipeline *current) {
 			current->operators.push_back(op);
 
 			// TODO(d-justen): THIS is where we fill the pipeline's join vectors
+			// TODO: Or rather save it somewhere in the optimizer
 			// If client_context->polr
 			//   Do not push back op
 			//   Check if operators already contain a multiplexer

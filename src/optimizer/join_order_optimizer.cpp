@@ -227,6 +227,7 @@ JoinNode *JoinOrderOptimizer::EmitPair(JoinRelationSet *left, JoinRelationSet *r
 	if (entry == plans.end() || new_plan->cost < entry->second->cost) {
 		// the plan is the optimal plan, move it into the dynamic programming tree
 		auto result = new_plan.get();
+		// TODO: Or here, allow multiple plans for the set (-> multimap?), then pick top N ones
 		plans[new_set] = move(new_plan);
 		return result;
 	}
@@ -366,6 +367,67 @@ bool JoinOrderOptimizer::SolveJoinOrderExactly() {
 	return true;
 }
 
+void JoinOrderOptimizer::FindAllLeftDeepTrees() {
+	idx_t max_cardinality = 0, seed_table_idx = 0;
+
+	for (idx_t i = 0; i < relations.size(); i++) {
+		idx_t estimate = relations[i]->op->estimated_cardinality;
+		if (estimate > max_cardinality) {
+			max_cardinality = estimate;
+			seed_table_idx = i;
+		}
+	}
+
+	vector<idx_t> remaining;
+	remaining.reserve(relations.size());
+
+	for (idx_t i = 0; i < relations.size(); i++) {
+		if (i != seed_table_idx) {
+			remaining.push_back(i);
+		}
+	}
+
+	vector<idx_t> joined(1);
+	joined[0] = seed_table_idx;
+
+	EnumerateJoinOrders(joined, remaining);
+}
+
+void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t>& joined, vector<idx_t>& remaining) {
+	if (remaining.empty()) {
+		join_paths.push_back(joined);
+		return;
+	}
+
+	vector<JoinRelationSet *> joined_relation_sets;
+	joined_relation_sets.reserve(joined.size());
+
+	for (auto& j : joined) {
+		joined_relation_sets.push_back(set_manager.GetJoinRelation(j));
+	}
+
+	for (idx_t i = 0; i < remaining.size(); i++) {
+		auto* remaining_relation_set = set_manager.GetJoinRelation(remaining[i]);
+
+		for (auto& j : joined_relation_sets) {
+			auto* connection = query_graph.GetConnection(j, remaining_relation_set);
+
+			if (connection) {
+				vector<idx_t> new_joined;
+				new_joined.reserve(joined.size() + 1);
+				new_joined.insert(new_joined.end(), joined.begin(), joined.end());
+				new_joined.push_back(remaining[i]);
+
+				vector<idx_t> new_remaining;
+				new_remaining.insert(new_remaining.end(), remaining.begin(), remaining.end());
+				new_remaining.erase(new_remaining.begin() + i);
+
+				EnumerateJoinOrders(new_joined, new_remaining);
+			}
+		}
+	}
+}
+
 void JoinOrderOptimizer::SolveJoinOrderApproximately() {
 	// at this point, we exited the dynamic programming but did not compute the final join order because it took too
 	// long instead, we use a greedy heuristic to obtain a join ordering now we use Greedy Operator Ordering to
@@ -395,6 +457,7 @@ void JoinOrderOptimizer::SolveJoinOrderApproximately() {
 						best_left = i;
 						best_right = j;
 					}
+					// TODO: Maybe here, if this is not the best connection but costs only x more AND we have space left for more join orders (e.g., < 20), add this somewhere
 				}
 			}
 		}
@@ -749,6 +812,7 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 	// First we initialize each of the single-node plans with themselves and with their cardinalities these are the leaf
 	// nodes of the join tree NOTE: we can just use pointers to JoinRelationSet* here because the GetJoinRelation
 	// function ensures that a unique combination of relations will have a unique JoinRelationSet object.
+	// TODO: This might be the place to insert Join Order Enumeration
 	for (idx_t i = 0; i < relations.size(); i++) {
 		auto &rel = *relations[i];
 		auto node = set_manager.GetJoinRelation(i);
@@ -775,6 +839,11 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		final_plan = plans.find(total_relation);
 		D_ASSERT(final_plan != plans.end());
 	}
+
+	if (relations.size() > 2) {
+		FindAllLeftDeepTrees();
+	}
+
 	// now perform the actual reordering
 	return RewritePlan(move(plan), final_plan->second.get());
 }

@@ -95,9 +95,6 @@ COPY supplier FROM 'test/ssb/data/supplier.tbl'
 statement ok
 COPY date FROM 'test/ssb/data/date.tbl'
 
-statement ok
-SET disabled_optimizers TO 'join_order'
-
 # q2.1.1
 statement ok
 SELECT SUM(LO_REVENUE), D_YEAR, P_BRAND
@@ -109,6 +106,9 @@ SELECT SUM(LO_REVENUE), D_YEAR, P_BRAND
 		AND S_REGION = 'AMERICA'
 	GROUP BY D_YEAR, P_BRAND
 	ORDER BY D_YEAR, P_BRAND
+
+statement ok
+SET disabled_optimizers TO 'join_order'
 
 # q2.1.2
 statement ok

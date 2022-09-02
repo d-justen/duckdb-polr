@@ -72,6 +72,9 @@ private:
 	//! C}
 	expression_map_t<vector<FilterInfo *>> equivalence_sets;
 
+	//! POLR
+	vector<vector<idx_t>> join_paths;
+
 	//! Extract the bindings referred to by an Expression
 	bool ExtractBindings(Expression &expression, unordered_set<idx_t> &bindings);
 	//! Traverse the query tree to find (1) base relations, (2) existing join conditions and (3) filters that can be
@@ -99,6 +102,11 @@ private:
 	//! Solve the join order exactly using dynamic programming. Returns true if it was completed successfully (i.e. did
 	//! not time-out)
 	bool SolveJoinOrderExactly();
+
+	//! POLR
+	void FindAllLeftDeepTrees();
+	void EnumerateJoinOrders(vector<idx_t>& joined, vector<idx_t>& remaining);
+
 	//! Solve the join order approximately using a greedy algorithm
 	void SolveJoinOrderApproximately();
 
