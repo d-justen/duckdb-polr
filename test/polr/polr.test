@@ -39,6 +39,9 @@ SELECT * FROM table_a JOIN table_b ON table_a.a_a = table_b.b_a JOIN table_c ON 
 statement ok
 SET disabled_optimizers TO 'join_order'
 
+statement ok
+PRAGMA enable_polr
+
 # row-wise
 query IIIIII
 SELECT * FROM table_a JOIN table_b ON table_a.a_a = table_b.b_a JOIN table_c ON table_a.a_b = table_c.c_b
@@ -88,9 +91,6 @@ SELECT * FROM table_a JOIN table_c ON table_a.a_b = table_c.c_b JOIN table_b ON 
 997	3997	7	3997	997	1997
 998	3998	8	3998	998	1998
 999	3999	9	3999	999	1999
-
-statement ok
-PRAGMA enable_polr
 
 # row-wise
 query IIIIII

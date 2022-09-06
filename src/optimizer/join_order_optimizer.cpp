@@ -368,15 +368,26 @@ bool JoinOrderOptimizer::SolveJoinOrderExactly() {
 }
 
 void JoinOrderOptimizer::FindAllLeftDeepTrees() {
-	idx_t max_cardinality = 0, seed_table_idx = 0;
-
+	// First, find the left most relation from the optimized plan
+	// That will be our seed table
+	unordered_set<idx_t> bindings;
 	for (idx_t i = 0; i < relations.size(); i++) {
-		idx_t estimate = relations[i]->op->estimated_cardinality;
-		if (estimate > max_cardinality) {
-			max_cardinality = estimate;
-			seed_table_idx = i;
-		}
+		bindings.insert(i);
 	}
+	auto total_relation = set_manager.GetJoinRelation(bindings);
+	auto final_plan = plans.find(total_relation);
+	D_ASSERT(final_plan != plans.cend());
+
+	auto *join_node = final_plan->second->left;
+	JoinRelationSet *join_set = nullptr;
+
+	while (join_node) {
+		join_set = join_node->set;
+		join_node = join_node->left;
+	}
+
+	D_ASSERT(join_set->count == 1);
+	idx_t seed_table_idx = join_set->relations[0];
 
 	vector<idx_t> remaining;
 	remaining.reserve(relations.size());
@@ -393,7 +404,7 @@ void JoinOrderOptimizer::FindAllLeftDeepTrees() {
 	EnumerateJoinOrders(joined, remaining);
 }
 
-void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t>& joined, vector<idx_t>& remaining) {
+void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t> &remaining) {
 	if (remaining.empty()) {
 		join_paths.push_back(joined);
 		return;
@@ -402,15 +413,15 @@ void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t>& joined, vector<idx_t
 	vector<JoinRelationSet *> joined_relation_sets;
 	joined_relation_sets.reserve(joined.size());
 
-	for (auto& j : joined) {
+	for (auto &j : joined) {
 		joined_relation_sets.push_back(set_manager.GetJoinRelation(j));
 	}
 
 	for (idx_t i = 0; i < remaining.size(); i++) {
-		auto* remaining_relation_set = set_manager.GetJoinRelation(remaining[i]);
+		auto *remaining_relation_set = set_manager.GetJoinRelation(remaining[i]);
 
-		for (auto& j : joined_relation_sets) {
-			auto* connection = query_graph.GetConnection(j, remaining_relation_set);
+		for (auto &j : joined_relation_sets) {
+			auto *connection = query_graph.GetConnection(j, remaining_relation_set);
 
 			if (connection) {
 				vector<idx_t> new_joined;
@@ -457,7 +468,8 @@ void JoinOrderOptimizer::SolveJoinOrderApproximately() {
 						best_left = i;
 						best_right = j;
 					}
-					// TODO: Maybe here, if this is not the best connection but costs only x more AND we have space left for more join orders (e.g., < 20), add this somewhere
+					// TODO: Maybe here, if this is not the best connection but costs only x more AND we have space left
+					// for more join orders (e.g., < 20), add this somewhere
 				}
 			}
 		}

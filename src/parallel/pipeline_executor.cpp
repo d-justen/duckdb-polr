@@ -397,6 +397,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 	context.thread.current_join_path = &pipeline.join_paths[current_path];
 	adaptive_union_chunk->Reset();
 
+	// TODO: Initialize this chunk before and then re-use it
 	auto tmp_adaptive_union_chunk = make_unique<DataChunk>();
 	tmp_adaptive_union_chunk->Initialize(adaptive_union_chunk->GetTypes());
 

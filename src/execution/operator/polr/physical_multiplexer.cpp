@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <map>
 #include <iostream>
 
@@ -26,6 +27,7 @@ public:
 	idx_t chunk_offset = 0;
 	idx_t current_path_idx;
 	idx_t current_path_tuple_count = 0;
+	idx_t current_path_remaining_tuples = 0;
 
 	// To be set after running the path
 	vector<double> intermediates_per_input_tuple;
@@ -46,6 +48,20 @@ unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ClientContext &c
 OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                 GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	auto &state = (MultiplexerState &)state_p;
+
+	// Shortcut: If we have tuples left from previous multiplexing, just route the whole next chunk
+	if (state.current_path_remaining_tuples > 0) {
+		chunk.Reference(input);
+		state.current_path_tuple_count = input.size();
+
+		if (state.current_path_remaining_tuples > input.size()) {
+			state.current_path_remaining_tuples -= input.size();
+		} else {
+			state.current_path_remaining_tuples = 0;
+		}
+
+		return OperatorResultType::NEED_MORE_INPUT;
+	}
 
 	// Initialize each path with one tuple to get initial weights
 	if (state.num_paths_initialized < path_count) {
@@ -98,16 +114,18 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		}
 	}
 
-	idx_t output_tuple_count = 0;
-	// We want to process the whole chunk if we are on the fastest path
-	if (next_path_has_max_weight) {
-		output_tuple_count = input.size() - state.chunk_offset;
-	} else {
-		// For now, we only send whole chunks
-		// output_tuple_count = input.size() - state.chunk_offset;
-		output_tuple_count = std::min(input.size() - state.chunk_offset,
-		                              static_cast<idx_t>(std::ceil(state.num_tuples_processed * path_weights[next_path_idx] -
-		   state.input_tuple_count_per_path[next_path_idx])));
+	idx_t output_tuple_count = static_cast<idx_t>(std::ceil(state.num_tuples_processed * path_weights[next_path_idx] -
+	                                                        state.input_tuple_count_per_path[next_path_idx]));
+
+	idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+
+	if (output_tuple_count > remaining_input_tuples) {
+		state.current_path_remaining_tuples = output_tuple_count - remaining_input_tuples;
+		output_tuple_count = remaining_input_tuples;
+
+		// We want to process the whole chunk if we are on the fastest path
+	} else if (next_path_has_max_weight) {
+		output_tuple_count = remaining_input_tuples;
 	}
 
 	if (state.chunk_offset == 0 && output_tuple_count == input.size()) {
@@ -188,14 +206,22 @@ string PhysicalMultiplexer::ParamsToString() const {
 	return "";
 }
 
+// TODO: We introduced a shortcut to not calculate path_weights after each chunk. If we see that the performance
+// deteriorates much, set remaining_tuples to 0
 void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_intermediates) const {
 	auto &state = (MultiplexerState &)state_p;
 
-	// TODO: intermediates_per_input_tuple can be 0. is there a better way than +1?
+	// We count input tuples as intermediates here. Otherwise, we can have 0 intermediates per input tuple resulting in
+	// general weirdness
 	double intermediates_per_input_tuple =
-	    (num_intermediates + 1) / static_cast<double>(state.current_path_tuple_count);
+	    (num_intermediates + state.current_path_tuple_count) / static_cast<double>(state.current_path_tuple_count);
 
 	if (state.num_paths_initialized == path_count) {
+		if (state.intermediates_per_input_tuple[state.current_path_idx] * 1.2 < intermediates_per_input_tuple) {
+			// Our path is now 20% (<- magic number) slower than before. We want to calculate weights again next time
+			state.current_path_remaining_tuples = 0;
+		}
+
 		// Rolling average
 		state.intermediates_per_input_tuple[state.current_path_idx] *= 0.5;
 		state.intermediates_per_input_tuple[state.current_path_idx] += 0.5 * intermediates_per_input_tuple;

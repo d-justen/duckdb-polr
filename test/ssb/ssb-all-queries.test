@@ -1,4 +1,4 @@
-# name: test/ssb/ssb-q1.test
+# name: test/ssb/ssb-all-queries.test
 # description: Run Star-Schema Benchmark Q1
 # group: [ssb]
 

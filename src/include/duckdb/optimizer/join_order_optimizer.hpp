@@ -105,7 +105,7 @@ private:
 
 	//! POLR
 	void FindAllLeftDeepTrees();
-	void EnumerateJoinOrders(vector<idx_t>& joined, vector<idx_t>& remaining);
+	void EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t> &remaining);
 
 	//! Solve the join order approximately using a greedy algorithm
 	void SolveJoinOrderApproximately();
