@@ -81,6 +81,9 @@ public:
 	//! The client configuration
 	ClientConfig config;
 
+	//! Generated POLR paths
+	shared_ptr<vector<vector<idx_t>>> polr_paths;
+
 public:
 	DUCKDB_API Transaction &ActiveTransaction() {
 		return transaction.ActiveTransaction();

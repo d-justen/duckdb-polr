@@ -98,7 +98,7 @@ order by
 
 # q3
 statement ok
-explain analyze select
+select
 	l_orderkey,
 	sum(l_extendedprice*(1-l_discount)) as revenue,
 	o_orderdate,
@@ -120,6 +120,9 @@ group by
 order by
 	revenue desc,
 	o_orderdate
+
+statement ok
+PRAGMA enable_polr
 
 # q5
 statement ok

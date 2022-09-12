@@ -6,6 +6,7 @@
 #include "duckdb/planner/operator/list.hpp"
 
 #include <algorithm>
+#include <map>
 
 namespace duckdb {
 
@@ -398,6 +399,8 @@ void JoinOrderOptimizer::FindAllLeftDeepTrees() {
 		}
 	}
 
+	join_paths = std::make_shared<vector<vector<idx_t>>>();
+
 	vector<idx_t> joined(1);
 	joined[0] = seed_table_idx;
 
@@ -406,7 +409,7 @@ void JoinOrderOptimizer::FindAllLeftDeepTrees() {
 
 void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t> &remaining) {
 	if (remaining.empty()) {
-		join_paths.push_back(joined);
+		join_paths->push_back(joined);
 		return;
 	}
 
@@ -557,6 +560,56 @@ static unique_ptr<LogicalOperator> ExtractJoinRelation(SingleJoinRelation &rel) 
 		}
 	}
 	throw Exception("Could not find relation in parent node (?)");
+}
+
+void JoinOrderOptimizer::FilterLeftDeepTrees() {
+	std::map<std::map<idx_t, set<idx_t>>, vector<idx_t>> join_paths_per_filter_group;
+
+	for (idx_t i = 0; i < join_paths->size(); i++) {
+		std::map<idx_t, set<idx_t>> filter_indizes_per_relation;
+
+		auto &current_join_path = join_paths->at(i);
+		JoinRelationSet *left = set_manager.GetJoinRelation(current_join_path[0]);
+		JoinRelationSet *right;
+
+		for (idx_t j = 1; j < current_join_path.size(); j++) {
+			idx_t relation_idx = current_join_path[j];
+			right = set_manager.GetJoinRelation(relation_idx);
+			auto *connection = query_graph.GetConnection(left, right);
+
+			for (auto *filter : connection->filters) {
+				// TODO(d-justen): instead we could look into the filter to check the build column (binding index)
+				// This seems to work fine for now though
+				filter_indizes_per_relation[relation_idx].insert(filter->filter_index);
+			}
+
+			left = set_manager.Union(left, right);
+		}
+
+		join_paths_per_filter_group[filter_indizes_per_relation].emplace_back(i);
+	}
+
+	if (join_paths_per_filter_group.size() == 1)
+		return;
+
+	vector<idx_t> *largest_filter_group;
+	idx_t largest_filter_group_size = 0;
+	for (auto &filter_group : join_paths_per_filter_group) {
+		if (filter_group.second.size() > largest_filter_group_size) {
+			largest_filter_group_size = filter_group.second.size();
+			largest_filter_group = &filter_group.second;
+		}
+	}
+
+	vector<vector<idx_t>> filtered_join_paths;
+	filtered_join_paths.reserve(largest_filter_group_size);
+
+	for (auto &join_path_idx : *largest_filter_group) {
+		filtered_join_paths.push_back(join_paths->at(join_path_idx));
+	}
+
+	join_paths->clear();
+	join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cend());
 }
 
 pair<JoinRelationSet *, unique_ptr<LogicalOperator>>
@@ -824,7 +877,6 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 	// First we initialize each of the single-node plans with themselves and with their cardinalities these are the leaf
 	// nodes of the join tree NOTE: we can just use pointers to JoinRelationSet* here because the GetJoinRelation
 	// function ensures that a unique combination of relations will have a unique JoinRelationSet object.
-	// TODO: This might be the place to insert Join Order Enumeration
 	for (idx_t i = 0; i < relations.size(); i++) {
 		auto &rel = *relations[i];
 		auto node = set_manager.GetJoinRelation(i);
@@ -852,8 +904,31 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		D_ASSERT(final_plan != plans.end());
 	}
 
-	if (relations.size() > 2) {
+	if (relations.size() > 2 && context.config.enable_polr) {
+		// FIXME: This generates the same path multiple times (e.g., jcch q5, each path 3 times) -> set instead of vec?
+		// :)
 		FindAllLeftDeepTrees();
+		FilterLeftDeepTrees();
+
+		// Generate LeftDeepJoinTree
+		auto &join_path = join_paths->at(0);
+		JoinRelationSet *left = set_manager.GetJoinRelation(join_path[0]);
+
+		for (idx_t i = 1; i < join_path.size(); i++) {
+			JoinNode *left_plan = plans.find(left)->second.get();
+
+			auto *right = set_manager.GetJoinRelation(join_path[i]);
+			auto *right_plan = plans.find(right)->second.get();
+
+			auto *connection = query_graph.GetConnection(left, right);
+			auto *new_set = set_manager.Union(left, right);
+			auto new_plan = CreateJoinTree(new_set, connection, left_plan, right_plan);
+			left = new_set;
+			plans[left] = move(new_plan);
+		}
+
+		final_plan = plans.find(left);
+		context.polr_paths = join_paths;
 	}
 
 	// now perform the actual reordering

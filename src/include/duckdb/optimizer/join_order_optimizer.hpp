@@ -10,6 +10,7 @@
 
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/unordered_set.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "duckdb/optimizer/join_order/query_graph.hpp"
 #include "duckdb/optimizer/join_order/join_relation.hpp"
 #include "duckdb/parser/expression_map.hpp"
@@ -73,7 +74,7 @@ private:
 	expression_map_t<vector<FilterInfo *>> equivalence_sets;
 
 	//! POLR
-	vector<vector<idx_t>> join_paths;
+	shared_ptr<vector<vector<idx_t>>> join_paths;
 
 	//! Extract the bindings referred to by an Expression
 	bool ExtractBindings(Expression &expression, unordered_set<idx_t> &bindings);
@@ -106,6 +107,7 @@ private:
 	//! POLR
 	void FindAllLeftDeepTrees();
 	void EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t> &remaining);
+	void FilterLeftDeepTrees();
 
 	//! Solve the join order approximately using a greedy algorithm
 	void SolveJoinOrderApproximately();

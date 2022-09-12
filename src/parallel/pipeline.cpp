@@ -248,10 +248,35 @@ void Pipeline::BuildPOLRPaths() {
 	}
 
 	if (hash_join_idxs.size() >= 2) {
+		// TODO: We must now take the join paths from context and somehow know which relation_idx belongs to which HJ
+		auto &initial_join_path = executor.context.polr_paths->at(0);
+		D_ASSERT(hash_join_idxs.size() == initial_join_path.size() - 1);
+
+		map<idx_t, idx_t> join_order_mapping;
+
+		for (idx_t i = 1; i < initial_join_path.size(); i++) {
+			join_order_mapping[initial_join_path[i]] = i - 1;
+		}
+
+		join_paths.reserve(executor.context.polr_paths->size());
+
+		// Fill join paths
+		for (auto &path : *executor.context.polr_paths) {
+			vector<idx_t> translated_join_order;
+			translated_join_order.reserve(path.size());
+
+			for (idx_t i = 1; i < path.size(); i++) {
+				idx_t relation_idx = path[i];
+				idx_t translated_join_idx = join_order_mapping[relation_idx];
+				translated_join_order.push_back(translated_join_idx);
+			}
+
+			join_paths.push_back(translated_join_order);
+		}
+
 		vector<idx_t> num_columns_per_join;
 		num_columns_per_join.reserve(hash_join_idxs.size());
 
-		// Fill join paths
 		for (auto hash_join_idx : hash_join_idxs) {
 			joins.push_back(static_cast<PhysicalHashJoin *>(operators[hash_join_idx]));
 			num_columns_per_join.push_back(joins.back()->types.size());
@@ -261,15 +286,9 @@ void Pipeline::BuildPOLRPaths() {
 		operators.erase(operators.begin() + hash_join_idxs.front(),
 		                operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
 
-		// Fill in multiplexer
-		idx_t num_join_paths = 1;
-		idx_t n = joins.size();
-		while (n > 1)
-			num_join_paths *= n--;
-
 		auto prev_types = joins.front()->children[0]->GetTypes();
 		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
-		                                               num_join_paths);
+		                                               join_paths.size());
 		multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
 		multiplexer_idx = hash_join_idxs.front();
 		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
@@ -278,16 +297,6 @@ void Pipeline::BuildPOLRPaths() {
 		    make_unique<PhysicalAdaptiveUnion>(joins.back()->types, multiplexer->types.size(),
 		                                       move(num_columns_per_join), joins.back()->estimated_cardinality);
 		adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
-
-		vector<idx_t> join_order_permutations(joins.size());
-
-		for (idx_t i = 0; i < join_order_permutations.size(); i++) {
-			join_order_permutations[i] = i;
-		}
-
-		do {
-			join_paths.push_back(join_order_permutations);
-		} while (std::next_permutation(join_order_permutations.begin(), join_order_permutations.end()));
 	}
 }
 
