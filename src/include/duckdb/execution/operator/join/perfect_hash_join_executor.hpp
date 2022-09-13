@@ -13,6 +13,8 @@
 #include "duckdb/execution/join_hashtable.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 
+#include <map>
+
 namespace duckdb {
 
 class PhysicalHashJoinState;
@@ -42,6 +44,7 @@ public:
 	bool CanDoPerfectHashJoin();
 
 	unique_ptr<OperatorState> GetOperatorState(ClientContext &context);
+	unique_ptr<OperatorState> GetOperatorStateWithBindings(ClientContext &context, std::map<idx_t, idx_t> &bindings);
 	OperatorResultType ProbePerfectHashTable(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                                         OperatorState &state);
 	bool BuildPerfectHashTable(LogicalType &type);

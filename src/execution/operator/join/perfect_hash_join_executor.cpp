@@ -132,6 +132,7 @@ public:
 	SelectionVector build_sel_vec;
 	SelectionVector probe_sel_vec;
 	SelectionVector seq_sel_vec;
+	vector<unique_ptr<Expression>> changed_exprs;
 };
 
 unique_ptr<OperatorState> PerfectHashJoinExecutor::GetOperatorState(ClientContext &context) {
@@ -140,6 +141,32 @@ unique_ptr<OperatorState> PerfectHashJoinExecutor::GetOperatorState(ClientContex
 	for (auto &cond : join.conditions) {
 		state->probe_executor.AddExpression(*cond.left);
 	}
+	state->build_sel_vec.Initialize(STANDARD_VECTOR_SIZE);
+	state->probe_sel_vec.Initialize(STANDARD_VECTOR_SIZE);
+	state->seq_sel_vec.Initialize(STANDARD_VECTOR_SIZE);
+	return move(state);
+}
+
+unique_ptr<OperatorState> PerfectHashJoinExecutor::GetOperatorStateWithBindings(ClientContext &context,
+                                                                                map<idx_t, idx_t> &bindings) {
+	auto state = make_unique<PerfectHashJoinState>();
+	state->join_keys.Initialize(join.condition_types);
+
+	for (idx_t i = 0; i < join.conditions.size(); i++) {
+		auto binding = bindings.find(i);
+
+		if (binding != bindings.end()) {
+			auto expr = join.conditions[binding->first].left->Copy();
+			auto &bound_ref_expr = dynamic_cast<BoundReferenceExpression &>(*expr);
+			bound_ref_expr.index = binding->second;
+
+			state->probe_executor.AddExpression(*expr);
+			state->changed_exprs.push_back(move(expr));
+		} else {
+			state->probe_executor.AddExpression(*join.conditions[i].left);
+		}
+	}
+
 	state->build_sel_vec.Initialize(STANDARD_VECTOR_SIZE);
 	state->probe_sel_vec.Initialize(STANDARD_VECTOR_SIZE);
 	state->seq_sel_vec.Initialize(STANDARD_VECTOR_SIZE);

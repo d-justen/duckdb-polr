@@ -31,8 +31,21 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 				}
 			}
 
-			for (auto &join : pipeline.joins) {
-				join_intermediate_states.push_back(join->GetOperatorState(context.client));
+			join_intermediate_states.reserve(pipeline.join_paths.size());
+			for (idx_t i = 0; i < pipeline.join_paths.size(); i++) {
+				auto &join_path = pipeline.join_paths[i];
+				vector<unique_ptr<OperatorState>> states;
+				states.reserve(pipeline.joins.size());
+
+				for (idx_t j = 0; j < pipeline.joins.size(); j++) {
+					idx_t join_idx = join_path[j];
+					auto *join = pipeline.joins[join_idx];
+					auto &bindings = pipeline.left_expression_bindings[i][j];
+					auto state = join->GetOperatorStateWithBindings(context.client, bindings);
+
+					states.push_back(move(state));
+				}
+				join_intermediate_states.push_back(move(states));
 			}
 
 			adaptive_union_chunk = make_unique<DataChunk>();
@@ -412,7 +425,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 
 		idx_t global_join_idx = pipeline.join_paths[current_path][local_join_idx];
 		auto current_operator = pipeline.joins[global_join_idx];
-		auto &current_state = join_intermediate_states[global_join_idx];
+		auto &current_state = join_intermediate_states[current_path][local_join_idx];
 
 		StartOperator(current_operator);
 		auto result =

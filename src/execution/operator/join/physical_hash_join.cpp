@@ -194,6 +194,7 @@ public:
 	ExpressionExecutor probe_executor;
 	unique_ptr<JoinHashTable::ScanStructure> scan_structure;
 	unique_ptr<OperatorState> perfect_hash_join_state;
+	vector<unique_ptr<Expression>> changed_exprs;
 
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
@@ -210,6 +211,32 @@ unique_ptr<OperatorState> PhysicalHashJoin::GetOperatorState(ClientContext &cont
 		state->join_keys.Initialize(condition_types);
 		for (auto &cond : conditions) {
 			state->probe_executor.AddExpression(*cond.left);
+		}
+	}
+	return move(state);
+}
+
+unique_ptr<OperatorState> PhysicalHashJoin::GetOperatorStateWithBindings(ClientContext &context,
+                                                                         map<idx_t, idx_t> &bindings) const {
+	auto state = make_unique<PhysicalHashJoinState>();
+	auto &sink = (HashJoinGlobalState &)*sink_state;
+	if (sink.perfect_join_executor) {
+		state->perfect_hash_join_state = sink.perfect_join_executor->GetOperatorStateWithBindings(context, bindings);
+	} else {
+		state->join_keys.Initialize(condition_types);
+		for (idx_t i = 0; i < conditions.size(); i++) {
+			auto binding = bindings.find(i);
+
+			if (binding != bindings.end()) {
+				auto expr = conditions[binding->first].left->Copy();
+				auto &bound_ref_expr = dynamic_cast<BoundReferenceExpression &>(*expr);
+				bound_ref_expr.index = binding->second;
+
+				state->probe_executor.AddExpression(*expr);
+				state->changed_exprs.push_back(move(expr));
+			} else {
+				state->probe_executor.AddExpression(*conditions[i].left);
+			}
 		}
 	}
 	return move(state);

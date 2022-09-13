@@ -18,6 +18,8 @@
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/common/atomic.hpp"
 
+#include <map>
+
 namespace duckdb {
 class Executor;
 class Event;
@@ -76,6 +78,7 @@ private:
 	//! POLR related
 	vector<PhysicalHashJoin *> joins;
 	vector<vector<idx_t>> join_paths; // e.g., [2, 0, 1] -> joins[2], then joins[0], then joins[1]
+	vector<vector<std::map<idx_t, idx_t>>> left_expression_bindings;
 	idx_t multiplexer_idx;
 	std::unique_ptr<PhysicalMultiplexer> multiplexer;
 	std::unique_ptr<PhysicalAdaptiveUnion> adaptive_union;

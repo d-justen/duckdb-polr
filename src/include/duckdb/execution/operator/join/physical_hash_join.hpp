@@ -16,6 +16,8 @@
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/planner/operator/logical_join.hpp"
 
+#include <map>
+
 namespace duckdb {
 
 //! PhysicalHashJoin represents a hash loop join between two tables
@@ -42,6 +44,8 @@ public:
 public:
 	// Operator Interface
 	unique_ptr<OperatorState> GetOperatorState(ClientContext &context) const override;
+	unique_ptr<OperatorState> GetOperatorStateWithBindings(ClientContext &context,
+	                                                       std::map<idx_t, idx_t> &bindings) const;
 	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
