@@ -413,31 +413,26 @@ void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t
 		return;
 	}
 
-	vector<JoinRelationSet *> joined_relation_sets;
-	joined_relation_sets.reserve(joined.size());
+	unordered_set<idx_t> joined_relation_bindings(joined.cbegin(), joined.cend());
+	auto *joined_relation_set = set_manager.GetJoinRelation(joined_relation_bindings);
 
-	for (auto &j : joined) {
-		joined_relation_sets.push_back(set_manager.GetJoinRelation(j));
-	}
+	unordered_set<idx_t> remaining_relation_bindings(remaining.begin(), remaining.end());
 
 	for (idx_t i = 0; i < remaining.size(); i++) {
 		auto *remaining_relation_set = set_manager.GetJoinRelation(remaining[i]);
+		auto *connection = query_graph.GetConnection(joined_relation_set, remaining_relation_set);
 
-		for (auto &j : joined_relation_sets) {
-			auto *connection = query_graph.GetConnection(j, remaining_relation_set);
+		if (connection) {
+			vector<idx_t> new_joined;
+			new_joined.reserve(joined.size() + 1);
+			new_joined.insert(new_joined.end(), joined.begin(), joined.end());
+			new_joined.push_back(remaining[i]);
 
-			if (connection) {
-				vector<idx_t> new_joined;
-				new_joined.reserve(joined.size() + 1);
-				new_joined.insert(new_joined.end(), joined.begin(), joined.end());
-				new_joined.push_back(remaining[i]);
+			vector<idx_t> new_remaining;
+			new_remaining.insert(new_remaining.end(), remaining.begin(), remaining.end());
+			new_remaining.erase(new_remaining.begin() + i);
 
-				vector<idx_t> new_remaining;
-				new_remaining.insert(new_remaining.end(), remaining.begin(), remaining.end());
-				new_remaining.erase(new_remaining.begin() + i);
-
-				EnumerateJoinOrders(new_joined, new_remaining);
-			}
+			EnumerateJoinOrders(new_joined, new_remaining);
 		}
 	}
 }
@@ -905,8 +900,6 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 	}
 
 	if (relations.size() > 2 && context.config.enable_polr) {
-		// FIXME: This generates the same path multiple times (e.g., jcch q5, each path 3 times) -> set instead of vec?
-		// :)
 		FindAllLeftDeepTrees();
 		FilterLeftDeepTrees();
 
