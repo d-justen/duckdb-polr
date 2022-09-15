@@ -90,6 +90,9 @@ void Vector::Reference(const Value &value) {
 }
 
 void Vector::Reference(Vector &other) {
+	if (other.GetType() != GetType()) {
+		void;
+	}
 	D_ASSERT(other.GetType() == GetType());
 	Reinterpret(other);
 }

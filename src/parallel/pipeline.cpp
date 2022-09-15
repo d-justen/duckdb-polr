@@ -249,10 +249,6 @@ void Pipeline::BuildPOLRPaths() {
 
 	if (hash_join_idxs.size() >= 2) {
 		auto &initial_join_path = executor.context.polr_paths->at(0);
-		if (!(hash_join_idxs.size() == initial_join_path.size() - 1)) {
-			void;
-		}
-
 		D_ASSERT(hash_join_idxs.size() == initial_join_path.size() - 1);
 
 		map<idx_t, idx_t> join_order_mapping;
@@ -316,7 +312,8 @@ void Pipeline::BuildPOLRPaths() {
 
 		for (idx_t i = 0; i < joins.size(); i++) {
 			auto &join = joins[i];
-			column_offsets.push_back(column_offsets.back() + join->right_projection_map.size());
+			idx_t num_columns_from_right = join->right_projection_map.empty() ? join->children[1]->types.size() : join->right_projection_map.size();
+			column_offsets.push_back(column_offsets.back() + num_columns_from_right);
 
 			for (idx_t j = 0; j < join->conditions.size(); j++) {
 				auto &condition = join->conditions[j];
