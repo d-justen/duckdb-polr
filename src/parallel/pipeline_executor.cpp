@@ -330,28 +330,47 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 
 			auto current_operator = pipeline.operators[operator_idx];
 
-			// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
-			if (operator_idx > 0 && pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
-				RunPath(*prev_chunk);
-				prev_chunk = &*adaptive_union_chunk;
-			}
+			if (current_operator->type == PhysicalOperatorType::MULTIPLEXER) {
+				DataChunk mpx_output_chunk; // TODO: This is a no-no, move to ctor
+				mpx_output_chunk.Initialize(pipeline.multiplexer->GetTypes());
 
-			// if current_idx > source_idx, we pass the previous' operators output through the Execute of the current
-			// operator
-			StartOperator(current_operator);
-			auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
-			                                        *intermediate_states[current_intermediate - 1]);
-			EndOperator(current_operator, &current_chunk);
-			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
-				// more data remains in this operator
-				// push in-process marker
-				in_process_operators.push(current_idx);
-			} else if (result == OperatorResultType::FINISHED) {
-				D_ASSERT(current_chunk.size() == 0);
-				return OperatorResultType::FINISHED;
+				StartOperator(current_operator);
+				auto result = current_operator->Execute(context, *prev_chunk, mpx_output_chunk, *current_operator->op_state,
+				                                        *intermediate_states[current_intermediate - 1]);
+				EndOperator(current_operator, &current_chunk);
+				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
+					// more data remains in this operator
+					// push in-process marker
+					in_process_operators.push(current_idx);
+				}
+
+				RunPath(mpx_output_chunk);
+				if (current_intermediate >= intermediate_chunks.size()) {
+					current_chunk.Reference(*adaptive_union_chunk);
+				}
+			} else {
+				// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
+				if (operator_idx > 0 && pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
+					prev_chunk = &*adaptive_union_chunk;
+				}
+
+				// if current_idx > source_idx, we pass the previous' operators output through the Execute of the current
+				// operator
+				StartOperator(current_operator);
+				auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
+				                                        *intermediate_states[current_intermediate - 1]);
+				EndOperator(current_operator, &current_chunk);
+				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
+					// more data remains in this operator
+					// push in-process marker
+					in_process_operators.push(current_idx);
+				} else if (result == OperatorResultType::FINISHED) {
+					D_ASSERT(current_chunk.size() == 0);
+					return OperatorResultType::FINISHED;
+				}
+				current_chunk.Verify();
+				CacheChunk(current_chunk, operator_idx);
 			}
-			current_chunk.Verify();
-			CacheChunk(current_chunk, operator_idx);
 		}
 
 		if (current_chunk.size() == 0) {
@@ -386,6 +405,11 @@ void PipelineExecutor::FetchFromSource(DataChunk &result) {
 
 void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 	PhysicalOperator *last_op = pipeline.operators.empty() ? pipeline.source : pipeline.operators.back();
+
+	if (last_op->type == PhysicalOperatorType::MULTIPLEXER) {
+		last_op = &*pipeline.adaptive_union;
+	}
+
 	chunk.Initialize(last_op->GetTypes());
 }
 

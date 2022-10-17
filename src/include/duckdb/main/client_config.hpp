@@ -21,7 +21,7 @@ struct ClientConfig {
 	//! If the query profiler is enabled or not.
 	bool enable_profiler = false;
 	//! If detailed query profiling is enabled
-	bool enable_detailed_profiling = false;
+	bool enable_detailed_profiling = true;
 	//! The format to automatically print query profiling information in (default: disabled)
 	ProfilerPrintFormat profiler_print_format = ProfilerPrintFormat::NONE;
 	//! The file to save query profiling information to, instead of printing it to the console

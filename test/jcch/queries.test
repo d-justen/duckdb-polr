@@ -194,9 +194,6 @@ group by
 order by
 	revenue desc
 
-statement ok
-PRAGMA enable_polr
-
 # q5
 statement ok
 select
@@ -223,3 +220,77 @@ group by
 	n_name
 order by
 	revenue desc
+
+statement ok
+select
+	l_orderkey,
+	sum(l_extendedprice*(1-l_discount)) as revenue,
+	o_orderdate,
+	o_shippriority
+from
+	customer,
+	orders,
+	lineitem
+where
+	c_mktsegment = 'BUILDING'
+	and c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+	and o_orderdate < date '1993-05-30'
+	and l_shipdate > date '1993-05-30'
+group by
+	l_orderkey,
+	o_orderdate,
+	o_shippriority
+order by
+	revenue desc,
+	o_orderdate
+
+statement ok
+PRAGMA enable_polr
+
+statement ok
+explain analyze select
+	l_orderkey,
+	sum(l_extendedprice*(1-l_discount)) as revenue,
+	o_orderdate,
+	o_shippriority
+from
+	orders
+join customer on c_custkey = o_custkey
+join lineitem on l_orderkey = o_orderkey
+where
+	c_mktsegment = 'BUILDING'
+	and o_orderdate < date '1993-05-30'
+	and l_shipdate > date '1993-05-30'
+group by
+	l_orderkey,
+	o_orderdate,
+	o_shippriority
+order by
+	revenue desc,
+	o_orderdate;
+
+
+
+explain analyze select
+	l_orderkey,
+	sum(l_extendedprice*(1-l_discount)) as revenue,
+	o_orderdate,
+	o_shippriority
+from
+	customer,
+	orders,
+	lineitem
+where
+	c_mktsegment = 'BUILDING'
+	and c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+	and o_orderdate < date '1993-05-30'
+	and l_shipdate > date '1993-05-30'
+group by
+	l_orderkey,
+	o_orderdate,
+	o_shippriority
+order by
+	revenue desc,
+	o_orderdate

@@ -422,7 +422,7 @@ void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t
 		auto *remaining_relation_set = set_manager.GetJoinRelation(remaining[i]);
 		auto *connection = query_graph.GetConnection(joined_relation_set, remaining_relation_set);
 
-		if (connection) {
+		if (connection && join_paths->size() < 512) {
 			vector<idx_t> new_joined;
 			new_joined.reserve(joined.size() + 1);
 			new_joined.insert(new_joined.end(), joined.begin(), joined.end());
@@ -604,7 +604,11 @@ void JoinOrderOptimizer::FilterLeftDeepTrees() {
 	}
 
 	join_paths->clear();
-	join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cend());
+	if (filtered_join_paths.size() <= 32) {
+		join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cend());
+	} else {
+		join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cbegin() + 16);
+	}
 }
 
 pair<JoinRelationSet *, unique_ptr<LogicalOperator>>
