@@ -18,21 +18,23 @@ using duckdb_parquet::format::Type;
 static unique_ptr<BaseStatistics> CreateNumericStats(const LogicalType &type,
                                                      const duckdb_parquet::format::SchemaElement &schema_ele,
                                                      const duckdb_parquet::format::Statistics &parquet_stats) {
-	auto stats = make_unique<NumericStatistics>(type);
+	auto stats = make_unique<NumericStatistics>(type, StatisticsType::LOCAL_STATS);
 
 	// for reasons unknown to science, Parquet defines *both* `min` and `min_value` as well as `max` and
 	// `max_value`. All are optional. such elegance.
 	if (parquet_stats.__isset.min) {
-		stats->min = ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.min).CastAs(type);
+		stats->min = ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.min).DefaultCastAs(type);
 	} else if (parquet_stats.__isset.min_value) {
-		stats->min = ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.min_value).CastAs(type);
+		stats->min =
+		    ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.min_value).DefaultCastAs(type);
 	} else {
 		stats->min = Value(type);
 	}
 	if (parquet_stats.__isset.max) {
-		stats->max = ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.max).CastAs(type);
+		stats->max = ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.max).DefaultCastAs(type);
 	} else if (parquet_stats.__isset.max_value) {
-		stats->max = ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.max_value).CastAs(type);
+		stats->max =
+		    ParquetStatisticsUtils::ConvertValue(type, schema_ele, parquet_stats.max_value).DefaultCastAs(type);
 	} else {
 		stats->max = Value(type);
 	}
@@ -210,7 +212,7 @@ unique_ptr<BaseStatistics> ParquetStatisticsUtils::TransformColumnStatistics(con
 		row_group_stats = CreateNumericStats(type, s_ele, parquet_stats);
 		break;
 	case LogicalTypeId::VARCHAR: {
-		auto string_stats = make_unique<StringStatistics>(type);
+		auto string_stats = make_unique<StringStatistics>(type, StatisticsType::LOCAL_STATS);
 		if (parquet_stats.__isset.min) {
 			string_stats->Update(parquet_stats.min);
 		} else if (parquet_stats.__isset.min_value) {

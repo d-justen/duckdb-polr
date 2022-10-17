@@ -25,6 +25,8 @@ import java.util.concurrent.Executor;
 public class DuckDBConnection implements java.sql.Connection {
 	protected ByteBuffer conn_ref = null;
 	protected DuckDBDatabase db;
+	protected boolean autoCommit = true;
+	protected boolean transactionRunning = false;
 
 	public DuckDBConnection(DuckDBDatabase db) throws SQLException {
 		if (db.db_ref == null) {
@@ -33,6 +35,7 @@ public class DuckDBConnection implements java.sql.Connection {
 		conn_ref = DuckDBNative.duckdb_jdbc_connect(db.db_ref);
 		DuckDBNative.duckdb_jdbc_set_auto_commit(conn_ref, true);
 		this.db = db;
+		db.incrementConnections();
 	}
 	
 	public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability)
@@ -78,12 +81,14 @@ public class DuckDBConnection implements java.sql.Connection {
 	public void commit() throws SQLException {
 		Statement s = createStatement();
 		s.execute("COMMIT");
+		transactionRunning = false;
 		s.close();
 	}
 
 	public void rollback() throws SQLException {
 		Statement s = createStatement();
 		s.execute("ROLLBACK");
+		transactionRunning = false;
 		s.close();
 	}
 
@@ -95,6 +100,7 @@ public class DuckDBConnection implements java.sql.Connection {
 		if (conn_ref != null) {
 			DuckDBNative.duckdb_jdbc_disconnect(conn_ref);
 			conn_ref = null;
+			db.maybeShutdown();
 		}
 		db = null;
 	}
@@ -148,20 +154,33 @@ public class DuckDBConnection implements java.sql.Connection {
 		return db.read_only;
 	}
 
-	// at some point we will implement this
-
 	public void setAutoCommit(boolean autoCommit) throws SQLException {
 		if (isClosed()) {
 			throw new SQLException("Connection was closed");
 		}
-		DuckDBNative.duckdb_jdbc_set_auto_commit(conn_ref, autoCommit);
+		
+		if (this.autoCommit != autoCommit) {
+			this.autoCommit = autoCommit;
+
+			// A running transaction is committed if switched to auto-commit
+			if (transactionRunning && autoCommit) {
+				this.commit();
+			}
+		}
+		return;
+
+		// Native method is not working as one would expect ... uncomment maybe later
+		// DuckDBNative.duckdb_jdbc_set_auto_commit(conn_ref, autoCommit);
 	}
 
 	public boolean getAutoCommit() throws SQLException {
 		if (isClosed()) {
 			throw new SQLException("Connection was closed");
 		}
-		return DuckDBNative.duckdb_jdbc_get_auto_commit(conn_ref);
+		return this.autoCommit;
+
+		// Native method is not working as one would expect ... uncomment maybe later
+		// return DuckDBNative.duckdb_jdbc_get_auto_commit(conn_ref);
 	}
 
 	public PreparedStatement prepareStatement(String sql) throws SQLException {
@@ -185,7 +204,7 @@ public class DuckDBConnection implements java.sql.Connection {
 	}
 
 	public String getSchema() throws SQLException {
-		throw new SQLFeatureNotSupportedException();
+		return DuckDBNative.duckdb_jdbc_get_schema(conn_ref);
 	}
 
 	public void abort(Executor executor) throws SQLException {

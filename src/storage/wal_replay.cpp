@@ -16,6 +16,7 @@
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/write_ahead_log.hpp"
+#include "duckdb/storage/storage_manager.hpp"
 
 namespace duckdb {
 
@@ -105,8 +106,8 @@ bool WriteAheadLog::Replay(DatabaseInstance &database, string &path) {
 	initial_reader.reset();
 	if (checkpoint_state.checkpoint_id != INVALID_BLOCK) {
 		// there is a checkpoint flag: check if we need to deserialize the WAL
-		auto &manager = BlockManager::GetBlockManager(database);
-		if (manager.IsRootBlock(checkpoint_state.checkpoint_id)) {
+		auto &manager = StorageManager::GetStorageManager(database);
+		if (manager.IsCheckpointClean(checkpoint_state.checkpoint_id)) {
 			// the contents of the WAL have already been checkpointed
 			// we can safely truncate the WAL and ignore its contents
 			return true;
@@ -231,7 +232,7 @@ void ReplayState::ReplayEntry(WALType entry_type) {
 // Replay Table
 //===--------------------------------------------------------------------===//
 void ReplayState::ReplayCreateTable() {
-	auto info = TableCatalogEntry::Deserialize(source);
+	auto info = TableCatalogEntry::Deserialize(source, context);
 	if (deserialize_only) {
 		return;
 	}
@@ -271,7 +272,7 @@ void ReplayState::ReplayAlter() {
 // Replay View
 //===--------------------------------------------------------------------===//
 void ReplayState::ReplayCreateView() {
-	auto entry = ViewCatalogEntry::Deserialize(source);
+	auto entry = ViewCatalogEntry::Deserialize(source, context);
 	if (deserialize_only) {
 		return;
 	}
@@ -394,7 +395,7 @@ void ReplayState::ReplaySequenceValue() {
 // Replay Macro
 //===--------------------------------------------------------------------===//
 void ReplayState::ReplayCreateMacro() {
-	auto entry = ScalarMacroCatalogEntry::Deserialize(source);
+	auto entry = ScalarMacroCatalogEntry::Deserialize(source, context);
 	if (deserialize_only) {
 		return;
 	}
@@ -420,7 +421,7 @@ void ReplayState::ReplayDropMacro() {
 // Replay Table Macro
 //===--------------------------------------------------------------------===//
 void ReplayState::ReplayCreateTableMacro() {
-	auto entry = TableMacroCatalogEntry::Deserialize(source);
+	auto entry = TableMacroCatalogEntry::Deserialize(source, context);
 	if (deserialize_only) {
 		return;
 	}
@@ -466,7 +467,7 @@ void ReplayState::ReplayInsert() {
 	}
 
 	// append to the current table
-	current_table->storage->Append(*current_table, context, chunk);
+	current_table->storage->LocalAppend(*current_table, context, chunk);
 }
 
 void ReplayState::ReplayDelete() {

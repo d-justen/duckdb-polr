@@ -5,6 +5,7 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/assert.hpp"
+#include "duckdb/common/operator/multiply.hpp"
 #include "duckdb/common/limits.hpp"
 
 #include <cstring>
@@ -14,6 +15,10 @@
 namespace duckdb {
 
 static_assert(sizeof(date_t) == sizeof(int32_t), "date_t was padded");
+
+const char *Date::PINF = "infinity";  // NOLINT
+const char *Date::NINF = "-infinity"; // NOLINT
+const char *Date::EPOCH = "epoch";    // NOLINT
 
 const string_t Date::MONTH_NAMES_ABBREVIATED[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
@@ -185,6 +190,18 @@ bool Date::ParseDoubleDigit(const char *buf, idx_t len, idx_t &pos, int32_t &res
 	return false;
 }
 
+static bool TryConvertDateSpecial(const char *buf, idx_t len, idx_t &pos, const char *special) {
+	auto p = pos;
+	for (; p < len && *special; ++p) {
+		const auto s = *special++;
+		if (!s || StringUtil::CharacterToLower(buf[p]) != s) {
+			return false;
+		}
+	}
+	pos = p;
+	return true;
+}
+
 bool Date::TryConvertDate(const char *buf, idx_t len, idx_t &pos, date_t &result, bool strict) {
 	pos = 0;
 	if (len == 0) {
@@ -213,7 +230,19 @@ bool Date::TryConvertDate(const char *buf, idx_t len, idx_t &pos, date_t &result
 		}
 	}
 	if (!StringUtil::CharacterIsDigit(buf[pos])) {
-		return false;
+		// Check for special values
+		if (TryConvertDateSpecial(buf, len, pos, PINF)) {
+			result = yearneg ? date_t::ninfinity() : date_t::infinity();
+		} else if (TryConvertDateSpecial(buf, len, pos, EPOCH)) {
+			result = date_t::epoch();
+		} else {
+			return false;
+		}
+		// skip trailing spaces - parsing must be strict here
+		while (pos < len && StringUtil::CharacterIsSpace(buf[pos])) {
+			pos++;
+		}
+		return pos == len;
 	}
 	// first parse the year
 	for (; pos < len && StringUtil::CharacterIsDigit(buf[pos]); pos++) {
@@ -314,6 +343,13 @@ date_t Date::FromString(const string &str, bool strict) {
 }
 
 string Date::ToString(date_t date) {
+	// PG displays temporal infinities in lowercase,
+	// but numerics in Titlecase.
+	if (date == date_t::infinity()) {
+		return PINF;
+	} else if (date == date_t::ninfinity()) {
+		return NINF;
+	}
 	int32_t date_units[3];
 	idx_t year_length;
 	bool add_bc;
@@ -386,6 +422,14 @@ int64_t Date::EpochNanoseconds(date_t date) {
 	return ((int64_t)date.days) * (Interval::MICROS_PER_DAY * 1000);
 }
 
+int64_t Date::EpochMicroseconds(date_t date) {
+	int64_t result;
+	if (!TryMultiplyOperator::Operation<int64_t, int64_t, int64_t>(date.days, Interval::MICROS_PER_DAY, result)) {
+		throw ConversionException("Could not convert DATE to microseconds");
+	}
+	return result;
+}
+
 int32_t Date::ExtractYear(date_t d, int32_t *last_year) {
 	auto n = d.days;
 	// cached look up: check if year of this date is the same as the last one we looked up
@@ -445,10 +489,10 @@ int32_t Date::ExtractISODayOfTheWeek(date_t date) {
 	// 7  = 4
 	if (date.days < 0) {
 		// negative date: start off at 4 and cycle downwards
-		return (7 - ((-date.days + 3) % 7));
+		return (7 - ((-int64_t(date.days) + 3) % 7));
 	} else {
 		// positive date: start off at 4 and cycle upwards
-		return ((date.days + 3) % 7) + 1;
+		return ((int64_t(date.days) + 3) % 7) + 1;
 	}
 }
 

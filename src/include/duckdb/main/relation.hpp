@@ -16,6 +16,7 @@
 #include "duckdb/parser/column_definition.hpp"
 #include "duckdb/common/named_parameter_map.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/main/external_dependencies.hpp"
 
 #include <memory>
 
@@ -27,8 +28,6 @@ class Binder;
 class LogicalOperator;
 class QueryNode;
 class TableRef;
-
-class ExtraDependencies {};
 
 class Relation : public std::enable_shared_from_this<Relation> {
 public:
@@ -44,7 +43,7 @@ public:
 
 	RelationType type;
 
-	unique_ptr<ExtraDependencies> extra_dependencies;
+	shared_ptr<ExternalDependency> extra_dependencies;
 
 public:
 	DUCKDB_API virtual const vector<ColumnDefinition> &Columns() = 0;
@@ -60,6 +59,8 @@ public:
 	DUCKDB_API void Head(idx_t limit = 10);
 
 	DUCKDB_API shared_ptr<Relation> CreateView(const string &name, bool replace = true, bool temporary = false);
+	DUCKDB_API shared_ptr<Relation> CreateView(const string &schema_name, const string &name, bool replace = true,
+	                                           bool temporary = false);
 	DUCKDB_API unique_ptr<QueryResult> Query(const string &sql);
 	DUCKDB_API unique_ptr<QueryResult> Query(const string &name, const string &sql);
 
@@ -144,6 +145,7 @@ public:
 	DUCKDB_API virtual Relation *ChildRelation() {
 		return nullptr;
 	}
+	DUCKDB_API vector<shared_ptr<ExternalDependency>> GetAllDependencies();
 
 protected:
 	DUCKDB_API string RenderWhitespace(idx_t depth);

@@ -17,8 +17,8 @@
 
 namespace duckdb {
 
-class PhysicalHashJoinState;
-class HashJoinGlobalState;
+class HashJoinOperatorState;
+class HashJoinGlobalSinkState;
 class PhysicalHashJoin;
 
 struct PerfectHashJoinStats {
@@ -43,8 +43,8 @@ public:
 public:
 	bool CanDoPerfectHashJoin();
 
-	unique_ptr<OperatorState> GetOperatorState(ClientContext &context);
-	unique_ptr<OperatorState> GetOperatorStateWithBindings(ClientContext &context, std::map<idx_t, idx_t> &bindings);
+	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context);
+	unique_ptr<OperatorState> GetOperatorStateWithBindings(ExecutionContext &context, std::map<idx_t, idx_t> &bindings);
 	OperatorResultType ProbePerfectHashTable(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                                         OperatorState &state);
 	bool BuildPerfectHashTable(LogicalType &type);

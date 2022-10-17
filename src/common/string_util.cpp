@@ -1,7 +1,6 @@
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/pair.hpp"
 #include "duckdb/common/to_string.hpp"
-#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/exception.hpp"
 
 #include <algorithm>
@@ -202,8 +201,9 @@ vector<string> StringUtil::TopNStrings(vector<pair<string, idx_t>> scores, idx_t
 	if (scores.empty()) {
 		return vector<string>();
 	}
-	sort(scores.begin(), scores.end(),
-	     [](const pair<string, idx_t> &a, const pair<string, idx_t> &b) -> bool { return a.second < b.second; });
+	sort(scores.begin(), scores.end(), [](const pair<string, idx_t> &a, const pair<string, idx_t> &b) -> bool {
+		return a.second < b.second || (a.second == b.second && a.first.size() < b.first.size());
+	});
 	vector<string> result;
 	result.push_back(scores[0].first);
 	for (idx_t i = 1; i < MinValue<idx_t>(scores.size(), n); i++) {
@@ -234,7 +234,9 @@ private:
 };
 
 // adapted from https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Levenshtein_distance#C++
-idx_t StringUtil::LevenshteinDistance(const string &s1, const string &s2) {
+idx_t StringUtil::LevenshteinDistance(const string &s1_p, const string &s2_p) {
+	auto s1 = StringUtil::Lower(s1_p);
+	auto s2 = StringUtil::Lower(s2_p);
 	idx_t len1 = s1.size();
 	idx_t len2 = s2.size();
 	if (len1 == 0) {
@@ -273,7 +275,11 @@ vector<string> StringUtil::TopNLevenshtein(const vector<string> &strings, const 
 	vector<pair<string, idx_t>> scores;
 	scores.reserve(strings.size());
 	for (auto &str : strings) {
-		scores.emplace_back(str, LevenshteinDistance(str, target));
+		if (target.size() < str.size()) {
+			scores.emplace_back(str, LevenshteinDistance(str.substr(0, target.size()), target));
+		} else {
+			scores.emplace_back(str, LevenshteinDistance(str, target));
+		}
 	}
 	return TopNStrings(scores, n, threshold);
 }

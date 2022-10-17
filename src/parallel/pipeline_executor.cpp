@@ -1,5 +1,6 @@
 #include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/main/client_context.hpp"
+#include "duckdb/common/limits.hpp"
 
 namespace duckdb {
 
@@ -25,7 +26,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 					types.insert(types.cend(), build_types.cbegin(), build_types.cend());
 
 					auto chunk = make_unique<DataChunk>();
-					chunk->Initialize(types);
+					chunk->Initialize(Allocator::Get(context.client), types);
 
 					join_intermediate_chunks[i].push_back(move(chunk));
 				}
@@ -41,7 +42,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 					idx_t join_idx = join_path[j];
 					auto *join = pipeline.joins[join_idx];
 					auto &bindings = pipeline.left_expression_bindings[i][j];
-					auto state = join->GetOperatorStateWithBindings(context.client, bindings);
+					auto state = join->GetOperatorStateWithBindings(context, bindings);
 
 					states.push_back(move(state));
 				}
@@ -49,8 +50,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			}
 
 			adaptive_union_chunk = make_unique<DataChunk>();
-			adaptive_union_chunk->Initialize(pipeline.joins.back()->GetTypes());
-			adaptive_union_state = pipeline.adaptive_union->GetOperatorState(context.client);
+			adaptive_union_chunk->Initialize(Allocator::Get(context.client), pipeline.joins.back()->GetTypes());
+			adaptive_union_state = pipeline.adaptive_union->GetOperatorState(context);
 		}
 	}
 
@@ -58,7 +59,9 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
+		requires_batch_index = pipeline.sink->RequiresBatchIndex() && pipeline.source->SupportsBatchIndex();
 	}
+	bool can_cache_in_pipeline = pipeline.sink && !pipeline.IsOrderDependent() && !requires_batch_index;
 	intermediate_chunks.reserve(pipeline.operators.size());
 	intermediate_states.reserve(pipeline.operators.size());
 	cached_chunks.resize(pipeline.operators.size());
@@ -66,15 +69,15 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		auto prev_operator = i == 0 ? pipeline.source : pipeline.operators[i - 1];
 		auto current_operator = pipeline.operators[i];
 		auto chunk = make_unique<DataChunk>();
-		chunk->Initialize(prev_operator->GetTypes());
+		chunk->Initialize(Allocator::Get(context.client), prev_operator->GetTypes());
 		intermediate_chunks.push_back(move(chunk));
-		intermediate_states.push_back(current_operator->GetOperatorState(context.client));
+		intermediate_states.push_back(current_operator->GetOperatorState(context));
 
 		if (i == pipeline.multiplexer_idx) {
 			multiplexer_state = &*intermediate_states.back();
 		}
 
-		if (pipeline.sink && !pipeline.sink->SinkOrderMatters() && current_operator->RequiresCache()) {
+		if (can_cache_in_pipeline && current_operator->RequiresCache()) {
 			auto &cache_types = current_operator->GetTypes();
 			bool can_cache = true;
 			for (auto &type : cache_types) {
@@ -87,12 +90,12 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 				continue;
 			}
 			cached_chunks[i] = make_unique<DataChunk>();
-			cached_chunks[i]->Initialize(current_operator->GetTypes());
+			cached_chunks[i]->Initialize(Allocator::Get(context.client), current_operator->GetTypes());
 		}
 		if (current_operator->IsSink() && current_operator->sink_state->state == SinkFinalizeType::NO_OUTPUT_POSSIBLE) {
 			// one of the operators has already figured out no output is possible
 			// we can skip executing the pipeline
-			finished_processing = true;
+			FinishProcessing();
 		}
 	}
 	InitializeChunk(final_chunk);
@@ -103,7 +106,7 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 	bool exhausted_source = false;
 	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
 	for (idx_t i = 0; i < max_chunks; i++) {
-		if (finished_processing) {
+		if (IsFinished()) {
 			break;
 		}
 		source_chunk.Reset();
@@ -114,11 +117,11 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 		}
 		auto result = ExecutePushInternal(source_chunk);
 		if (result == OperatorResultType::FINISHED) {
-			finished_processing = true;
+			D_ASSERT(IsFinished());
 			break;
 		}
 	}
-	if (!exhausted_source && !finished_processing) {
+	if (!exhausted_source && !IsFinished()) {
 		return false;
 	}
 	PushFinalize();
@@ -138,6 +141,15 @@ void PipelineExecutor::Execute() {
 OperatorResultType PipelineExecutor::ExecutePush(DataChunk &input) { // LCOV_EXCL_START
 	return ExecutePushInternal(input);
 } // LCOV_EXCL_STOP
+
+void PipelineExecutor::FinishProcessing(int32_t operator_idx) {
+	finished_processing_idx = operator_idx < 0 ? NumericLimits<int32_t>::Maximum() : operator_idx;
+	in_process_operators = stack<idx_t>();
+}
+
+bool PipelineExecutor::IsFinished() {
+	return finished_processing_idx >= 0;
+}
 
 OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t initial_idx) {
 	D_ASSERT(pipeline.sink);
@@ -163,6 +175,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			auto sink_result = pipeline.sink->Sink(context, *pipeline.sink->sink_state, *local_sink_state, sink_chunk);
 			EndOperator(pipeline.sink, nullptr);
 			if (sink_result == SinkResultType::FINISHED) {
+				FinishProcessing();
 				return OperatorResultType::FINISHED;
 			}
 		}
@@ -170,7 +183,6 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			return OperatorResultType::NEED_MORE_INPUT;
 		}
 	}
-	return OperatorResultType::FINISHED;
 }
 
 void PipelineExecutor::PushFinalize() {
@@ -179,13 +191,15 @@ void PipelineExecutor::PushFinalize() {
 	}
 	finalized = true;
 	// flush all caches
-	if (!finished_processing) {
-		D_ASSERT(in_process_operators.empty());
-		for (idx_t i = 0; i < cached_chunks.size(); i++) {
-			if (cached_chunks[i] && cached_chunks[i]->size() > 0) {
-				ExecutePushInternal(*cached_chunks[i], i + 1);
-				cached_chunks[i].reset();
-			}
+	// note that even if an operator has finished, we might still need to flush caches AFTER that operator
+	// e.g. if we have SOURCE -> LIMIT -> CROSS_PRODUCT -> SINK, if the LIMIT reports no more rows will be passed on
+	// we still need to flush caches from the CROSS_PRODUCT
+	D_ASSERT(in_process_operators.empty());
+	idx_t start_idx = IsFinished() ? idx_t(finished_processing_idx) : 0;
+	for (idx_t i = start_idx; i < cached_chunks.size(); i++) {
+		if (cached_chunks[i] && cached_chunks[i]->size() > 0) {
+			ExecutePushInternal(*cached_chunks[i], i + 1);
+			cached_chunks[i].reset();
 		}
 	}
 	D_ASSERT(local_sink_state);
@@ -230,7 +244,7 @@ void PipelineExecutor::CacheChunk(DataChunk &current_chunk, idx_t operator_idx) 
 			if (chunk_cache.size() >= (STANDARD_VECTOR_SIZE - CACHE_THRESHOLD)) {
 				// chunk cache full: return it
 				current_chunk.Move(chunk_cache);
-				chunk_cache.Initialize(pipeline.operators[operator_idx]->GetTypes());
+				chunk_cache.Initialize(Allocator::Get(context.client), pipeline.operators[operator_idx]->GetTypes());
 			} else {
 				// chunk cache not full: probe again
 				current_chunk.Reset();
@@ -241,7 +255,7 @@ void PipelineExecutor::CacheChunk(DataChunk &current_chunk, idx_t operator_idx) 
 }
 
 void PipelineExecutor::ExecutePull(DataChunk &result) {
-	if (finished_processing) {
+	if (IsFinished()) {
 		return;
 	}
 	auto &executor = pipeline.executor;
@@ -257,10 +271,18 @@ void PipelineExecutor::ExecutePull(DataChunk &result) {
 				}
 			}
 			if (!pipeline.operators.empty()) {
-				Execute(source_chunk, result);
+				auto state = Execute(source_chunk, result);
+				if (state == OperatorResultType::FINISHED) {
+					break;
+				}
 			}
 		}
-	} catch (std::exception &ex) { // LCOV_EXCL_START
+	} catch (const Exception &ex) { // LCOV_EXCL_START
+		if (executor.HasError()) {
+			executor.ThrowException();
+		}
+		throw;
+	} catch (std::exception &ex) {
 		if (executor.HasError()) {
 			executor.ThrowException();
 		}
@@ -332,11 +354,12 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 
 			if (current_operator->type == PhysicalOperatorType::MULTIPLEXER) {
 				DataChunk mpx_output_chunk; // TODO: This is a no-no, move to ctor
-				mpx_output_chunk.Initialize(pipeline.multiplexer->GetTypes());
+				mpx_output_chunk.Initialize(Allocator::Get(context.client), pipeline.multiplexer->GetTypes());
 
 				StartOperator(current_operator);
-				auto result = current_operator->Execute(context, *prev_chunk, mpx_output_chunk, *current_operator->op_state,
-				                                        *intermediate_states[current_intermediate - 1]);
+				auto result =
+				    current_operator->Execute(context, *prev_chunk, mpx_output_chunk, *current_operator->op_state,
+				                              *intermediate_states[current_intermediate - 1]);
 				EndOperator(current_operator, &current_chunk);
 				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 					// more data remains in this operator
@@ -350,15 +373,17 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				}
 			} else {
 				// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
-				if (operator_idx > 0 && pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
+				if (operator_idx > 0 &&
+				    pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
 					prev_chunk = &*adaptive_union_chunk;
 				}
 
-				// if current_idx > source_idx, we pass the previous' operators output through the Execute of the current
-				// operator
+				// if current_idx > source_idx, we pass the previous' operators output through the Execute of the
+				// current operator
 				StartOperator(current_operator);
-				auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
-				                                        *intermediate_states[current_intermediate - 1]);
+				auto result =
+				    current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
+				                              *intermediate_states[current_intermediate - 1]);
 				EndOperator(current_operator, &current_chunk);
 				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 					// more data remains in this operator
@@ -366,6 +391,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 					in_process_operators.push(current_idx);
 				} else if (result == OperatorResultType::FINISHED) {
 					D_ASSERT(current_chunk.size() == 0);
+					FinishProcessing(current_idx);
 					return OperatorResultType::FINISHED;
 				}
 				current_chunk.Verify();
@@ -400,6 +426,14 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 void PipelineExecutor::FetchFromSource(DataChunk &result) {
 	StartOperator(pipeline.source);
 	pipeline.source->GetData(context, result, *pipeline.source_state, *local_source_state);
+	if (result.size() != 0 && requires_batch_index) {
+		auto next_batch_index =
+		    pipeline.source->GetBatchIndex(context, result, *pipeline.source_state, *local_source_state);
+		next_batch_index += pipeline.base_batch_index;
+		D_ASSERT(local_sink_state->batch_index <= next_batch_index ||
+		         local_sink_state->batch_index == DConstants::INVALID_INDEX);
+		local_sink_state->batch_index = next_batch_index;
+	}
 	EndOperator(pipeline.source, &result);
 }
 
@@ -410,7 +444,7 @@ void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 		last_op = &*pipeline.adaptive_union;
 	}
 
-	chunk.Initialize(last_op->GetTypes());
+	chunk.Initialize(Allocator::DefaultAllocator(), last_op->GetTypes());
 }
 
 void PipelineExecutor::StartOperator(PhysicalOperator *op) {
@@ -436,7 +470,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 
 	// TODO: Initialize this chunk before and then re-use it
 	auto tmp_adaptive_union_chunk = make_unique<DataChunk>();
-	tmp_adaptive_union_chunk->Initialize(adaptive_union_chunk->GetTypes());
+	tmp_adaptive_union_chunk->Initialize(Allocator::Get(context.client), adaptive_union_chunk->GetTypes());
 
 	stack<idx_t> in_process_joins;
 	idx_t local_join_idx = 0;

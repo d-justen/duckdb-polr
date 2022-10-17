@@ -14,15 +14,6 @@
 
 namespace duckdb {
 
-struct timestamp_struct {
-	int32_t year;
-	int8_t month;
-	int8_t day;
-	int8_t hour;
-	int8_t min;
-	int8_t sec;
-	int16_t msec;
-};
 //! The Timestamp class is a static class that holds helper functions for the Timestamp
 //! type.
 class Timestamp {
@@ -33,8 +24,11 @@ public:
 	constexpr static const int32_t MIN_DAY = 22;
 
 public:
-	//! Convert a string in the format "YYYY-MM-DD hh:mm:ss" to a timestamp object
+	//! Convert a string in the format "YYYY-MM-DD hh:mm:ss[.f][-+TH[:tm]]" to a timestamp object
 	DUCKDB_API static timestamp_t FromString(const string &str);
+	//! Convert a string where the offset can also be a time zone string: / [A_Za-z0-9/_]+/
+	//! If the tz is not empty, the result is still an instant, but the parts can be extracted and applied to the TZ
+	DUCKDB_API static bool TryConvertTimestampTZ(const char *str, idx_t len, timestamp_t &result, string_t &tz);
 	DUCKDB_API static bool TryConvertTimestamp(const char *str, idx_t len, timestamp_t &result);
 	DUCKDB_API static timestamp_t FromCString(const char *str, idx_t len);
 	//! Convert a date object to a string in the format "YYYY-MM-DD hh:mm:ss"
@@ -46,6 +40,11 @@ public:
 	//! Create a Timestamp object from a specified (date, time) combination
 	DUCKDB_API static timestamp_t FromDatetime(date_t date, dtime_t time);
 	DUCKDB_API static bool TryFromDatetime(date_t date, dtime_t time, timestamp_t &result);
+
+	//! Is the timestamp finite or infinite?
+	static inline bool IsFinite(timestamp_t timestamp) {
+		return timestamp != timestamp_t::infinity() && timestamp != timestamp_t::ninfinity();
+	}
 
 	//! Extract the date and time from a given timestamp object
 	DUCKDB_API static void Convert(timestamp_t date, date_t &out_date, dtime_t &out_time);

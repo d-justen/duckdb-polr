@@ -41,7 +41,7 @@ public:
 	}
 };
 
-unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ClientContext &context) const {
+unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ExecutionContext &context) const {
 	return make_unique<MultiplexerState>(path_count);
 }
 

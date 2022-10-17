@@ -42,15 +42,14 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 	explicit InterpretedBenchmarkState(string path)
 	    : benchmark_config(GetBenchmarkConfig()), db(path.empty() ? nullptr : path.c_str(), benchmark_config.get()),
 	      con(db) {
-		con.EnableProfiling();
 		auto &instance = BenchmarkRunner::GetInstance();
 		auto res = con.Query("PRAGMA threads=" + to_string(instance.threads));
-		D_ASSERT(res->success);
+		D_ASSERT(!res->HasError());
 	}
 
 	unique_ptr<DBConfig> GetBenchmarkConfig() {
 		auto result = make_unique<DBConfig>();
-		result->load_extensions = false;
+		result->options.load_extensions = false;
 		return result;
 	}
 };
@@ -144,6 +143,11 @@ void InterpretedBenchmark::LoadBenchmark() {
 				throw std::runtime_error(reader.FormatException("require requires a single parameter"));
 			}
 			extensions.insert(splits[1]);
+		} else if (splits[0] == "connect") {
+			if (splits.size() != 2) {
+				throw std::runtime_error(reader.FormatException("connect requires a database path"));
+			}
+			db_path = (splits[1]);
 		} else if (splits[0] == "cache") {
 			if (splits.size() != 2) {
 				throw std::runtime_error(reader.FormatException("cache requires a single parameter"));
@@ -197,28 +201,17 @@ void InterpretedBenchmark::LoadBenchmark() {
 			}
 			if (is_file) {
 				// read the results from the file
-				result_column_count = -1;
-				std::ifstream csv_infile(splits[1]);
-				bool skipped_header = false;
-				idx_t line_number = 0;
-				while (std::getline(csv_infile, line)) {
-					line_number++;
-					if (line.empty()) {
-						break;
+				DuckDB db;
+				Connection con(db);
+				auto result = con.Query("SELECT * FROM read_csv_auto('" + splits[1] +
+				                        "', delim='|', header=1, nullstr='NULL', all_varchar=1)");
+				result_column_count = result->ColumnCount();
+				for (auto &row : *result) {
+					vector<string> row_values;
+					for (idx_t col_idx = 0; col_idx < result->ColumnCount(); col_idx++) {
+						row_values.push_back(row.GetValue<string>(col_idx));
 					}
-					if (!skipped_header) {
-						skipped_header = true;
-						continue;
-					}
-					auto result_splits = StringUtil::Split(line, "|");
-					if (result_column_count < 0) {
-						result_column_count = result_splits.size();
-					} else if (idx_t(result_column_count) != result_splits.size()) {
-						throw std::runtime_error("error in file " + splits[1] +
-						                         ", inconsistent amount of rows in CSV on line " +
-						                         to_string(line_number));
-					}
-					result_values.push_back(move(result_splits));
+					result_values.push_back(move(row_values));
 				}
 
 				// read the main file until we encounter an empty line
@@ -277,6 +270,7 @@ unique_ptr<BenchmarkState> InterpretedBenchmark::Initialize(BenchmarkConfigurati
 	unique_ptr<QueryResult> result;
 	LoadBenchmark();
 	auto state = make_unique<InterpretedBenchmarkState>(GetDatabasePath());
+	extensions.insert("parquet");
 	for (auto &extension : extensions) {
 		auto result = ExtensionHelper::LoadExtension(state->db, extension);
 		if (result == ExtensionLoadResult::EXTENSION_UNKNOWN) {
@@ -291,8 +285,8 @@ unique_ptr<BenchmarkState> InterpretedBenchmark::Initialize(BenchmarkConfigurati
 		string init_query = queries["init"];
 		result = state->con.Query(init_query);
 		while (result) {
-			if (!result->success) {
-				throw Exception(result->error);
+			if (result->HasError()) {
+				result->ThrowError();
 			}
 			result = move(result->next);
 		}
@@ -315,8 +309,8 @@ unique_ptr<BenchmarkState> InterpretedBenchmark::Initialize(BenchmarkConfigurati
 		}
 	}
 	while (result) {
-		if (!result->success) {
-			throw Exception(result->error);
+		if (result->HasError()) {
+			result->ThrowError();
 		}
 		result = move(result->next);
 	}
@@ -346,8 +340,8 @@ void InterpretedBenchmark::Cleanup(BenchmarkState *state_p) {
 		string cleanup_query = queries["cleanup"];
 		result = state.con.Query(cleanup_query);
 		while (result) {
-			if (!result->success) {
-				throw Exception(result->error);
+			if (result->HasError()) {
+				result->ThrowError();
 			}
 			result = move(result->next);
 		}
@@ -359,6 +353,8 @@ string InterpretedBenchmark::GetDatabasePath() {
 		string path = "duckdb_benchmark_db.db";
 		DeleteDatabase(path);
 		return path;
+	} else if (db_path != "") {
+		return db_path;
 	} else {
 		return string();
 	}
@@ -366,8 +362,8 @@ string InterpretedBenchmark::GetDatabasePath() {
 
 string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
 	auto &state = (InterpretedBenchmarkState &)*state_p;
-	if (!state.result->success) {
-		return state.result->error;
+	if (state.result->HasError()) {
+		return state.result->GetError();
 	}
 	if (result_column_count == 0) {
 		// no result specified
@@ -380,31 +376,31 @@ string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
 		                          state.result->ToString());
 	}
 	// compare row count
-	if (state.result->collection.Count() != result_values.size()) {
+	if (state.result->RowCount() != result_values.size()) {
 		return StringUtil::Format("Error in result: expected %lld rows but got %lld\nObtained result: %s",
-		                          (int64_t)result_values.size(), (int64_t)state.result->collection.Count(),
+		                          (int64_t)result_values.size(), (int64_t)state.result->RowCount(),
 		                          state.result->ToString());
 	}
 	// compare values
 	for (int64_t r = 0; r < (int64_t)result_values.size(); r++) {
 		for (int64_t c = 0; c < result_column_count; c++) {
-			auto value = state.result->collection.GetValue(c, r);
+			auto value = state.result->GetValue(c, r);
 			if (result_values[r][c] == "NULL" && value.IsNull()) {
+				continue;
+			}
+			if (result_values[r][c] == value.ToString()) {
+				continue;
+			}
+			if (result_values[r][c] == "(empty)" && (value.ToString() == "" || value.IsNull())) {
 				continue;
 			}
 
 			Value verify_val(result_values[r][c]);
 			try {
-				if (result_values[r][c] == value.ToString()) {
-					continue;
-				}
-				verify_val = verify_val.CastAs(state.result->types[c]);
-				if (result_values[r][c] == "(empty)" && (verify_val.ToString() == "" || value.IsNull())) {
-					continue;
-				}
+				verify_val = verify_val.CastAs(*state.con.context, value.type());
 			} catch (...) {
 			}
-			if (!Value::ValuesAreEqual(value, verify_val)) {
+			if (!Value::ValuesAreEqual(*state.con.context, verify_val, value)) {
 				return StringUtil::Format(
 				    "Error in result on row %lld column %lld: expected value \"%s\" but got value \"%s\"", r + 1, c + 1,
 				    verify_val.ToString().c_str(), value.ToString().c_str());

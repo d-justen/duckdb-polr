@@ -21,7 +21,7 @@ public:
 	}
 };
 
-unique_ptr<OperatorState> PhysicalAdaptiveUnion::GetOperatorState(ClientContext &context) const {
+unique_ptr<OperatorState> PhysicalAdaptiveUnion::GetOperatorState(ExecutionContext &context) const {
 	return make_unique<AdaptiveUnionState>();
 }
 

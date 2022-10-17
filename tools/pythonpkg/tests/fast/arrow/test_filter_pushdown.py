@@ -259,6 +259,39 @@ class TestArrowFilterPushdown(object):
         # Try Or
         assert duckdb_conn.execute("SELECT count(*) from testarrow where a = '2020-03-01 10:00:01' or b ='2008-01-01 00:00:01'").fetchone()[0] == 2
 
+    def test_filter_pushdown_timestamp_TZ(self,duckdb_cursor):
+        if not can_run:
+            return
+        duckdb_conn.execute("CREATE TABLE test_timestamptz (a  TIMESTAMPTZ, b TIMESTAMPTZ, c TIMESTAMPTZ)")
+        duckdb_conn.execute("INSERT INTO  test_timestamptz VALUES ('2008-01-01 00:00:01','2008-01-01 00:00:01','2008-01-01 00:00:01'),('2010-01-01 10:00:01','2010-01-01 10:00:01','2010-01-01 10:00:01'),('2020-03-01 10:00:01','2010-01-01 10:00:01','2020-03-01 10:00:01'),(NULL,NULL,NULL)")
+        duck_tbl = duckdb_conn.table("test_timestamptz")
+        arrow_table = duck_tbl.arrow()
+        print (arrow_table)
+
+        duckdb_conn.register("testarrow",arrow_table)
+        # Try ==
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a ='2008-01-01 00:00:01'").fetchone()[0] == 1
+        # Try >
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a >'2008-01-01 00:00:01'").fetchone()[0] == 2
+        # Try >=
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a >='2010-01-01 10:00:01'").fetchone()[0] == 2
+        # Try <
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a <'2010-01-01 10:00:01'").fetchone()[0] == 1
+        # Try <=
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a <='2010-01-01 10:00:01'").fetchone()[0] == 2
+
+        # Try Is Null
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a IS NULL").fetchone()[0] == 1
+        # Try Is Not Null
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a IS NOT NULL").fetchone()[0] == 3
+
+        # Try And
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a='2010-01-01 10:00:01' and b ='2008-01-01 00:00:01'").fetchone()[0] == 0
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a ='2020-03-01 10:00:01' and b = '2010-01-01 10:00:01' and c = '2020-03-01 10:00:01'").fetchone()[0] == 1
+        # Try Or
+        assert duckdb_conn.execute("SELECT count(*) from testarrow where a = '2020-03-01 10:00:01' or b ='2008-01-01 00:00:01'").fetchone()[0] == 2
+
+
     def test_filter_pushdown_date(self,duckdb_cursor):
         if not can_run:
             return
@@ -330,3 +363,16 @@ class TestArrowFilterPushdown(object):
 
         os.remove("data1.parquet")
         os.remove("data2.parquet")
+
+    def test_filter_column_removal(self,duckdb_cursor):
+        if not can_run:
+            return
+        duckdb_conn.execute("CREATE TABLE test AS SELECT range i, range j FROM range(5)")
+        duck_test_table = duckdb_conn.table("test")
+        arrow_test_table = duck_test_table.arrow()
+        duckdb_conn.register("arrow_test_table",arrow_test_table)
+
+        # PR 4817 - remove filter columns that are unused in the remainder of the query plan from the table function
+        query_res = duckdb_conn.execute("EXPLAIN SELECT count(*) from testarrow where a = 100 or b =1").fetchall()
+        match = re.search("│ +j +│", query_res[0][1])
+        assert not match

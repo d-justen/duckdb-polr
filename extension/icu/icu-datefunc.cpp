@@ -7,21 +7,22 @@
 
 namespace duckdb {
 
-ICUDateFunc::BindData::BindData(const BindData &other) : calendar(other.calendar->clone()) {
+ICUDateFunc::BindData::BindData(const BindData &other)
+    : tz_setting(other.tz_setting), cal_setting(other.cal_setting), calendar(other.calendar->clone()) {
 }
 
 ICUDateFunc::BindData::BindData(ClientContext &context) {
 	Value tz_value;
-	string tz_id;
 	if (context.TryGetCurrentSetting("TimeZone", tz_value)) {
-		tz_id = tz_value.ToString();
+		tz_setting = tz_value.ToString();
 	}
-	auto tz = icu::TimeZone::createTimeZone(icu::UnicodeString::fromUTF8(icu::StringPiece(tz_id)));
+	auto tz = icu::TimeZone::createTimeZone(icu::UnicodeString::fromUTF8(icu::StringPiece(tz_setting)));
 
 	string cal_id("@calendar=");
 	Value cal_value;
 	if (context.TryGetCurrentSetting("Calendar", cal_value)) {
-		cal_id += cal_value.ToString();
+		cal_setting = cal_value.ToString();
+		cal_id += cal_setting;
 	} else {
 		cal_id += "gregorian";
 	}
@@ -35,18 +36,23 @@ ICUDateFunc::BindData::BindData(ClientContext &context) {
 	}
 }
 
-bool ICUDateFunc::BindData::Equals(FunctionData &other_p) {
-	auto &other = (BindData &)other_p;
-	return FunctionData::Equals(other_p) && *calendar == *other.calendar;
+bool ICUDateFunc::BindData::Equals(const FunctionData &other_p) const {
+	auto &other = (const ICUDateFunc::BindData &)other_p;
+	return *calendar == *other.calendar;
 }
 
-unique_ptr<FunctionData> ICUDateFunc::BindData::Copy() {
+unique_ptr<FunctionData> ICUDateFunc::BindData::Copy() const {
 	return make_unique<BindData>(*this);
 }
 
 unique_ptr<FunctionData> ICUDateFunc::Bind(ClientContext &context, ScalarFunction &bound_function,
                                            vector<unique_ptr<Expression>> &arguments) {
 	return make_unique<BindData>(context);
+}
+
+void ICUDateFunc::SetTimeZone(icu::Calendar *calendar, const string_t &tz_id) {
+	auto tz = icu_66::TimeZone::createTimeZone(icu::UnicodeString::fromUTF8(icu::StringPiece(tz_id.GetString())));
+	calendar->adoptTimeZone(tz);
 }
 
 timestamp_t ICUDateFunc::GetTimeUnsafe(icu::Calendar *calendar, uint64_t micros) {
@@ -81,7 +87,11 @@ timestamp_t ICUDateFunc::GetTime(icu::Calendar *calendar, uint64_t micros) {
 
 uint64_t ICUDateFunc::SetTime(icu::Calendar *calendar, timestamp_t date) {
 	int64_t millis = date.value / Interval::MICROS_PER_MSEC;
-	uint64_t micros = date.value % Interval::MICROS_PER_MSEC;
+	int64_t micros = date.value % Interval::MICROS_PER_MSEC;
+	if (micros < 0) {
+		--millis;
+		micros += Interval::MICROS_PER_MSEC;
+	}
 
 	const auto udate = UDate(millis);
 	UErrorCode status = U_ZERO_ERROR;
@@ -89,7 +99,7 @@ uint64_t ICUDateFunc::SetTime(icu::Calendar *calendar, timestamp_t date) {
 	if (U_FAILURE(status)) {
 		throw Exception("Unable to set ICU calendar time.");
 	}
-	return micros;
+	return uint64_t(micros);
 }
 
 int32_t ICUDateFunc::ExtractField(icu::Calendar *calendar, UCalendarDateFields field) {

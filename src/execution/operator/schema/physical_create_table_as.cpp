@@ -17,13 +17,14 @@ PhysicalCreateTableAs::PhysicalCreateTableAs(LogicalOperator &op, SchemaCatalogE
 //===--------------------------------------------------------------------===//
 class CreateTableAsGlobalState : public GlobalSinkState {
 public:
-	CreateTableAsGlobalState() {
-		inserted_count = 0;
+	CreateTableAsGlobalState() : inserted_count(0), initialized(false) {
 	}
 
 	mutex append_lock;
 	TableCatalogEntry *table;
 	int64_t inserted_count;
+	LocalAppendState append_state;
+	bool initialized;
 };
 
 unique_ptr<GlobalSinkState> PhysicalCreateTableAs::GetGlobalSinkState(ClientContext &context) const {
@@ -36,12 +37,24 @@ unique_ptr<GlobalSinkState> PhysicalCreateTableAs::GetGlobalSinkState(ClientCont
 SinkResultType PhysicalCreateTableAs::Sink(ExecutionContext &context, GlobalSinkState &state, LocalSinkState &lstate_p,
                                            DataChunk &input) const {
 	auto &sink = (CreateTableAsGlobalState &)state;
-	if (sink.table) {
-		lock_guard<mutex> client_guard(sink.append_lock);
-		sink.table->storage->Append(*sink.table, context.client, input);
-		sink.inserted_count += input.size();
+	D_ASSERT(sink.table);
+	lock_guard<mutex> client_guard(sink.append_lock);
+	if (!sink.initialized) {
+		sink.table->storage->InitializeLocalAppend(sink.append_state, context.client);
+		sink.initialized = true;
 	}
+	sink.table->storage->LocalAppend(sink.append_state, *sink.table, context.client, input);
+	sink.inserted_count += input.size();
 	return SinkResultType::NEED_MORE_INPUT;
+}
+
+SinkFinalizeType PhysicalCreateTableAs::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
+                                                 GlobalSinkState &state) const {
+	auto &gstate = (CreateTableAsGlobalState &)state;
+	if (gstate.initialized) {
+		gstate.table->storage->FinalizeLocalAppend(gstate.append_state);
+	}
+	return SinkFinalizeType::READY;
 }
 
 //===--------------------------------------------------------------------===//
