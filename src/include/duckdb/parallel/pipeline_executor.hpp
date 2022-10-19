@@ -51,7 +51,7 @@ public:
 	void PullFinalize();
 
 	//! POLR related
-	void RunPath(DataChunk &chunk);
+	void RunPath(DataChunk &chunk, DataChunk &result);
 
 private:
 	//! The pipeline to process

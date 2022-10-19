@@ -69,7 +69,13 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		auto prev_operator = i == 0 ? pipeline.source : pipeline.operators[i - 1];
 		auto current_operator = pipeline.operators[i];
 		auto chunk = make_unique<DataChunk>();
-		chunk->Initialize(Allocator::Get(context.client), prev_operator->GetTypes());
+
+		if (prev_operator->type == PhysicalOperatorType::MULTIPLEXER) {
+			chunk->Initialize(Allocator::Get(context.client), pipeline.adaptive_union->GetTypes());
+		} else {
+			chunk->Initialize(Allocator::Get(context.client), prev_operator->GetTypes());
+		}
+
 		intermediate_chunks.push_back(move(chunk));
 		intermediate_states.push_back(current_operator->GetOperatorState(context));
 
@@ -360,24 +366,15 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				auto result =
 				    current_operator->Execute(context, *prev_chunk, mpx_output_chunk, *current_operator->op_state,
 				                              *intermediate_states[current_intermediate - 1]);
-				EndOperator(current_operator, &current_chunk);
+				EndOperator(current_operator, &mpx_output_chunk);
 				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 					// more data remains in this operator
 					// push in-process marker
 					in_process_operators.push(current_idx);
 				}
 
-				RunPath(mpx_output_chunk);
-				if (current_intermediate >= intermediate_chunks.size()) {
-					current_chunk.Reference(*adaptive_union_chunk);
-				}
+				RunPath(mpx_output_chunk, current_chunk);
 			} else {
-				// If previous operator was Multiplexer, prev_chunk is now the output from adaptive_union
-				if (operator_idx > 0 &&
-				    pipeline.operators[operator_idx - 1]->type == PhysicalOperatorType::MULTIPLEXER) {
-					prev_chunk = &*adaptive_union_chunk;
-				}
-
 				// if current_idx > source_idx, we pass the previous' operators output through the Execute of the
 				// current operator
 				StartOperator(current_operator);
@@ -462,11 +459,10 @@ void PipelineExecutor::EndOperator(PhysicalOperator *op, DataChunk *chunk) {
 	}
 }
 
-void PipelineExecutor::RunPath(DataChunk &chunk) {
+void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result) {
 	idx_t current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
 
 	context.thread.current_join_path = &pipeline.join_paths[current_path];
-	adaptive_union_chunk->Reset();
 
 	// TODO: Initialize this chunk before and then re-use it
 	auto tmp_adaptive_union_chunk = make_unique<DataChunk>();
@@ -486,13 +482,13 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 		auto &current_state = join_intermediate_states[current_path][local_join_idx];
 
 		StartOperator(current_operator);
-		auto result =
+		auto join_result =
 		    current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state, *current_state);
 		EndOperator(current_operator, &current_chunk);
 
 		num_intermediates += current_chunk.size();
 
-		if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
+		if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {
 			// more data remains in this operator
 			// push in-process marker
 			in_process_joins.push(local_join_idx);
@@ -518,9 +514,9 @@ void PipelineExecutor::RunPath(DataChunk &chunk) {
 				StartOperator(&*pipeline.adaptive_union);
 				pipeline.adaptive_union->Execute(context, current_chunk, *tmp_adaptive_union_chunk,
 				                                 *pipeline.adaptive_union->op_state, *adaptive_union_state);
-				EndOperator(&*pipeline.adaptive_union, &*adaptive_union_chunk);
+				EndOperator(&*pipeline.adaptive_union, &*tmp_adaptive_union_chunk);
 
-				adaptive_union_chunk->Append(*tmp_adaptive_union_chunk, true);
+				result.Append(*tmp_adaptive_union_chunk, true);
 				tmp_adaptive_union_chunk->Reset();
 
 				if (!in_process_joins.empty()) {

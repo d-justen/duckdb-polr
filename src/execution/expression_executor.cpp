@@ -42,9 +42,6 @@ void ExpressionExecutor::Initialize(const Expression &expression, ExpressionExec
 
 void ExpressionExecutor::Execute(DataChunk *input, DataChunk &result) {
 	SetChunk(input);
-	if (expressions.size() != result.ColumnCount()) {
-		(void)input;
-	}
 
 	D_ASSERT(expressions.size() == result.ColumnCount());
 	D_ASSERT(!expressions.empty());
