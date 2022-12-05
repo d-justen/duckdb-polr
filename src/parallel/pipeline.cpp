@@ -175,7 +175,7 @@ void Pipeline::Ready() {
 	std::reverse(operators.begin(), operators.end());
 	Reset(); // TODO: Why do we have to reset here?
 
-	if (executor.context.config.enable_polr) {
+	if (executor.context.config.enable_polr && executor.context.polr_paths) {
 		BuildPOLRPaths();
 	}
 }
@@ -242,6 +242,10 @@ void Pipeline::BuildPOLRPaths() {
 
 	if (hash_join_idxs.size() >= 2) {
 		auto &initial_join_path = executor.context.polr_paths->at(0);
+		if (hash_join_idxs.size() != initial_join_path.size() - 1) {
+			return;
+		}
+
 		D_ASSERT(hash_join_idxs.size() == initial_join_path.size() - 1);
 
 		map<idx_t, idx_t> join_order_mapping;
