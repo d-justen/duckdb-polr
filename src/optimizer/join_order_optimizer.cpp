@@ -496,6 +496,7 @@ void JoinOrderOptimizer::FindAllLeftDeepTrees() {
 	auto *join_node = final_plan->second->left;
 	JoinRelationSet *join_set = nullptr;
 
+	// TODO: Detect whether we have a left-deep join plan. If so: set original_join_order to that join succession
 	while (join_node) {
 		join_set = join_node->set;
 		join_node = join_node->left;
@@ -504,45 +505,45 @@ void JoinOrderOptimizer::FindAllLeftDeepTrees() {
 	D_ASSERT(join_set->count == 1);
 	idx_t seed_table_idx = join_set->relations[0];
 
-	vector<idx_t> remaining;
+	vector<JoinRelationSet *> remaining;
 	remaining.reserve(relations.size());
 
 	for (idx_t i = 0; i < relations.size(); i++) {
 		if (i != seed_table_idx) {
-			remaining.push_back(i);
+			remaining.push_back(set_manager.GetJoinRelation(i));
 		}
 	}
 
-	join_paths = std::make_shared<vector<vector<idx_t>>>();
+	join_paths = std::make_shared<vector<vector<JoinRelationSet *>>>();
 
-	vector<idx_t> joined(1);
-	joined[0] = seed_table_idx;
+	vector<JoinRelationSet *> joined(1);
+	joined[0] = set_manager.GetJoinRelation(seed_table_idx);
 
 	EnumerateJoinOrders(joined, remaining);
 }
 
-void JoinOrderOptimizer::EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t> &remaining) {
+void JoinOrderOptimizer::EnumerateJoinOrders(vector<JoinRelationSet *> &joined, vector<JoinRelationSet *> &remaining) {
 	if (remaining.empty()) {
 		join_paths->push_back(joined);
 		return;
 	}
 
-	unordered_set<idx_t> joined_relation_bindings(joined.cbegin(), joined.cend());
-	auto *joined_relation_set = set_manager.GetJoinRelation(joined_relation_bindings);
-
-	unordered_set<idx_t> remaining_relation_bindings(remaining.begin(), remaining.end());
+	auto *joined_relation_set = joined.front();
+	for (idx_t i = 1; i < joined.size(); i++) {
+		joined_relation_set = set_manager.Union(joined_relation_set, joined[i]);
+	}
 
 	for (idx_t i = 0; i < remaining.size(); i++) {
-		auto *remaining_relation_set = set_manager.GetJoinRelation(remaining[i]);
+		auto *remaining_relation_set = remaining[i];
 		auto connections = query_graph.GetConnections(joined_relation_set, remaining_relation_set);
 
 		if (!connections.empty() && join_paths->size() < 512) {
-			vector<idx_t> new_joined;
+			vector<JoinRelationSet *> new_joined;
 			new_joined.reserve(joined.size() + 1);
 			new_joined.insert(new_joined.end(), joined.begin(), joined.end());
 			new_joined.push_back(remaining[i]);
 
-			vector<idx_t> new_remaining;
+			vector<JoinRelationSet *> new_remaining;
 			new_remaining.insert(new_remaining.end(), remaining.begin(), remaining.end());
 			new_remaining.erase(new_remaining.begin() + i);
 
@@ -772,19 +773,78 @@ static unique_ptr<LogicalOperator> ExtractJoinRelation(SingleJoinRelation &rel) 
 	throw Exception("Could not find relation in parent node (?)");
 }
 
+void JoinOrderOptimizer::FindLongestInnerLDT() {
+	// First, retrieve the optimizer's found plan
+	unordered_set<idx_t> bindings;
+	for (idx_t i = 0; i < relations.size(); i++) {
+		bindings.insert(i);
+	}
+	auto total_relation = set_manager.GetJoinRelation(bindings);
+	auto final_plan = plans.find(total_relation);
+	D_ASSERT(final_plan != plans.cend());
+
+	// Find the longest left-deep tree within the plan
+	auto ldt_set = FindLDTRecursive(&*final_plan->second);
+	// The LDT must feature at least 2 joins (i.e. >= 3 RelationSets) to allow changing the order
+	if (ldt_set.size() <= 2) {
+		return;
+	}
+
+	auto reversed_join_order = std::make_shared<vector<JoinRelationSet *>>();
+	for (auto it = ldt_set.rbegin(); it != ldt_set.rend(); it++) {
+		reversed_join_order->push_back(*it);
+	}
+	original_join_order = reversed_join_order;
+
+	// Now generate all possible join orders with this set
+	std::vector<JoinRelationSet *> joined(1, original_join_order->front());
+	std::vector<JoinRelationSet *> remaining(std::next(original_join_order->begin()), original_join_order->end());
+
+	EnumerateJoinOrders(joined, remaining);
+	FilterLeftDeepTrees();
+}
+
+vector<JoinRelationSet *> JoinOrderOptimizer::FindLDTRecursive(JoinNode *node) {
+	vector<JoinRelationSet *> set;
+
+	auto *left_child = node->left;
+	auto *right_child = node->right;
+
+	// See how long the LDT is from here
+	while (left_child) {
+		set.push_back(right_child->set);
+
+		if (!left_child->left) {
+			set.push_back(left_child->set);
+		}
+
+		right_child = left_child->right;
+		left_child = left_child->left;
+	}
+
+	if (node->right) {
+		auto set_from_right = FindLDTRecursive(node->right);
+
+		if (set_from_right.size() > set.size()) {
+			set = set_from_right;
+		}
+	}
+
+	return set;
+}
+
 void JoinOrderOptimizer::FilterLeftDeepTrees() {
-	std::map<std::map<idx_t, set<idx_t>>, vector<idx_t>> join_paths_per_filter_group;
+	std::map<std::map<JoinRelationSet *, set<idx_t>>, vector<idx_t>> join_paths_per_filter_group;
 
 	for (idx_t i = 0; i < join_paths->size(); i++) {
-		std::map<idx_t, set<idx_t>> filter_indizes_per_relation;
+		std::map<JoinRelationSet *, set<idx_t>> filter_indizes_per_relation;
 
 		auto &current_join_path = join_paths->at(i);
-		JoinRelationSet *left = set_manager.GetJoinRelation(current_join_path[0]);
+		JoinRelationSet *left = current_join_path[0];
 		JoinRelationSet *right;
 
 		for (idx_t j = 1; j < current_join_path.size(); j++) {
-			idx_t relation_idx = current_join_path[j];
-			right = set_manager.GetJoinRelation(relation_idx);
+			right = current_join_path[j];
 			auto connections = query_graph.GetConnections(left, right);
 			D_ASSERT(!connections.empty());
 			auto *best_connection = connections.back();
@@ -792,7 +852,7 @@ void JoinOrderOptimizer::FilterLeftDeepTrees() {
 			for (auto *filter : best_connection->filters) {
 				// TODO(d-justen): instead we could look into the filter to check the build column (binding index)
 				// This seems to work fine for now though
-				filter_indizes_per_relation[relation_idx].insert(filter->filter_index);
+				filter_indizes_per_relation[right].insert(filter->filter_index);
 			}
 
 			left = set_manager.Union(left, right);
@@ -801,31 +861,65 @@ void JoinOrderOptimizer::FilterLeftDeepTrees() {
 		join_paths_per_filter_group[filter_indizes_per_relation].emplace_back(i);
 	}
 
-	if (join_paths_per_filter_group.size() == 1)
+	if (join_paths_per_filter_group.size() == 1) {
 		return;
+	}
 
-	vector<idx_t> *largest_filter_group;
-	idx_t largest_filter_group_size = 0;
-	for (auto &filter_group : join_paths_per_filter_group) {
-		if (filter_group.second.size() > largest_filter_group_size) {
-			largest_filter_group_size = filter_group.second.size();
-			largest_filter_group = &filter_group.second;
+	vector<idx_t> *winning_filter_group;
+
+	if (original_join_order) {
+		for (auto &filter_group : join_paths_per_filter_group) {
+			for (auto join_path_idx : filter_group.second) {
+				auto &join_path = join_paths->at(join_path_idx);
+				D_ASSERT(original_join_order->size() == join_path.size());
+
+				bool found_original_join_order = true;
+				for (idx_t i = 0; i < original_join_order->size(); i++) {
+					auto *original_rel = original_join_order->at(i);
+					auto *generated_rel = join_path[i];
+
+					if (original_rel->count != generated_rel->count) {
+						found_original_join_order = false;
+						break;
+					}
+
+					for (idx_t j = 0; j < original_rel->count; j++) {
+						if (original_rel->relations[j] != generated_rel->relations[j]) {
+							found_original_join_order = false;
+							break;
+						}
+					}
+				}
+
+				if (found_original_join_order) {
+					winning_filter_group = &filter_group.second;
+				}
+			}
+		}
+	} else {
+		idx_t largest_filter_group_size = 0;
+		for (auto &filter_group : join_paths_per_filter_group) {
+			if (filter_group.second.size() > largest_filter_group_size) {
+				largest_filter_group_size = filter_group.second.size();
+				winning_filter_group = &filter_group.second;
+			}
 		}
 	}
 
-	vector<vector<idx_t>> filtered_join_paths;
-	filtered_join_paths.reserve(largest_filter_group_size);
+	vector<vector<JoinRelationSet *>> filtered_join_paths;
+	filtered_join_paths.reserve(winning_filter_group->size());
 
-	for (auto &join_path_idx : *largest_filter_group) {
+	for (auto &join_path_idx : *winning_filter_group) {
 		filtered_join_paths.push_back(join_paths->at(join_path_idx));
 	}
 
 	join_paths->clear();
-	if (filtered_join_paths.size() <= 32) {
-		join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cend());
-	} else {
-		join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cbegin() + 16);
-	}
+	// if (filtered_join_paths.size() <= 32) {
+	join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cend());
+	//} else {
+	// TODO: Limit the number of join paths but always make sure to include the original join path
+	// join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cbegin() + 32);
+	//}
 }
 
 pair<JoinRelationSet *, unique_ptr<LogicalOperator>>
@@ -1136,29 +1230,81 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		D_ASSERT(final_plan != plans.end());
 	}
 
-	if (relations.size() > 2 && context.config.enable_polr) {
+	if (relations.size() > 2 && context.config.enable_polr && !context.config.bushy_polr) {
 		FindAllLeftDeepTrees();
 		FilterLeftDeepTrees();
 
+		if (join_paths->size() <= 1) {
+			join_paths.reset();
+			return RewritePlan(move(plan), final_plan->second.get());
+		}
+
 		// Generate LeftDeepJoinTree
 		auto &join_path = join_paths->at(0);
-		JoinRelationSet *left = set_manager.GetJoinRelation(join_path[0]);
+		JoinRelationSet *left = join_path[0];
 
 		for (idx_t i = 1; i < join_path.size(); i++) {
 			JoinNode *left_plan = plans.find(left)->second.get();
 
-			auto *right = set_manager.GetJoinRelation(join_path[i]);
+			auto *right = join_path[i];
 			auto *right_plan = plans.find(right)->second.get();
 
 			auto connections = query_graph.GetConnections(left, right);
 			auto *new_set = set_manager.Union(left, right);
-			auto new_plan = CreateJoinTree(new_set, connections, left_plan, right_plan);
+			auto new_plan = make_unique<JoinNode>(new_set, connections.back(), left_plan, right_plan, 0, 0);
 			left = new_set;
 			plans[left] = move(new_plan);
 		}
 
 		final_plan = plans.find(left);
-		context.polr_paths = join_paths;
+
+		// Translate JoinRelation paths into paths with relative order to original join order
+		auto &start_join_order = original_join_order ? *original_join_order : join_paths->front();
+		std::map<JoinRelationSet *, idx_t> relation_map;
+		for (idx_t i = 0; i < start_join_order.size(); i++) {
+			relation_map[start_join_order[i]] = i;
+		}
+
+		auto polr_paths = std::make_shared<vector<vector<idx_t>>>();
+		polr_paths->reserve(join_paths->size());
+
+		for (const auto &path : *join_paths) {
+			std::vector<idx_t> relative_path;
+			relative_path.reserve(path.size());
+
+			for (auto *relation_set : path) {
+				relative_path.push_back(relation_map[relation_set]);
+			}
+
+			polr_paths->push_back(relative_path);
+		}
+
+		context.polr_paths = polr_paths;
+	} else if (relations.size() > 2 && context.config.enable_polr && context.config.bushy_polr) {
+		FindLongestInnerLDT();
+
+		// Translate JoinRelation paths into paths with relative order to original join order
+		auto &start_join_order = original_join_order ? *original_join_order : join_paths->front();
+		std::map<JoinRelationSet *, idx_t> relation_map;
+		for (idx_t i = 0; i < start_join_order.size(); i++) {
+			relation_map[start_join_order[i]] = i;
+		}
+
+		auto polr_paths = std::make_shared<vector<vector<idx_t>>>();
+		polr_paths->reserve(join_paths->size());
+
+		for (const auto &path : *join_paths) {
+			std::vector<idx_t> relative_path;
+			relative_path.reserve(path.size());
+
+			for (auto *relation_set : path) {
+				relative_path.push_back(relation_map[relation_set]);
+			}
+
+			polr_paths->push_back(relative_path);
+		}
+
+		context.polr_paths = polr_paths;
 	}
 
 	// now perform the actual reordering

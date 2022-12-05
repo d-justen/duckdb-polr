@@ -25,9 +25,9 @@ void dbgen(DuckDB &db) {
 }
 
 string get_query(int query) {
-	if (query <= 0 || query > IMDB_LITE_QUERIES_COUNT) {
+	if (query <= 0 || query > IMDB_QUERIES_COUNT) {
 		throw SyntaxException("Out of range IMDB query number %d", query);
 	}
-	return IMDB_LITE_QUERIES[query - 1];
+	return IMDB_QUERIES[query - 1];
 }
 } // namespace imdb

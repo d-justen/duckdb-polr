@@ -65,7 +65,8 @@ private:
 	bool must_update_full_plan;
 	unordered_set<std::string> join_nodes_in_full_plan;
 	//! POLR
-	shared_ptr<vector<vector<idx_t>>> join_paths;
+	shared_ptr<vector<vector<JoinRelationSet *>>> join_paths;
+	shared_ptr<vector<JoinRelationSet *>> original_join_order;
 
 	//! Extract the bindings referred to by an Expression
 	bool ExtractBindings(Expression &expression, unordered_set<idx_t> &bindings);
@@ -102,8 +103,11 @@ private:
 
 	//! POLR
 	void FindAllLeftDeepTrees();
-	void EnumerateJoinOrders(vector<idx_t> &joined, vector<idx_t> &remaining);
+	void EnumerateJoinOrders(vector<JoinRelationSet *> &joined, vector<JoinRelationSet *> &remaining);
 	void FilterLeftDeepTrees();
+
+	void FindLongestInnerLDT();
+	vector<JoinRelationSet *> FindLDTRecursive(JoinNode *node);
 
 	//! Solve the join order approximately using a greedy algorithm
 	void SolveJoinOrderApproximately();
