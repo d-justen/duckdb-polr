@@ -5,6 +5,7 @@
 #include <cmath>
 #include <map>
 #include <iostream>
+#include <fstream>
 
 namespace duckdb {
 
@@ -21,6 +22,7 @@ public:
 		input_tuple_count_per_path.resize(path_count);
 	}
 
+	bool first_mpx_run = true;
 	idx_t num_paths_initialized = 0;
 
 	// To be set before running the path
@@ -29,12 +31,16 @@ public:
 	idx_t current_path_tuple_count = 0;
 	idx_t current_path_remaining_tuples = 0;
 
+	// To be set during path run
+	idx_t num_intermediates_current_path = 0;
+
 	// To be set after running the path
 	vector<double> intermediates_per_input_tuple;
 	idx_t num_tuples_processed = 0;
 	vector<idx_t> input_tuple_count_per_path;
 
 	const idx_t init_tuple_count = 8;
+	std::stringstream log;
 
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
@@ -48,6 +54,13 @@ unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ExecutionContext
 OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                 GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	auto &state = (MultiplexerState &)state_p;
+
+	if (!state.first_mpx_run) {
+		FinalizePathRun(state, state.num_intermediates_current_path);
+		state.num_intermediates_current_path = 0;
+	} else {
+		state.first_mpx_run = false;
+	}
 
 	// Shortcut: If we have tuples left from previous multiplexing, just route the whole next chunk
 	if (state.current_path_remaining_tuples > 0) {
@@ -76,7 +89,6 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		}
 		chunk.Slice(input, sel, tuple_count);
 
-		state.num_paths_initialized++;
 		state.chunk_offset += tuple_count;
 		state.current_path_idx = next_path_idx;
 		state.current_path_tuple_count = tuple_count;
@@ -93,8 +105,8 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 
 	idx_t next_path_idx = 0;
 	double sent_to_path_ratio = std::numeric_limits<double>::max();
-	double max_weight = 0;
-	bool next_path_has_max_weight = false;
+	double min_intermediates = std::numeric_limits<double>::max();
+	bool next_path_has_min_intermediates = false;
 
 	for (idx_t i = 0; i < path_weights.size(); ++i) {
 		const double current_ratio =
@@ -105,11 +117,11 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 			sent_to_path_ratio = current_ratio;
 
 			// Let's send more tuples, if we happen to choose the fastest path -> mark it here first
-			if (path_weights[i] > max_weight) {
-				max_weight = path_weights[i];
-				next_path_has_max_weight = true;
+			if (state.intermediates_per_input_tuple[i] <= min_intermediates) {
+				min_intermediates = state.intermediates_per_input_tuple[i];
+				next_path_has_min_intermediates = true;
 			} else {
-				next_path_has_max_weight = false;
+				next_path_has_min_intermediates = false;
 			}
 		}
 	}
@@ -124,7 +136,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		output_tuple_count = remaining_input_tuples;
 
 		// We want to process the whole chunk if we are on the fastest path
-	} else if (next_path_has_max_weight) {
+	} else if (next_path_has_min_intermediates) {
 		output_tuple_count = remaining_input_tuples;
 	}
 
@@ -170,8 +182,10 @@ void PhysicalMultiplexer::CalculateJoinPathWeights(const vector<double> &join_pa
 	for (auto it = std::next(sorted_performance_idxs.rbegin(), 1); it != sorted_performance_idxs.rend(); ++it) {
 		const double cost_next = it->first;
 
+		double cost_next_rounded = std::round(cost_next / 0.001) * 0.001;
+		double cost_bottom_rounded = std::round(cost_bottom / 0.001) * 0.001;
 		// path_weights could be the same, so lets introduce noise
-		if (cost_next == cost_bottom) {
+		if (cost_next_rounded == cost_bottom_rounded) {
 			cost_bottom += 0.001;
 		}
 
@@ -227,15 +241,31 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_inte
 		state.intermediates_per_input_tuple[state.current_path_idx] += 0.5 * intermediates_per_input_tuple;
 	} else {
 		state.intermediates_per_input_tuple[state.current_path_idx] = intermediates_per_input_tuple;
+		state.num_paths_initialized++;
 	}
 
 	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
 	state.num_tuples_processed += state.current_path_tuple_count;
+
+	for (double num_intm : state.intermediates_per_input_tuple) {
+		state.log << num_intm << ",";
+	}
+
+	for (idx_t num_inp : state.input_tuple_count_per_path) {
+		state.log << num_inp << ",";
+	}
+
+	state.log << "\n";
 }
 
 idx_t PhysicalMultiplexer::GetCurrentPathIndex(OperatorState &state_p) const {
 	auto &state = (MultiplexerState &)state_p;
 	return state.current_path_idx;
+}
+
+void PhysicalMultiplexer::AddNumIntermediates(OperatorState &state_p, idx_t count) const {
+	auto &state = (MultiplexerState &)state_p;
+	state.num_intermediates_current_path += count;
 }
 
 void PhysicalMultiplexer::PrintStatistics(OperatorState &state_p) const {
@@ -244,6 +274,11 @@ void PhysicalMultiplexer::PrintStatistics(OperatorState &state_p) const {
 	for (idx_t i = 0; i < state.input_tuple_count_per_path.size(); i++) {
 		std::cout << i << ": " << state.input_tuple_count_per_path[i] << "\n";
 	}
+}
+
+void PhysicalMultiplexer::WriteLogToFile(OperatorState &state_p, std::ofstream &file) const {
+	auto &state = (MultiplexerState &)state_p;
+	file << state.log.str();
 }
 
 } // namespace duckdb

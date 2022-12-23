@@ -27,6 +27,7 @@ public:
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
 	void FinalizePathRun(OperatorState &state_p, idx_t num_intermediates) const;
+	void AddNumIntermediates(OperatorState &state_p, idx_t count) const;
 	idx_t GetCurrentPathIndex(OperatorState &state_p) const;
 
 	bool ParallelOperator() const override {
@@ -38,6 +39,7 @@ public:
 
 	string ParamsToString() const override;
 	void PrintStatistics(OperatorState &state) const;
+	void WriteLogToFile(OperatorState &state, std::ofstream &file) const;
 
 private:
 	void CalculateJoinPathWeights(const vector<double> &join_path_costs, vector<double> &path_weights) const;

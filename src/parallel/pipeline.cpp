@@ -240,7 +240,8 @@ void Pipeline::BuildPOLRPaths() {
 		}
 	}
 
-	if (hash_join_idxs.size() >= 2) {
+	if (!hash_join_idxs.empty() && ((PhysicalHashJoin &)*(operators[hash_join_idxs.front()])).is_polr_root_join &&
+	    hash_join_idxs.size() == executor.context.polr_paths->front().size() - 1) {
 		auto &initial_join_path = executor.context.polr_paths->at(0);
 		if (hash_join_idxs.size() != initial_join_path.size() - 1) {
 			return;

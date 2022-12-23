@@ -74,7 +74,7 @@ struct ClientConfig {
 
 	//! Enable POLR
 	bool enable_polr = true;
-	bool bushy_polr = false;
+	bool bushy_polr = true;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

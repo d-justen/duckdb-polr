@@ -26,6 +26,8 @@ public:
 	//! Used for duplicate-eliminated joins
 	vector<LogicalType> delim_types;
 
+	bool is_polr_root_join = false;
+
 public:
 	string ParamsToString() const override;
 	void Serialize(FieldWriter &writer) const override;

@@ -51,6 +51,8 @@ public:
 	//! Whether we can go external (can't yet if recursive CTE or full outer TODO)
 	bool can_go_external;
 
+	bool is_polr_root_join = false;
+
 public:
 	// Operator Interface
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;

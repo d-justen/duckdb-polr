@@ -51,7 +51,7 @@ public:
 	void PullFinalize();
 
 	//! POLR related
-	void RunPath(DataChunk &chunk, DataChunk &result);
+	void RunPath(DataChunk &chunk, DataChunk &result, idx_t start_idx = 0);
 
 private:
 	//! The pipeline to process
@@ -72,6 +72,10 @@ private:
 	OperatorState *multiplexer_state;
 	unique_ptr<DataChunk> adaptive_union_chunk;
 	unique_ptr<OperatorState> adaptive_union_state;
+	vector<unique_ptr<DataChunk>> cached_join_chunks;
+	stack<idx_t> in_process_joins;
+	idx_t num_intermediates_current_path = 0;
+	unique_ptr<DataChunk> mpx_output_chunk;
 
 	//! The local source state
 	unique_ptr<LocalSourceState> local_source_state;
@@ -111,7 +115,7 @@ private:
 	OperatorResultType Execute(DataChunk &input, DataChunk &result, idx_t initial_index = 0);
 
 	static bool CanCacheType(const LogicalType &type);
-	void CacheChunk(DataChunk &input, idx_t operator_idx);
+	void CacheChunk(DataChunk &input, idx_t operator_idx, bool is_polr_join = false);
 };
 
 } // namespace duckdb

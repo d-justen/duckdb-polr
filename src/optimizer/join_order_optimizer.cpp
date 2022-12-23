@@ -800,6 +800,8 @@ void JoinOrderOptimizer::FindLongestInnerLDT() {
 	std::vector<JoinRelationSet *> joined(1, original_join_order->front());
 	std::vector<JoinRelationSet *> remaining(std::next(original_join_order->begin()), original_join_order->end());
 
+	join_paths = std::make_shared<vector<vector<JoinRelationSet *>>>();
+
 	EnumerateJoinOrders(joined, remaining);
 	FilterLeftDeepTrees();
 }
@@ -940,6 +942,10 @@ JoinOrderOptimizer::GenerateJoins(vector<unique_ptr<LogicalOperator>> &extracted
 			auto join = make_unique<LogicalComparisonJoin>(JoinType::INNER);
 			join->children.push_back(move(left.second));
 			join->children.push_back(move(right.second));
+
+			if (join_paths && node->left->set->relations == join_paths->front().front()->relations) {
+				join->is_polr_root_join = true;
+			}
 			// set the join conditions from the join node
 			for (auto &f : node->info->filters) {
 				// extract the filter from the operator it originally belonged to
@@ -1283,8 +1289,14 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 	} else if (relations.size() > 2 && context.config.enable_polr && context.config.bushy_polr) {
 		FindLongestInnerLDT();
 
+		if (!join_paths || join_paths->size() <= 1) {
+			join_paths.reset();
+			return RewritePlan(move(plan), final_plan->second.get());
+		}
+
 		// Translate JoinRelation paths into paths with relative order to original join order
-		auto &start_join_order = original_join_order ? *original_join_order : join_paths->front();
+		auto &start_join_order =
+		    original_join_order ? *original_join_order : join_paths->front(); // TODO: both nullptr right now
 		std::map<JoinRelationSet *, idx_t> relation_map;
 		for (idx_t i = 0; i < start_join_order.size(); i++) {
 			relation_map[start_join_order[i]] = i;

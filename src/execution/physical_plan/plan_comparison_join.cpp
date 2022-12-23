@@ -241,6 +241,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalComparison
 		plan = make_unique<PhysicalHashJoin>(op, move(left), move(right), move(op.conditions), op.join_type,
 		                                     op.left_projection_map, op.right_projection_map, move(op.delim_types),
 		                                     op.estimated_cardinality, perfect_join_stats);
+		((PhysicalHashJoin &)*plan).is_polr_root_join = op.is_polr_root_join;
 
 	} else {
 		bool can_merge = has_range > 0;
