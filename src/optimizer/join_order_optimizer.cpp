@@ -916,12 +916,11 @@ void JoinOrderOptimizer::FilterLeftDeepTrees() {
 	}
 
 	join_paths->clear();
-	// if (filtered_join_paths.size() <= 32) {
-	join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cend());
-	//} else {
-	// TODO: Limit the number of join paths but always make sure to include the original join path
-	// join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cbegin() + 32);
-	//}
+	if (filtered_join_paths.size() <= 16) {
+		join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cend());
+	} else {
+		join_paths->insert(join_paths->cend(), filtered_join_paths.cbegin(), filtered_join_paths.cbegin() + 16);
+	}
 }
 
 pair<JoinRelationSet *, unique_ptr<LogicalOperator>>

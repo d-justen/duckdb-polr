@@ -126,10 +126,13 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		}
 	}
 
-	idx_t output_tuple_count = static_cast<idx_t>(std::ceil(state.num_tuples_processed * path_weights[next_path_idx] -
-	                                                        state.input_tuple_count_per_path[next_path_idx]));
+	auto output_tuple_count = static_cast<int64_t>(std::ceil(state.num_tuples_processed * path_weights[next_path_idx] -
+	                                                         state.input_tuple_count_per_path[next_path_idx]));
 
-	idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+	D_ASSERT(input.size() > state.chunk_offset);
+	int64_t remaining_input_tuples = input.size() - state.chunk_offset;
+	D_ASSERT(remaining_input_tuples > 0);
+	D_ASSERT(remaining_input_tuples <= STANDARD_VECTOR_SIZE);
 
 	if (output_tuple_count > remaining_input_tuples) {
 		state.current_path_remaining_tuples = output_tuple_count - remaining_input_tuples;
@@ -139,6 +142,8 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	} else if (next_path_has_min_intermediates) {
 		output_tuple_count = remaining_input_tuples;
 	}
+
+	D_ASSERT(output_tuple_count > 0 && output_tuple_count <= 1024);
 
 	if (state.chunk_offset == 0 && output_tuple_count == input.size()) {
 		chunk.Reference(input);
