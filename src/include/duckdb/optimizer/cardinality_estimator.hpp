@@ -57,6 +57,8 @@ struct Subgraph2Denominator {
 class CardinalityEstimator {
 public:
 	explicit CardinalityEstimator(ClientContext &context) : context(context) {
+		generator = std::mt19937(context.config.seed);
+		dis = std::uniform_real_distribution<>(context.config.min_cardinality, 1.0);
 	}
 
 private:
@@ -70,6 +72,8 @@ private:
 	vector<RelationsToTDom> relations_to_tdoms;
 
 	static constexpr double DEFAULT_SELECTIVITY = 0.2;
+	std::mt19937 generator;
+	std::uniform_real_distribution<> dis;
 
 public:
 	static void VerifySymmetry(JoinNode *result, JoinNode *entry);

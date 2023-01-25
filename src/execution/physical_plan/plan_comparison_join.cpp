@@ -220,7 +220,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalComparison
 	if (has_equality) {
 		Index *left_index {}, *right_index {};
 		TransformIndexJoin(context, op, &left_index, &right_index, left.get(), right.get());
-		if (/*!ClientConfig::GetConfig(context).enable_polr &&*/ left_index && // TODO: uncomment these if JOB fails
+		if (left_index && // TODO: uncomment these if JOB fails
 		    (ClientConfig::GetConfig(context).force_index_join || rhs_cardinality < 0.01 * lhs_cardinality)) {
 			auto &tbl_scan = (PhysicalTableScan &)*left;
 			swap(op.conditions[0].left, op.conditions[0].right);
@@ -228,7 +228,7 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalComparison
 			                                      op.right_projection_map, op.left_projection_map, tbl_scan.column_ids,
 			                                      left_index, false, op.estimated_cardinality);
 		}
-		if (/*!ClientConfig::GetConfig(context).enable_polr &&*/ right_index &&
+		if (right_index &&
 		    (ClientConfig::GetConfig(context).force_index_join || lhs_cardinality < 0.01 * rhs_cardinality)) {
 			auto &tbl_scan = (PhysicalTableScan &)*right;
 			return make_unique<PhysicalIndexJoin>(op, move(left), move(right), move(op.conditions), op.join_type,

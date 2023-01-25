@@ -73,8 +73,11 @@ struct ClientConfig {
 	idx_t perfect_ht_threshold = 12;
 
 	//! Enable POLR
-	bool enable_polr = true;
-	bool bushy_polr = true;
+	bool enable_polr = false;
+	bool bushy_polr = false;
+	bool enable_cardinality_estimator = false;
+	double min_cardinality = 0.01;
+	int seed = 2;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

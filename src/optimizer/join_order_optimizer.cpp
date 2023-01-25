@@ -265,7 +265,12 @@ unique_ptr<JoinNode> JoinOrderOptimizer::CreateJoinTree(JoinRelationSet *set,
 		expected_cardinality = cardinality_estimator.EstimateCrossProduct(left, right);
 	} else {
 		// normal join, expect foreign key join
+		// if (context.config.enable_cardinality_estimator) {
 		expected_cardinality = cardinality_estimator.EstimateCardinalityWithSet(set);
+		// } else {
+		//	expected_cardinality = MaxValue(left->GetCardinality(), right->GetCardinality());
+		// }
+
 		best_connection = possible_connections.back();
 	}
 
@@ -863,9 +868,9 @@ void JoinOrderOptimizer::FilterLeftDeepTrees() {
 		join_paths_per_filter_group[filter_indizes_per_relation].emplace_back(i);
 	}
 
-	if (join_paths_per_filter_group.size() == 1) {
-		return;
-	}
+	/* if (join_paths_per_filter_group.size() == 1) {
+	    return;
+	} */
 
 	vector<idx_t> *winning_filter_group;
 

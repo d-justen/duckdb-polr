@@ -79,6 +79,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	// Initialize each path with one tuple to get initial weights
 	if (state.num_paths_initialized < path_count) {
 		idx_t next_path_idx = state.num_paths_initialized;
+		D_ASSERT(input.size() > state.chunk_offset);
 		idx_t remaining_input_tuples = input.size() - state.chunk_offset;
 		idx_t tuple_count =
 		    remaining_input_tuples > state.init_tuple_count ? state.init_tuple_count : remaining_input_tuples;
@@ -94,6 +95,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		state.current_path_tuple_count = tuple_count;
 
 		if (state.chunk_offset == input.size()) {
+			state.chunk_offset = 0;
 			return OperatorResultType::NEED_MORE_INPUT;
 		} else {
 			return OperatorResultType::HAVE_MORE_OUTPUT;

@@ -542,6 +542,16 @@ idx_t CardinalityEstimator::InspectTableFilters(idx_t cardinality, LogicalOperat
 }
 
 void CardinalityEstimator::EstimateBaseTableCardinality(JoinNode *node, LogicalOperator *op) {
+	if (!context.config.enable_cardinality_estimator) {
+		if (context.config.min_cardinality != 1.0) {
+			node->SetEstimatedCardinality(node->GetBaseTableCardinality() * dis(generator));
+			return;
+		}
+
+		node->SetEstimatedCardinality(node->GetBaseTableCardinality());
+		return;
+	}
+
 	auto has_logical_filter = IsLogicalFilter(op);
 	auto table_filters = GetTableFilters(op);
 
