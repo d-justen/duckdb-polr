@@ -117,6 +117,42 @@ static void PragmaDisableOptimizer(ClientContext &context, const FunctionParamet
 
 static void PragmaEnablePOLR(ClientContext &context, const FunctionParameters &parameters) {
 	ClientConfig::GetConfig(context).enable_polr = true;
+	ClientConfig::GetConfig(context).bushy_polr = false;
+}
+
+static void PragmaDisablePOLR(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_polr = false;
+	ClientConfig::GetConfig(context).bushy_polr = false;
+}
+
+static void PragmaEnablePOLRBushy(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_polr = true;
+	ClientConfig::GetConfig(context).bushy_polr = true;
+}
+
+static void PragmaDisablePOLRBushy(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_polr = false;
+	ClientConfig::GetConfig(context).bushy_polr = false;
+}
+
+static void PragmaEnableCardinalityEstimator(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = true;
+	ClientConfig::GetConfig(context).min_cardinality = 1.0;
+}
+
+static void PragmaDisableCardinalityEstimator(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = false;
+	ClientConfig::GetConfig(context).min_cardinality = 1.0;
+}
+
+static void PragmaEnableRandomCardinalities(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = false;
+	ClientConfig::GetConfig(context).min_cardinality = 0.01;
+}
+
+static void PragmaDisableRandomCardinalities(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = true;
+	ClientConfig::GetConfig(context).min_cardinality = 1.0;
 }
 
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
@@ -157,6 +193,17 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	    PragmaFunction::PragmaStatement("disable_checkpoint_on_shutdown", PragmaDisableCheckpointOnShutdown));
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_polr", PragmaEnablePOLR));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_polr", PragmaDisablePOLR));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_polr_bushy", PragmaEnablePOLRBushy));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_polr_bushy", PragmaDisablePOLRBushy));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_cardinality_estimator", PragmaEnableCardinalityEstimator));
+	set.AddFunction(
+	    PragmaFunction::PragmaStatement("disable_cardinality_estimator", PragmaDisableCardinalityEstimator));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_random_cardinalities", PragmaEnableRandomCardinalities));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_random_cardinalities", PragmaDisableRandomCardinalities));
 }
 
 } // namespace duckdb

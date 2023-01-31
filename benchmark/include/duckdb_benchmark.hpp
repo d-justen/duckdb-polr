@@ -46,6 +46,22 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 			res = conn.Query("PRAGMA profiling_mode=" + profiling_mode);
 			D_ASSERT(!res->HasError());
 		}
+		if (instance.enable_polr) {
+			res = conn.Query("PRAGMA enable_polr");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_polr_bushy) {
+			res = conn.Query("PRAGMA enable_polr_bushy");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.disable_cardinality_estimator) {
+			res = conn.Query("PRAGMA disable_cardinality_estimator");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_random_cardinalities) {
+			res = conn.Query("PRAGMA enable_random_cardinalities");
+			D_ASSERT(!res->HasError());
+		}
 	}
 	virtual ~DuckDBBenchmarkState() {
 	}
@@ -91,7 +107,7 @@ public:
 	unique_ptr<BenchmarkState> Initialize(BenchmarkConfiguration &config) override {
 		auto state = CreateBenchmarkState();
 		Load(state.get());
-		return move(state);
+		return std::move(state);
 	}
 
 	void Run(BenchmarkState *state_p) override {

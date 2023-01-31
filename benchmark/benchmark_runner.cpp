@@ -55,36 +55,6 @@ void BenchmarkRunner::InitializeBenchmarkDirectory() {
 	}
 }
 
-void BenchmarkRunner::SaveDatabase(DuckDB &db, string name) {
-	InitializeBenchmarkDirectory();
-
-	auto &fs = db.GetFileSystem();
-	Connection con(db);
-	auto result = con.Query(
-	    StringUtil::Format("EXPORT DATABASE '%s' (FORMAT PARQUET)", fs.JoinPath(DUCKDB_BENCHMARK_DIRECTORY, name)));
-	if (result->HasError()) {
-		result->ThrowError("Failed to save database: ");
-	}
-}
-
-bool BenchmarkRunner::TryLoadDatabase(DuckDB &db, string name) {
-	auto &fs = db.GetFileSystem();
-	if (!fs.DirectoryExists(DUCKDB_BENCHMARK_DIRECTORY)) {
-		return false;
-	}
-	string base_dir = fs.JoinPath(DUCKDB_BENCHMARK_DIRECTORY, name);
-	// check if the [name]/schema.sql file exists
-	if (!fs.FileExists(fs.JoinPath(base_dir, "schema.sql"))) {
-		return false;
-	}
-	Connection con(db);
-	auto result = con.Query(StringUtil::Format("IMPORT DATABASE '%s'", base_dir));
-	if (result->HasError()) {
-		result->ThrowError("Failed to load database: ");
-	}
-	return true;
-}
-
 atomic<bool> is_active;
 atomic<bool> timeout;
 
@@ -130,9 +100,7 @@ void BenchmarkRunner::LogOutput(string message) {
 void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 	Profiler profiler;
 	auto display_name = benchmark->DisplayName();
-	// LogLine(string(display_name.size() + 6, '-'));
-	// LogLine("|| " + display_name + " ||");
-	// LogLine(string(display_name.size() + 6, '-'));
+
 	auto state = benchmark->Initialize(configuration);
 	auto nruns = benchmark->NRuns();
 	for (size_t i = 0; i < nruns + 1; i++) {
@@ -150,8 +118,6 @@ void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 		profiler.Start();
 		benchmark->Run(state.get());
 		profiler.End();
-
-		benchmark->Cleanup(state.get());
 
 		is_active = false;
 		interrupt_thread.join();
@@ -174,6 +140,7 @@ void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 				}
 			}
 		}
+		benchmark->Cleanup(state.get());
 	}
 	benchmark->Finalize();
 }
@@ -197,6 +164,8 @@ void print_help() {
 	fprintf(stderr, "              --log=[file]           Move log output to file\n");
 	fprintf(stderr, "              --info                 Prints info about the benchmark\n");
 	fprintf(stderr, "              --query                Prints query of the benchmark\n");
+	fprintf(stderr, "              --polr_mode=[std/bushy]\n");
+	fprintf(stderr, "              --cardinalities=[disabled/random]\n");
 	fprintf(stderr,
 	        "              [name_pattern]         Run only the benchmark which names match the specified name pattern, "
 	        "e.g., DS.* for TPC-DS benchmarks\n");
@@ -254,6 +223,36 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			file.open(splits[1]);
 			if (!file.good()) {
 				fprintf(stderr, "Could not open file %s for writing\n", splits[1].c_str());
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--polr_mode=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			if (splits[1] == "std") {
+				instance.enable_polr = true;
+			} else if (splits[1] == "bushy") {
+				instance.enable_polr_bushy = true;
+			} else {
+				print_help();
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--cardinalities=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			if (splits[1] == "disabled") {
+				instance.disable_cardinality_estimator = true;
+			} else if (splits[1] == "random") {
+				instance.enable_random_cardinalities = true;
+			} else {
+				print_help();
 				exit(1);
 			}
 		} else {

@@ -623,7 +623,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 		pipeline.multiplexer->AddNumIntermediates(*multiplexer_state, current_chunk.size());
 
 		current_chunk.Verify();
-		CacheChunk(current_chunk, local_join_idx, true);
+		// CacheChunk(current_chunk, local_join_idx, true);
 
 		if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {
 			// more data remains in this operator

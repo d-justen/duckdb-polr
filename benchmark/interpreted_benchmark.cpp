@@ -45,6 +45,23 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		auto &instance = BenchmarkRunner::GetInstance();
 		auto res = con.Query("PRAGMA threads=" + to_string(instance.threads));
 		D_ASSERT(!res->HasError());
+
+		if (instance.enable_polr) {
+			res = con.Query("PRAGMA enable_polr");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_polr_bushy) {
+			res = con.Query("PRAGMA enable_polr_bushy");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.disable_cardinality_estimator) {
+			res = con.Query("PRAGMA disable_cardinality_estimator");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_random_cardinalities) {
+			res = con.Query("PRAGMA enable_random_cardinalities");
+			D_ASSERT(!res->HasError());
+		}
 	}
 
 	unique_ptr<DBConfig> GetBenchmarkConfig() {
@@ -90,6 +107,39 @@ private:
 InterpretedBenchmark::InterpretedBenchmark(string full_path)
     : Benchmark(true, full_path, ParseGroupFromPath(full_path)), benchmark_path(full_path) {
 	replacement_mapping["BENCHMARK_DIR"] = BenchmarkRunner::DUCKDB_BENCHMARK_DIRECTORY;
+}
+
+void InterpretedBenchmark::ReadResultFromFile(BenchmarkFileReader &reader, const string &file) {
+	// read the results from the file
+	DuckDB db;
+	Connection con(db);
+	auto result =
+	    con.Query("SELECT * FROM read_csv_auto('" + file + "', delim='|', header=1, nullstr='NULL', all_varchar=1)");
+	result_column_count = result->ColumnCount();
+	for (auto &row : *result) {
+		vector<string> row_values;
+		for (idx_t col_idx = 0; col_idx < result->ColumnCount(); col_idx++) {
+			row_values.push_back(row.GetValue<string>(col_idx));
+		}
+		result_values.push_back(std::move(row_values));
+	}
+}
+
+void InterpretedBenchmark::ReadResultFromReader(BenchmarkFileReader &reader, const string &header) {
+	result_column_count = header.size();
+	// keep reading results until eof
+	string line;
+	while (reader.ReadLine(line)) {
+		if (line.empty()) {
+			break;
+		}
+		auto result_splits = StringUtil::Split(line, "\t");
+		if ((int64_t)result_splits.size() != result_column_count) {
+			throw std::runtime_error(reader.FormatException("expected " + std::to_string(result_splits.size()) +
+			                                                " values but got " + std::to_string(result_column_count)));
+		}
+		result_values.push_back(std::move(result_splits));
+	}
 }
 
 void InterpretedBenchmark::LoadBenchmark() {
@@ -143,16 +193,11 @@ void InterpretedBenchmark::LoadBenchmark() {
 				throw std::runtime_error(reader.FormatException("require requires a single parameter"));
 			}
 			extensions.insert(splits[1]);
-		} else if (splits[0] == "connect") {
-			if (splits.size() != 2) {
-				throw std::runtime_error(reader.FormatException("connect requires a database path"));
-			}
-			db_path = (splits[1]);
 		} else if (splits[0] == "cache") {
 			if (splits.size() != 2) {
 				throw std::runtime_error(reader.FormatException("cache requires a single parameter"));
 			}
-			data_cache = splits[1];
+			cache_db = splits[1];
 		} else if (splits[0] == "storage") {
 			if (splits.size() != 2) {
 				throw std::runtime_error(reader.FormatException("storage requires a single parameter"));
@@ -182,6 +227,43 @@ void InterpretedBenchmark::LoadBenchmark() {
 			} else {
 				subgroup = result;
 			}
+		} else if (splits[0] == "result_query") {
+			if (result_column_count > 0) {
+				throw std::runtime_error(reader.FormatException("multiple results found"));
+			}
+			// count the amount of columns
+			if (splits.size() <= 1 || splits[1].size() == 0) {
+				throw std::runtime_error(
+				    reader.FormatException("result_query must be followed by a column count (e.g. result III)"));
+			}
+			bool is_file = false;
+			for (idx_t i = 0; i < splits[1].size(); i++) {
+				if (splits[1][i] != 'i') {
+					is_file = true;
+					break;
+				}
+			}
+			if (is_file) {
+				ReadResultFromFile(reader, splits[1]);
+			}
+			// read the actual query
+			bool found_end = false;
+			string sql;
+			while (reader.ReadLine(line)) {
+				if (line == "----") {
+					found_end = true;
+					break;
+				}
+				sql += "\n" + line;
+			}
+			result_query = sql;
+			if (!found_end) {
+				throw std::runtime_error(reader.FormatException(
+				    "result_query must be followed by a query and a result (separated by ----)"));
+			}
+			if (!is_file) {
+				ReadResultFromReader(reader, splits[1]);
+			}
 		} else if (splits[0] == "result") {
 			if (result_column_count > 0) {
 				throw std::runtime_error(reader.FormatException("multiple results found"));
@@ -200,41 +282,17 @@ void InterpretedBenchmark::LoadBenchmark() {
 				}
 			}
 			if (is_file) {
-				// read the results from the file
-				DuckDB db;
-				Connection con(db);
-				auto result = con.Query("SELECT * FROM read_csv_auto('" + splits[1] +
-				                        "', delim='|', header=1, nullstr='NULL', all_varchar=1)");
-				result_column_count = result->ColumnCount();
-				for (auto &row : *result) {
-					vector<string> row_values;
-					for (idx_t col_idx = 0; col_idx < result->ColumnCount(); col_idx++) {
-						row_values.push_back(row.GetValue<string>(col_idx));
-					}
-					result_values.push_back(move(row_values));
-				}
+				ReadResultFromFile(reader, splits[1]);
 
 				// read the main file until we encounter an empty line
+				string line;
 				while (reader.ReadLine(line)) {
 					if (line.empty()) {
 						break;
 					}
 				}
 			} else {
-				result_column_count = splits[1].size();
-				// keep reading results until eof
-				while (reader.ReadLine(line)) {
-					if (line.empty()) {
-						break;
-					}
-					auto result_splits = StringUtil::Split(line, "\t");
-					if ((int64_t)result_splits.size() != result_column_count) {
-						throw std::runtime_error(
-						    reader.FormatException("expected " + std::to_string(result_splits.size()) +
-						                           " values but got " + std::to_string(result_column_count)));
-					}
-					result_values.push_back(move(result_splits));
-				}
+				ReadResultFromReader(reader, splits[1]);
 			}
 		} else if (splits[0] == "template") {
 			// template: update the path to read
@@ -269,7 +327,16 @@ void InterpretedBenchmark::LoadBenchmark() {
 unique_ptr<BenchmarkState> InterpretedBenchmark::Initialize(BenchmarkConfiguration &config) {
 	unique_ptr<QueryResult> result;
 	LoadBenchmark();
-	auto state = make_unique<InterpretedBenchmarkState>(GetDatabasePath());
+	unique_ptr<InterpretedBenchmarkState> state;
+	auto full_db_path = GetDatabasePath();
+	try {
+		state = make_unique<InterpretedBenchmarkState>(full_db_path);
+	} catch (Exception(e)) {
+		// if the connection throws an error, chances are it's a storage format error.
+		// In this case delete the file and connect again.
+		DeleteDatabase(full_db_path);
+		state = make_unique<InterpretedBenchmarkState>(full_db_path);
+	}
 	extensions.insert("parquet");
 	for (auto &extension : extensions) {
 		auto result = ExtensionHelper::LoadExtension(state->db, extension);
@@ -288,7 +355,7 @@ unique_ptr<BenchmarkState> InterpretedBenchmark::Initialize(BenchmarkConfigurati
 			if (result->HasError()) {
 				result->ThrowError();
 			}
-			result = move(result->next);
+			result = std::move(result->next);
 		}
 	}
 
@@ -297,22 +364,34 @@ unique_ptr<BenchmarkState> InterpretedBenchmark::Initialize(BenchmarkConfigurati
 		load_query = queries["load"];
 	}
 
-	if (data_cache.empty()) {
-		// no cache specified: just run the initialization code
+	if (cache_db.empty() && cache_db.compare(DEFAULT_DB_PATH) != 0) {
+		// no cache or db_path specified: just run the initialization code
 		result = state->con.Query(load_query);
 	} else {
-		// cache specified: try to load the cache
-		if (!BenchmarkRunner::TryLoadDatabase(state->db, data_cache)) {
+		// cache or db_path is specified: try to load from one of them
+		bool in_memory_db_has_data = false;
+		if (!cache_db.empty()) {
+			// Currently connected to a cached db. check if any tables exist.
+			// If tables exist, it's a good indication that the database is fine
+			// If they don't load the database
+			auto result = state->con.Query("SHOW TABLES;");
+			if (result->HasError()) {
+				result->ThrowError();
+			}
+			if (result->RowCount() > 0) {
+				in_memory_db_has_data = true;
+			}
+		}
+		if (!in_memory_db_has_data) {
 			// failed to load: write the cache
 			result = state->con.Query(load_query);
-			BenchmarkRunner::SaveDatabase(state->db, data_cache);
 		}
 	}
 	while (result) {
 		if (result->HasError()) {
 			result->ThrowError();
 		}
-		result = move(result->next);
+		result = std::move(result->next);
 	}
 	if (config.profile_info == BenchmarkProfileInfo::NORMAL) {
 		state->con.Query("PRAGMA enable_profiling");
@@ -343,48 +422,40 @@ void InterpretedBenchmark::Cleanup(BenchmarkState *state_p) {
 			if (result->HasError()) {
 				result->ThrowError();
 			}
-			result = move(result->next);
+			result = std::move(result->next);
 		}
 	}
 }
 
 string InterpretedBenchmark::GetDatabasePath() {
-	if (!InMemory()) {
-		string path = "duckdb_benchmark_db.db";
-		DeleteDatabase(path);
-		return path;
-	} else if (db_path != "") {
-		return db_path;
-	} else {
-		return string();
+	auto fs = FileSystem::CreateLocal();
+	if (!cache_db.empty()) {
+		return fs->JoinPath(BenchmarkRunner::DUCKDB_BENCHMARK_DIRECTORY, cache_db);
 	}
+	if (in_memory) {
+		return "";
+	}
+	auto db_path = fs->JoinPath(BenchmarkRunner::DUCKDB_BENCHMARK_DIRECTORY, DEFAULT_DB_PATH);
+	DeleteDatabase(db_path);
+	return db_path;
 }
 
-string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
+string InterpretedBenchmark::VerifyInternal(BenchmarkState *state_p, MaterializedQueryResult &result) {
 	auto &state = (InterpretedBenchmarkState &)*state_p;
-	if (state.result->HasError()) {
-		return state.result->GetError();
-	}
-	if (result_column_count == 0) {
-		// no result specified
-		return string();
-	}
 	// compare the column count
-	if (result_column_count >= 0 && (int64_t)state.result->ColumnCount() != result_column_count) {
+	if (result_column_count >= 0 && (int64_t)result.ColumnCount() != result_column_count) {
 		return StringUtil::Format("Error in result: expected %lld columns but got %lld\nObtained result: %s",
-		                          (int64_t)result_column_count, (int64_t)state.result->ColumnCount(),
-		                          state.result->ToString());
+		                          (int64_t)result_column_count, (int64_t)result.ColumnCount(), result.ToString());
 	}
 	// compare row count
-	if (state.result->RowCount() != result_values.size()) {
+	if (result.RowCount() != result_values.size()) {
 		return StringUtil::Format("Error in result: expected %lld rows but got %lld\nObtained result: %s",
-		                          (int64_t)result_values.size(), (int64_t)state.result->RowCount(),
-		                          state.result->ToString());
+		                          (int64_t)result_values.size(), (int64_t)result.RowCount(), result.ToString());
 	}
 	// compare values
 	for (int64_t r = 0; r < (int64_t)result_values.size(); r++) {
 		for (int64_t c = 0; c < result_column_count; c++) {
-			auto value = state.result->GetValue(c, r);
+			auto value = result.GetValue(c, r);
 			if (result_values[r][c] == "NULL" && value.IsNull()) {
 				continue;
 			}
@@ -401,13 +472,62 @@ string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
 			} catch (...) {
 			}
 			if (!Value::ValuesAreEqual(*state.con.context, verify_val, value)) {
-				return StringUtil::Format(
-				    "Error in result on row %lld column %lld: expected value \"%s\" but got value \"%s\"", r + 1, c + 1,
-				    verify_val.ToString().c_str(), value.ToString().c_str());
+				return StringUtil::Format("Error in result on row %lld column %lld: expected value \"%s\" but got "
+				                          "value \"%s\"\nObtained result:\n%s",
+				                          r + 1, c + 1, verify_val.ToString().c_str(), value.ToString().c_str(),
+				                          result.ToString().c_str());
 			}
 		}
 	}
 	return string();
+}
+
+string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
+	if (result_column_count == 0) {
+		// no result specified
+		return string();
+	}
+	auto &state = (InterpretedBenchmarkState &)*state_p;
+	if (state.result->HasError()) {
+		return state.result->GetError();
+	}
+	if (!result_query.empty()) {
+		// we are running a result query
+		// store the current result in a table called "__answer"
+		auto &collection = state.result->Collection();
+		auto &names = state.result->names;
+		auto &types = state.result->types;
+		// first create the (empty) table
+		string create_tbl = "CREATE OR REPLACE TEMP TABLE __answer(";
+		for (idx_t i = 0; i < names.size(); i++) {
+			if (i > 0) {
+				create_tbl += ", ";
+			}
+			create_tbl += KeywordHelper::WriteOptionallyQuoted(names[i]);
+			create_tbl += " ";
+			create_tbl += types[i].ToString();
+		}
+		create_tbl += ")";
+		auto new_result = state.con.Query(create_tbl);
+		if (new_result->HasError()) {
+			return new_result->GetError();
+		}
+		// now append the result to the answer table
+		auto table_info = state.con.TableInfo("__answer");
+		if (table_info == nullptr) {
+			throw std::runtime_error("Received a nullptr when querying table info of __answer");
+		}
+		state.con.Append(*table_info, collection);
+
+		// finally run the result query and verify the result of that query
+		new_result = state.con.Query(result_query);
+		if (new_result->HasError()) {
+			return new_result->GetError();
+		}
+		return VerifyInternal(state_p, *new_result);
+	} else {
+		return VerifyInternal(state_p, *state.result);
+	}
 }
 
 void InterpretedBenchmark::Interrupt(BenchmarkState *state_p) {

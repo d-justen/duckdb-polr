@@ -75,9 +75,9 @@ struct ClientConfig {
 	//! Enable POLR
 	bool enable_polr = false;
 	bool bushy_polr = false;
-	bool enable_cardinality_estimator = false;
-	double min_cardinality = 0.01;
-	int seed = 2;
+	bool enable_cardinality_estimator = true;
+	double min_cardinality = 1.0;
+	int seed = 1337;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;
