@@ -404,7 +404,7 @@ void QueryProfiler::QueryTreeToStream(std::ostream &ss) const {
 	ss << "│└───────────────────────────────────┘│\n";
 	ss << "└─────────────────────────────────────┘\n";
 
-	if (context.config.enable_polr) {
+	if (context.config.enable_polr && multiplexer_node && adaptive_union_node) {
 		ss << "┌─────────────────────────────────────┐\n";
 		ss << "│┌───────────────────────────────────┐│\n";
 		string mpx_time = "Multiplexer: " + RenderTiming(multiplexer_node->info.time);

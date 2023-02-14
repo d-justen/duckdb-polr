@@ -131,6 +131,10 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	auto output_tuple_count = static_cast<int64_t>(std::ceil(state.num_tuples_processed * path_weights[next_path_idx] -
 	                                                         state.input_tuple_count_per_path[next_path_idx]));
 
+	if (input.size() <= state.chunk_offset) {
+		void;
+	}
+
 	D_ASSERT(input.size() > state.chunk_offset);
 	int64_t remaining_input_tuples = input.size() - state.chunk_offset;
 	D_ASSERT(remaining_input_tuples > 0);

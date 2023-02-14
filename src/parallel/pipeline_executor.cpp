@@ -216,6 +216,7 @@ void PipelineExecutor::PushFinalize() {
 	// e.g. if we have SOURCE -> LIMIT -> CROSS_PRODUCT -> SINK, if the LIMIT reports no more rows will be passed on
 	// we still need to flush caches from the CROSS_PRODUCT
 	D_ASSERT(in_process_operators.empty());
+	D_ASSERT(in_process_joins.empty());
 	idx_t start_idx = IsFinished() ? idx_t(finished_processing_idx) : 0;
 	for (idx_t i = start_idx; i < cached_chunks.size(); i++) {
 		if (cached_chunks[i] && cached_chunks[i]->size() > 0) {
@@ -363,7 +364,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 		output_chunk.Reset();
 		RunPath(*mpx_output_chunk, output_chunk, -1);
 
-		if (result.size() > 0) {
+		if (result.size() > 0) { // TODO: if !inprocessjoins.empty()??
 			// TODO: We want to feed the following operators now
 			return OperatorResultType::HAVE_MORE_OUTPUT;
 		}
@@ -393,8 +394,8 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 		}
 	}
 
-	if (did_work_from_prior_run && !prior_run_tuples_produced_output) {
-		return OperatorResultType::NEED_MORE_INPUT;
+	if (did_work_from_prior_run && !prior_run_tuples_produced_output && in_process_operators.empty()) {
+		return OperatorResultType::NEED_MORE_INPUT; // TODO: Do we have to GoToSource instead?
 	}
 
 	if (prior_run_tuples_produced_output) {
@@ -538,6 +539,16 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 }
 
 void PipelineExecutor::FetchFromSource(DataChunk &result) {
+	D_ASSERT(in_process_operators.empty());
+	if (!in_process_joins.empty()) {
+		void;
+	}
+
+	D_ASSERT(in_process_joins.empty());
+	for (auto &cache : cached_join_chunks) {
+		D_ASSERT(!cache || cache->size() == 0);
+	}
+
 	StartOperator(pipeline.source);
 	pipeline.source->GetData(context, result, *pipeline.source_state, *local_source_state);
 	if (result.size() != 0 && requires_batch_index) {
@@ -623,6 +634,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 		pipeline.multiplexer->AddNumIntermediates(*multiplexer_state, current_chunk.size());
 
 		current_chunk.Verify();
+		// TODO: caching is broken. How can we ensure that the cache is processed correctly?
 		// CacheChunk(current_chunk, local_join_idx, true);
 
 		if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {

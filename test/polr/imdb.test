@@ -5,6 +5,22 @@
 ### CREATE TABLES
 
 statement ok
+CREATE TABLE aka_title (
+    id integer NOT NULL,
+    movie_id integer NOT NULL,
+    title character varying(553) NOT NULL,
+    imdb_index character varying(12),
+    kind_id integer NOT NULL,
+    production_year integer,
+    phonetic_code character varying(5),
+    episode_of_id integer,
+    season_nr integer,
+    episode_nr integer,
+    note character varying(72),
+    md5sum character varying(32)
+)
+
+statement ok
 CREATE TABLE aka_name ( id integer NOT NULL PRIMARY KEY, person_id integer NOT NULL, name text NOT NULL, imdb_index character varying(12), name_pcode_cf character varying(5), name_pcode_nf character varying(5), surname_pcode character varying(5), md5sum character varying(32) )
 
 statement ok
@@ -57,14 +73,17 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 
 ### FILL EM
 
-statement ok
-COPY aka_name FROM 'third_party/imdb/data/aka_name.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY aka_name FROM 'third_party/imdb/data/aka_name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
-COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
+COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
@@ -72,11 +91,11 @@ COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ES
 statement ok
 COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY comp_cast_type FROM 'third_party/imdb/data/comp_cast_type.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY comp_cast_type FROM 'third_party/imdb/data/comp_cast_type.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY complete_cast FROM 'third_party/imdb/data/complete_cast.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY complete_cast FROM 'third_party/imdb/data/complete_cast.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '\'
@@ -84,8 +103,8 @@ COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '
 statement ok
 COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY kind_type FROM 'third_party/imdb/data/kind_type.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY kind_type FROM 'third_party/imdb/data/kind_type.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY movie_companies FROM 'third_party/imdb/data/movie_companies.csv' DELIMITER ',' ESCAPE '\'
@@ -93,133 +112,62 @@ COPY movie_companies FROM 'third_party/imdb/data/movie_companies.csv' DELIMITER 
 statement ok
 COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY role_type FROM 'third_party/imdb/data/role_type.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY role_type FROM 'third_party/imdb/data/role_type.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY title FROM 'third_party/imdb/data/title.csv' DELIMITER ',' ESCAPE '\'
 
+# statement ok
+# PRAGMA enable_random_cardinalities
+
+statement ok
+PRAGMA enable_polr_bushy
+
 statement ok
 SET threads TO 1
 
+# query 15a
 statement ok
-SELECT MIN(an1.name) AS actress_pseudonym,
-       MIN(t.title) AS japanese_movie_dubbed
-FROM aka_name AS an1,
-     cast_info AS ci,
+SELECT MIN(mi.info) AS release_date,
+       MIN(t.title) AS modern_american_internet_movie
+FROM aka_title AS at,
      company_name AS cn,
+     company_type AS ct,
+     info_type AS it1,
+     keyword AS k,
      movie_companies AS mc,
-     name AS n1,
-     role_type AS rt,
-     title AS t
-WHERE ci.note ='(voice: English version)'
-  AND cn.country_code ='[jp]'
-  AND mc.note LIKE '%(Japan)%'
-  AND mc.note NOT LIKE '%(USA)%'
-  AND n1.name LIKE '%Yo%'
-  AND n1.name NOT LIKE '%Yu%'
-  AND rt.role ='actress'
-  AND an1.person_id = n1.id
-  AND n1.id = ci.person_id
-  AND ci.movie_id = t.id
-  AND t.id = mc.movie_id
-  AND mc.company_id = cn.id
-  AND ci.role_id = rt.id
-  AND an1.person_id = ci.person_id
-  AND ci.movie_id = mc.movie_id
-
-statement ok
-SELECT MIN(an.name) AS alternative_name,
-       MIN(chn.name) AS character_name,
-       MIN(t.title) AS movie
-FROM aka_name AS an,
-     char_name AS chn,
-     cast_info AS ci,
-     company_name AS cn,
-     movie_companies AS mc,
-     name AS n,
-     role_type AS rt,
-     title AS t
-WHERE ci.note IN ('(voice)',
-                  '(voice: Japanese version)',
-                  '(voice) (uncredited)',
-                  '(voice: English version)')
-  AND cn.country_code ='[us]'
-  AND mc.note IS NOT NULL
-  AND (mc.note LIKE '%(USA)%'
-       OR mc.note LIKE '%(worldwide)%')
-  AND n.gender ='f'
-  AND n.name LIKE '%Ang%'
-  AND rt.role ='actress'
-  AND t.production_year BETWEEN 2005 AND 2015
-  AND ci.movie_id = t.id
-  AND t.id = mc.movie_id
-  AND ci.movie_id = mc.movie_id
-  AND mc.company_id = cn.id
-  AND ci.role_id = rt.id
-  AND n.id = ci.person_id
-  AND chn.id = ci.person_role_id
-  AND an.person_id = n.id
-  AND an.person_id = ci.person_id
-
-statement ok
-SELECT MIN(t.title) AS movie_title
-FROM keyword AS k,
      movie_info AS mi,
      movie_keyword AS mk,
      title AS t
-WHERE k.keyword LIKE '%sequel%'
-  AND mi.info IN ('Sweden',
-                  'Norway',
-                  'Germany',
-                  'Denmark',
-                  'Swedish',
-                  'Denish',
-                  'Norwegian',
-                  'German')
-  AND t.production_year > 2005
+WHERE cn.country_code = '[us]'
+  AND it1.info = 'release dates'
+  AND mi.note LIKE '%internet%'
+  AND mi.info IS NOT NULL
+  AND (mi.info LIKE 'USA:% 199%'
+       OR mi.info LIKE 'USA:% 200%')
+  AND t.production_year > 1990
+  AND t.id = at.movie_id
   AND t.id = mi.movie_id
   AND t.id = mk.movie_id
+  AND t.id = mc.movie_id
   AND mk.movie_id = mi.movie_id
+  AND mk.movie_id = mc.movie_id
+  AND mk.movie_id = at.movie_id
+  AND mi.movie_id = mc.movie_id
+  AND mi.movie_id = at.movie_id
+  AND mc.movie_id = at.movie_id
   AND k.id = mk.keyword_id
-
-statement ok
-SELECT MIN(mi.info) AS release_date,
-       MIN(miidx.info) AS rating,
-       MIN(t.title) AS german_movie
-FROM company_name AS cn,
-     company_type AS ct,
-     info_type AS it,
-     info_type AS it2,
-     kind_type AS kt,
-     movie_companies AS mc,
-     movie_info AS mi,
-     movie_info_idx AS miidx,
-     title AS t
-WHERE cn.country_code ='[de]'
-  AND ct.kind ='production companies'
-  AND it.info ='rating'
-  AND it2.info ='release dates'
-  AND kt.kind ='movie'
-  AND mi.movie_id = t.id
-  AND it2.id = mi.info_type_id
-  AND kt.id = t.kind_id
-  AND mc.movie_id = t.id
+  AND it1.id = mi.info_type_id
   AND cn.id = mc.company_id
   AND ct.id = mc.company_type_id
-  AND miidx.movie_id = t.id
-  AND it.id = miidx.info_type_id
-  AND mi.movie_id = miidx.movie_id
-  AND mi.movie_id = mc.movie_id
-  AND miidx.movie_id = mc.movie_id;
-
 
