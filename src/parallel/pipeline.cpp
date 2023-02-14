@@ -356,8 +356,12 @@ void Pipeline::BuildPOLRPaths() {
 					}
 				}
 
+				idx_t additional_columns = joins[join_idx]->right_projection_map.empty()
+				                               ? joins[join_idx]->children[1]->types.size()
+				                               : joins[join_idx]->right_projection_map.size();
+
 				current_join_path_column_offsets.push_back(current_join_path_column_offsets.back() +
-				                                           joins[join_idx]->right_projection_map.size());
+				                                           additional_columns);
 			}
 
 			left_expression_bindings.push_back(expression_bindings);
