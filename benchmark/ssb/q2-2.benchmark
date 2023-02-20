@@ -1,0 +1,7 @@
+# name: benchmark/ssb/q2-2.benchmark
+# description: Run query 2.2 from the ssb benchmark
+# group: [ssb]
+
+template benchmark/ssb/ssb.benchmark.in
+QUERY_NUMBER=q2-2
+QUERY_NUMBER_PADDED=q2-2

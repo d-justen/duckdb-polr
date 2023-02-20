@@ -1,38 +1,3 @@
-# name: test/jcch/queries.test
-# description: Run JCC-H suite
-# group: [jcch]
-
-statement ok
-CREATE TABLE customer AS SELECT * FROM 'test/jcch/data/customer.csv'
-
-statement ok
-CREATE TABLE lineitem AS SELECT * FROM 'test/jcch/data/lineitem.csv'
-
-statement ok
-CREATE TABLE nation AS SELECT * FROM 'test/jcch/data/nation.csv'
-
-statement ok
-CREATE TABLE orders AS SELECT * FROM 'test/jcch/data/orders.csv'
-
-statement ok
-CREATE TABLE part AS SELECT * FROM 'test/jcch/data/part.csv'
-
-statement ok
-CREATE TABLE partsupp AS SELECT * FROM 'test/jcch/data/partsupp.csv'
-
-statement ok
-CREATE TABLE region AS SELECT * FROM 'test/jcch/data/region.csv'
-
-statement ok
-CREATE TABLE supplier AS SELECT * FROM 'test/jcch/data/supplier.csv'
-
-statement ok
-PRAGMA enable_polr_bushy
-
-statement ok
-SET threads TO 1
-
-query IIII
 SELECT
     supp_nation,
     cust_nation,
@@ -70,6 +35,4 @@ GROUP BY
 ORDER BY
     supp_nation,
     cust_nation,
-    l_year
-----
-EGYPT	CHINA	1994	5218462484.792456
+    l_year;

@@ -1,0 +1,7 @@
+# name: benchmark/jcch/q13.benchmark
+# description: Run query 13 from the jcch benchmark
+# group: [jcch]
+
+template benchmark/jcch/jcch.benchmark.in
+QUERY_NUMBER=q13
+QUERY_NUMBER_PADDED=q13

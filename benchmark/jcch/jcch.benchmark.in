@@ -1,0 +1,15 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [jcch]
+
+name Q${QUERY_NUMBER_PADDED}
+group jcch
+
+cache jcch.duckdb
+
+load benchmark/jcch/init/load.sql
+
+run benchmark/jcch/queries/${QUERY_NUMBER_PADDED}.sql
+
+# result benchmark/jcch/answers/${QUERY_NUMBER_PADDED}.csv
+# result benchmark/imdb/answers/01a.csv
