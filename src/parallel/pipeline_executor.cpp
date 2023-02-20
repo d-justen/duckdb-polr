@@ -506,6 +506,9 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				// if we got no output from the scan, we are done
 				break;
 			} else {
+				if (!in_process_joins.empty()) {
+					return OperatorResultType::HAVE_MORE_OUTPUT;
+				}
 				// if we got no output from an intermediate op
 				// we go back and try to pull data from the source again
 				GoToSource(current_idx, initial_idx);
