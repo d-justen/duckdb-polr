@@ -345,7 +345,8 @@ void Pipeline::BuildPOLRPaths() {
 					auto &binding_map = column_bindings->second;
 
 					for (auto &binding : binding_map) {
-						auto &[probe_join_idx, relative_column_idx] = binding.second;
+						auto probe_join_idx = binding.second.first;
+						auto relative_column_idx = binding.second.second;
 
 						for (idx_t i = 0; i < current_join_path_column_offsets.size(); i++) {
 							if (join_path[i] == probe_join_idx) {
