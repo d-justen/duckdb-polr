@@ -12,11 +12,11 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	if (context.client.config.enable_polr) {
 		if (!pipeline.joins.empty()) {
 			join_intermediate_chunks.resize(pipeline.join_paths.size());
-			/* cached_join_chunks.resize(pipeline.join_paths.front().size());
+			cached_join_chunks.resize(pipeline.join_paths.front().size());
 
 			for (idx_t i = 0; i < pipeline.join_paths.front().size(); i++) {
-			    cached_join_chunks[i] = make_unique<DataChunk>();
-			} */
+				cached_join_chunks[i] = make_unique<DataChunk>();
+			}
 
 			for (idx_t i = 0; i < pipeline.join_paths.size(); i++) {
 				vector<LogicalType> types;
@@ -593,23 +593,26 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 		return;
 	}
 
-	/* if (start_idx == 0 && in_process_joins.empty()) {
-	    for (idx_t i = 0; i < cached_join_chunks.size(); i++) {
-	        cached_join_chunks[i]->Destroy();
-	        cached_join_chunks[i]->Initialize(Allocator::Get(context.client),
-	                                          join_intermediate_chunks[current_path][i]->GetTypes());
-	    }
-	} */
+	if (start_idx == 0 && in_process_joins.empty()) {
+		for (idx_t i = 0; i < cached_join_chunks.size(); i++) {
+			D_ASSERT(cached_join_chunks[i]->size() == 0);
+			cached_join_chunks[i]->Destroy();
+			cached_join_chunks[i]->Initialize(Allocator::Get(context.client),
+			                                  join_intermediate_chunks[current_path][i]->GetTypes());
+		}
+	}
 
 	idx_t local_join_idx = start_idx;
 
 	if (!in_process_joins.empty()) {
 		local_join_idx = in_process_joins.top();
+		start_idx = 0;
 		in_process_joins.pop();
 	}
 
 	while (true) {
-		auto *prev_chunk = local_join_idx == 0 ? &chunk : &*join_intermediate_chunks[current_path][local_join_idx - 1];
+		auto *prev_chunk =
+		    local_join_idx == start_idx ? &chunk : &*join_intermediate_chunks[current_path][local_join_idx - 1];
 		auto &current_chunk = *join_intermediate_chunks[current_path][local_join_idx];
 		current_chunk.Reset();
 
@@ -625,8 +628,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 		pipeline.multiplexer->AddNumIntermediates(*multiplexer_state, current_chunk.size());
 
 		current_chunk.Verify();
-		// TODO: caching is broken. How can we ensure that the cache is processed correctly?
-		// CacheChunk(current_chunk, local_join_idx, true);
+		CacheChunk(current_chunk, local_join_idx, true);
 
 		if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {
 			// more data remains in this operator
@@ -641,6 +643,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 				in_process_joins.pop();
 				continue;
 			} else {
+				// TODO: go on with cached chunks?
 				break;
 			}
 		} else {
