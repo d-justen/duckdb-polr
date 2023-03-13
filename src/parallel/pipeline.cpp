@@ -284,8 +284,9 @@ void Pipeline::BuildPOLRPaths() {
 		                operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
 
 		auto prev_types = joins.front()->children[0]->GetTypes();
+		double regret_budget = DBConfig::GetConfig(executor.context).options.regret_budget;
 		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
-		                                               join_paths.size());
+		                                               join_paths.size(), regret_budget);
 		multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
 		multiplexer_idx = hash_join_idxs.front();
 		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);

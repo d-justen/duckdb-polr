@@ -55,6 +55,10 @@ public:
 	bool enable_polr_bushy = false;
 	bool disable_cardinality_estimator = false;
 	bool enable_random_cardinalities = false;
+	bool mpx_alternate_chunks = false;
+	double regret_budget = 0.2;
+	bool log_tuples_routed = false;
+	uint32_t nruns = 5;
 };
 
 } // namespace duckdb

@@ -29,7 +29,7 @@ WHERE
             AND l3.l_suppkey <> l1.l_suppkey
             AND l3.l_receiptdate > l3.l_commitdate)
     AND s_nationkey = n_nationkey
-    AND n_name = 'GERMANY'
+    AND n_name = 'UNITED STATES'
 GROUP BY
     s_name
 ORDER BY

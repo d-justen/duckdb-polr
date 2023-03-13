@@ -343,3 +343,5 @@ zig-cache/*
 
 # .db files
 *.db
+
+experiments/experiment-results

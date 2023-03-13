@@ -141,15 +141,16 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 	}
 	PushFinalize();
 
-#ifdef DEBUG
-	if (pipeline.multiplexer) {
+	if (pipeline.multiplexer && pipeline.executor.context.config.log_tuples_routed) {
 		pipeline.multiplexer->PrintStatistics(*multiplexer_state);
+		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;
-		file.open(std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".csv");
+		file.open("./experiments/" + filename + ".csv");
 		pipeline.multiplexer->WriteLogToFile(*multiplexer_state, file);
 		file.close();
+		std::cout << filename << "\n";
 	}
-#endif
+
 	return true;
 }
 

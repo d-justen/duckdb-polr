@@ -96,7 +96,10 @@ statement ok
 COPY date FROM 'test/ssb/data/date.tbl'
 
 statement ok
-SET disabled_optimizers TO 'join_order'
+PRAGMA enable_polr_bushy
+
+statement ok
+SET threads To 1
 
 #q4.1.1
 statement ok

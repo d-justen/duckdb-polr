@@ -26,7 +26,7 @@ public:
 	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
-	void FinalizePathRun(OperatorState &state_p, idx_t num_intermediates) const;
+	void FinalizePathRun(OperatorState &state_p, idx_t num_intermediates, bool log_tuples_routed) const;
 	void AddNumIntermediates(OperatorState &state_p, idx_t count) const;
 	idx_t GetCurrentPathIndex(OperatorState &state_p) const;
 

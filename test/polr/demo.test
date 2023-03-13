@@ -1,0 +1,82 @@
+# name: test/polr/demo.test
+# description: Demonstrate POLR use case
+# group: [polr]
+
+statement ok
+CREATE TABLE seed_table (
+	seed_id integer NOT NULL,
+	table_a_id integer,
+	table_b_id integer
+)
+
+loop i 0 1000
+
+statement ok
+INSERT INTO seed_table VALUES (${i}, 0, 0)
+
+statement ok
+INSERT INTO seed_table SELECT * FROM repeat(${i}, 1000) t1(a), repeat(${i}+1,1) t2(a), repeat(${i}+1,1) t3(a)
+
+statement ok
+INSERT INTO seed_table SELECT * from repeat(${i}, 23) t1(a), repeat(999, 1) t2(b), repeat(600, 1) t3(c)
+
+endloop
+
+statement ok
+CREATE TABLE table_a (
+	id integer NOT NULL,
+	comment varchar
+)
+
+statement ok
+INSERT INTO table_a SELECT id, comment FROM range(1, 501, 1) t1(id), repeat(1, 10) t2(b), repeat('A', 1) t3(comment)
+
+statement ok
+INSERT into table_a VALUES (0, 'MATCH')
+
+statement ok
+CREATE TABLE table_b(
+	id integer NOT NULL,
+	comment varchar
+)
+
+statement ok
+INSERT INTO table_b SELECT id, comment FROM range(501, 1001, 1) t1(id), repeat(1, 5) t2(b), repeat('B', 1) t3(comment)
+
+statement ok
+INSERT into table_b VALUES (0, 'MATCH')
+
+statement ok
+INSERT into table_b SELECT * FROM repeat(600, 20) t1(a), repeat('B', 1) t2(b)
+
+statement ok
+PRAGMA enable_polr_bushy
+
+statement ok
+SET threads TO 1
+
+statement ok
+EXPLAIN ANALYZE SELECT COUNT(*), min(table_a.comment), min(table_b.comment)
+FROM seed_table, table_a, table_b
+WHERE seed_table.table_a_id = table_a.id AND
+	seed_table.table_b_id = table_b.id
+
+statement ok
+PRAGMA disable_polr_bushy
+
+statement ok
+SET disabled_optimizers TO 'join_order'
+
+statement ok
+EXPLAIN ANALYZE SELECT COUNT(*), min(table_a.comment), min(table_b.comment)
+FROM seed_table
+JOIN table_a ON seed_table.table_a_id = table_a.id
+JOIN table_b ON seed_table.table_b_id = table_b.id
+
+query III
+EXPLAIN ANALYZE SELECT COUNT(*), min(table_a.comment), min(table_b.comment)
+FROM seed_table
+JOIN table_b ON seed_table.table_b_id = table_b.id
+JOIN table_a ON seed_table.table_a_id = table_a.id
+----
+1000	MATCH	MATCH

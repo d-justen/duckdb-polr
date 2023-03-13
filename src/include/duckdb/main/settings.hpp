@@ -324,4 +324,12 @@ struct ThreadsSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct RegretBudgetSetting {
+	static constexpr const char *Name = "regret_budget";
+	static constexpr const char *Description = "The regret budget used to calculate POLR weights.";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::DOUBLE;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static Value GetSetting(ClientContext &context);
+};
+
 } // namespace duckdb

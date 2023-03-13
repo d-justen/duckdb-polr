@@ -127,6 +127,9 @@ struct DBConfigOptions {
 	//! Enable emitting FSST Vectors
 	bool enable_fsst_vectors = false;
 
+	//! POLR
+	double regret_budget = 0.2;
+
 	bool operator==(const DBConfigOptions &other) const;
 };
 

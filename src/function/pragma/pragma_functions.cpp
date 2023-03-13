@@ -155,6 +155,22 @@ static void PragmaDisableRandomCardinalities(ClientContext &context, const Funct
 	ClientConfig::GetConfig(context).min_cardinality = 1.0;
 }
 
+static void PragmaEnableMpxAlternateChunks(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).mpx_alternate_chunks = true;
+}
+
+static void PragmaDisableMpxAlternateChunks(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).mpx_alternate_chunks = false;
+}
+
+static void PragmaEnableLogTuplesRouted(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).log_tuples_routed = true;
+}
+
+static void PragmaDisableLogTuplesRouted(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).log_tuples_routed = false;
+}
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -204,6 +220,12 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_random_cardinalities", PragmaEnableRandomCardinalities));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_random_cardinalities", PragmaDisableRandomCardinalities));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_mpx_alternate_chunks", PragmaEnableMpxAlternateChunks));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_mpx_alternate_chunks", PragmaDisableMpxAlternateChunks));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_log_tuples_routed", PragmaEnableLogTuplesRouted));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_log_tuples_routed", PragmaDisableLogTuplesRouted));
 }
 
 } // namespace duckdb

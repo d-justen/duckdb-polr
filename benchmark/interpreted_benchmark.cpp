@@ -46,6 +46,9 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		auto res = con.Query("PRAGMA threads=" + to_string(instance.threads));
 		D_ASSERT(!res->HasError());
 
+		auto res_regret_budget = con.Query("SET regret_budget TO " + to_string(instance.regret_budget));
+		D_ASSERT(!res->HasError());
+
 		if (instance.enable_polr) {
 			res = con.Query("PRAGMA enable_polr");
 			D_ASSERT(!res->HasError());
@@ -60,6 +63,14 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		}
 		if (instance.enable_random_cardinalities) {
 			res = con.Query("PRAGMA enable_random_cardinalities");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.mpx_alternate_chunks) {
+			res = con.Query("PRAGMA enable_mpx_alternate_chunks");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.log_tuples_routed) {
+			res = con.Query("PRAGMA enable_log_tuples_routed");
 			D_ASSERT(!res->HasError());
 		}
 	}

@@ -28,6 +28,10 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 		auto &instance = BenchmarkRunner::GetInstance();
 		auto res = conn.Query("PRAGMA threads=" + to_string(instance.threads));
 		D_ASSERT(!res->HasError());
+
+		auto res_regret_budget = conn.Query("SET regret_budget TO " + to_string(instance.regret_budget));
+		D_ASSERT(!res->HasError());
+
 		string profiling_mode;
 		switch (instance.configuration.profile_info) {
 		case BenchmarkProfileInfo::NONE:
@@ -60,6 +64,14 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 		}
 		if (instance.enable_random_cardinalities) {
 			res = conn.Query("PRAGMA enable_random_cardinalities");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.mpx_alternate_chunks) {
+			res = conn.Query("PRAGMA enable_mpx_alternate_chunks");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.log_tuples_routed) {
+			res = conn.Query("PRAGMA enable_log_tuples_routed");
 			D_ASSERT(!res->HasError());
 		}
 	}

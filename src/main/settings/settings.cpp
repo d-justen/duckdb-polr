@@ -650,4 +650,16 @@ Value ThreadsSetting::GetSetting(ClientContext &context) {
 	return Value::BIGINT(config.options.maximum_threads);
 }
 
+//===--------------------------------------------------------------------===//
+// Regret Budget Setting
+//===--------------------------------------------------------------------===//
+void RegretBudgetSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	config.options.regret_budget = input.GetValue<double>();
+}
+
+Value RegretBudgetSetting::GetSetting(ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return Value::DOUBLE(config.options.regret_budget);
+}
+
 } // namespace duckdb

@@ -1,5 +1,7 @@
 #include "duckdb/execution/operator/polr/physical_multiplexer.hpp"
 
+#include "duckdb/main/client_context.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -27,7 +29,7 @@ public:
 
 	// To be set before running the path
 	idx_t chunk_offset = 0;
-	idx_t current_path_idx;
+	idx_t current_path_idx = 0;
 	idx_t current_path_tuple_count = 0;
 	idx_t current_path_remaining_tuples = 0;
 
@@ -56,10 +58,18 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	auto &state = (MultiplexerState &)state_p;
 
 	if (!state.first_mpx_run) {
-		FinalizePathRun(state, state.num_intermediates_current_path);
+		FinalizePathRun(state, state.num_intermediates_current_path, context.client.config.log_tuples_routed);
 		state.num_intermediates_current_path = 0;
 	} else {
 		state.first_mpx_run = false;
+	}
+
+	if (context.client.config.mpx_alternate_chunks) {
+		state.current_path_idx =
+		    state.num_tuples_processed == 0 ? 0 : ++state.current_path_idx % state.input_tuple_count_per_path.size();
+		state.current_path_tuple_count = input.size();
+		chunk.Reference(input);
+		return OperatorResultType::NEED_MORE_INPUT;
 	}
 
 	// Shortcut: If we have tuples left from previous multiplexing, just route the whole next chunk
@@ -131,10 +141,6 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	auto output_tuple_count = static_cast<int64_t>(std::ceil(state.num_tuples_processed * path_weights[next_path_idx] -
 	                                                         state.input_tuple_count_per_path[next_path_idx]));
 
-	if (input.size() <= state.chunk_offset) {
-		void;
-	}
-
 	D_ASSERT(input.size() > state.chunk_offset);
 	int64_t remaining_input_tuples = input.size() - state.chunk_offset;
 	D_ASSERT(remaining_input_tuples > 0);
@@ -148,6 +154,9 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	} else if (next_path_has_min_intermediates) {
 		output_tuple_count = remaining_input_tuples;
 	}
+
+	// TODO: dirty. but do we always want to route whole chunks?
+	output_tuple_count = remaining_input_tuples;
 
 	D_ASSERT(output_tuple_count > 0 && output_tuple_count <= 1024);
 
@@ -233,7 +242,8 @@ string PhysicalMultiplexer::ParamsToString() const {
 
 // TODO: We introduced a shortcut to not calculate path_weights after each chunk. If we see that the performance
 // deteriorates much, set remaining_tuples to 0
-void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_intermediates) const {
+void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_intermediates,
+                                          bool log_tuples_routed) const {
 	auto &state = (MultiplexerState &)state_p;
 
 	// We count input tuples as intermediates here. Otherwise, we can have 0 intermediates per input tuple resulting in
@@ -242,14 +252,33 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_inte
 	    (num_intermediates + state.current_path_tuple_count) / static_cast<double>(state.current_path_tuple_count);
 
 	if (state.num_paths_initialized == path_count) {
-		if (state.intermediates_per_input_tuple[state.current_path_idx] * 1.2 < intermediates_per_input_tuple) {
-			// Our path is now 20% (<- magic number) slower than before. We want to calculate weights again next time
+		if (state.intermediates_per_input_tuple[state.current_path_idx] * 1.5 < intermediates_per_input_tuple) {
+			// Our path is now 50% (<- magic number) slower than before. We want to calculate weights again next time
 			state.current_path_remaining_tuples = 0;
+
+			// TODO: Is this a viable strategy?
+			// If our go-to path (most tuples were routed there) has seen a deterioration, reset input tuple counts.
+			// After this reset, we will be able to revisit that path fairly, in case it will perform better again.
+#ifndef DEBUG
+			if (std::none_of(state.input_tuple_count_per_path.cbegin(), state.input_tuple_count_per_path.cend(),
+			                 [&](const idx_t tuples) {
+				                 return tuples > state.input_tuple_count_per_path[state.current_path_idx];
+			                 })) {
+				for (idx_t i = 0; i < state.input_tuple_count_per_path.size(); i++) {
+					state.input_tuple_count_per_path[i] = 1;
+				}
+				state.num_tuples_processed = state.input_tuple_count_per_path.size();
+			}
+#endif
 		}
 
 		// Rolling average
 		state.intermediates_per_input_tuple[state.current_path_idx] *= 0.5;
 		state.intermediates_per_input_tuple[state.current_path_idx] += 0.5 * intermediates_per_input_tuple;
+
+		if (log_tuples_routed) {
+			state.intermediates_per_input_tuple[state.current_path_idx] = intermediates_per_input_tuple;
+		}
 	} else {
 		state.intermediates_per_input_tuple[state.current_path_idx] = intermediates_per_input_tuple;
 		state.num_paths_initialized++;
@@ -258,15 +287,24 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_inte
 	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
 	state.num_tuples_processed += state.current_path_tuple_count;
 
-	for (double num_intm : state.intermediates_per_input_tuple) {
-		state.log << num_intm << ",";
-	}
+	if (log_tuples_routed) {
+		if (state.num_tuples_processed - state.current_path_tuple_count == 0) {
+			// First run!
+			for (idx_t i = 0; i < state.intermediates_per_input_tuple.size(); i++) {
+				state.log << "intermediates_" << i << ",";
+				state.log << "sent_" << i << ",";
+			}
 
-	for (idx_t num_inp : state.input_tuple_count_per_path) {
-		state.log << num_inp << ",";
-	}
+			state.log << "\n";
+		}
 
-	state.log << "\n";
+		for (idx_t i = 0; i < state.intermediates_per_input_tuple.size(); i++) {
+			state.log << state.intermediates_per_input_tuple[i] << ",";
+			state.log << state.input_tuple_count_per_path[i] << ",";
+		}
+
+		state.log << "\n";
+	}
 }
 
 idx_t PhysicalMultiplexer::GetCurrentPathIndex(OperatorState &state_p) const {

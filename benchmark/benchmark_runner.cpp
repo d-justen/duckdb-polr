@@ -102,8 +102,14 @@ void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 	auto display_name = benchmark->DisplayName();
 
 	auto state = benchmark->Initialize(configuration);
-	auto nruns = benchmark->NRuns();
-	for (size_t i = 0; i < nruns + 1; i++) {
+
+	auto benchmark_runs = nruns;
+
+	if (nruns > 1) {
+		benchmark_runs += 1;
+	}
+
+	for (size_t i = 0; i < benchmark_runs; i++) {
 		bool hotrun = i > 0;
 		if (hotrun) {
 			Log(StringUtil::Format("%s\t%d\t", benchmark->name, i));
@@ -210,6 +216,10 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			// write info of benchmark
 			auto splits = StringUtil::Split(arg, '=');
 			instance.threads = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
+		} else if (StringUtil::StartsWith(arg, "--nruns=")) {
+			// write info of benchmark
+			auto splits = StringUtil::Split(arg, '=');
+			instance.nruns = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
 		} else if (arg == "--query") {
 			// write group of benchmark
 			instance.configuration.meta = BenchmarkMetaType::QUERY;
@@ -240,6 +250,14 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				print_help();
 				exit(1);
 			}
+		} else if (StringUtil::StartsWith(arg, "--regret_budget=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			instance.regret_budget = std::stod(splits[1]);
 		} else if (StringUtil::StartsWith(arg, "--cardinalities=")) {
 			auto splits = StringUtil::Split(arg, '=');
 			if (splits.size() != 2) {
@@ -255,6 +273,10 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				print_help();
 				exit(1);
 			}
+		} else if (arg == "--mpx_alternate_chunks") {
+			instance.mpx_alternate_chunks = true;
+		} else if (arg == "--log_tuples_routed") {
+			instance.log_tuples_routed = true;
 		} else {
 			if (!instance.configuration.name_pattern.empty()) {
 				fprintf(stderr, "Only one benchmark can be specified.\n");
