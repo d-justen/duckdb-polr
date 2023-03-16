@@ -149,6 +149,11 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 		pipeline.multiplexer->WriteLogToFile(*multiplexer_state, file);
 		file.close();
 		std::cout << filename << "\n";
+
+		std::ofstream file2;
+		file2.open("./experiments/" + filename + "-intms.txt");
+		file2 << num_intermediates_produced << "\n";
+		file2.close();
 	}
 
 	return true;
@@ -627,6 +632,7 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 		EndOperator(current_operator, &current_chunk);
 
 		pipeline.multiplexer->AddNumIntermediates(*multiplexer_state, current_chunk.size());
+		num_intermediates_produced += current_chunk.size();
 
 		current_chunk.Verify();
 		CacheChunk(current_chunk, local_join_idx, true);

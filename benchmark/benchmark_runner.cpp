@@ -84,10 +84,6 @@ void BenchmarkRunner::LogLine(string message) {
 
 void BenchmarkRunner::LogResult(string message) {
 	LogLine(message);
-	if (out_file.good()) {
-		out_file << message << endl;
-		out_file.flush();
-	}
 }
 
 void BenchmarkRunner::LogOutput(string message) {
@@ -143,6 +139,10 @@ void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 					break;
 				} else {
 					LogResult(std::to_string(profiler.Elapsed()));
+					if (out_file.good()) {
+						out_file << benchmark->name << "," << i << "," << profiler.Elapsed() << endl;
+						out_file.flush();
+					}
 				}
 			}
 		}
@@ -334,6 +334,7 @@ ConfigurationError run_benchmarks() {
 			}
 		} else {
 			instance.LogLine("name\trun\ttiming");
+
 			for (const auto &benchmark_index : benchmark_indices) {
 				instance.RunBenchmark(benchmarks[benchmark_index]);
 			}

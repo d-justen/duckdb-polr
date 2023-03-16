@@ -156,7 +156,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	}
 
 	// TODO: dirty. but do we always want to route whole chunks?
-	output_tuple_count = remaining_input_tuples;
+	// output_tuple_count = remaining_input_tuples;
 
 	D_ASSERT(output_tuple_count > 0 && output_tuple_count <= 1024);
 
@@ -246,10 +246,9 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_inte
                                           bool log_tuples_routed) const {
 	auto &state = (MultiplexerState &)state_p;
 
-	// We count input tuples as intermediates here. Otherwise, we can have 0 intermediates per input tuple resulting in
-	// general weirdness
-	double intermediates_per_input_tuple =
-	    (num_intermediates + state.current_path_tuple_count) / static_cast<double>(state.current_path_tuple_count);
+	// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
+	// weight calculation
+	double intermediates_per_input_tuple = num_intermediates == 0 ? 0.1 / 1024 : num_intermediates / static_cast<double>(state.current_path_tuple_count);
 
 	if (state.num_paths_initialized == path_count) {
 		if (state.intermediates_per_input_tuple[state.current_path_idx] * 1.5 < intermediates_per_input_tuple) {
@@ -257,19 +256,20 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_inte
 			state.current_path_remaining_tuples = 0;
 
 			// TODO: Is this a viable strategy?
+			// TODO: Also use this strategy when logging for efficacy experiment
 			// If our go-to path (most tuples were routed there) has seen a deterioration, reset input tuple counts.
 			// After this reset, we will be able to revisit that path fairly, in case it will perform better again.
-#ifndef DEBUG
-			if (std::none_of(state.input_tuple_count_per_path.cbegin(), state.input_tuple_count_per_path.cend(),
-			                 [&](const idx_t tuples) {
-				                 return tuples > state.input_tuple_count_per_path[state.current_path_idx];
-			                 })) {
-				for (idx_t i = 0; i < state.input_tuple_count_per_path.size(); i++) {
-					state.input_tuple_count_per_path[i] = 1;
+			if (!log_tuples_routed) {
+				if (std::none_of(state.input_tuple_count_per_path.cbegin(), state.input_tuple_count_per_path.cend(),
+				                 [&](const idx_t tuples) {
+					                 return tuples > state.input_tuple_count_per_path[state.current_path_idx];
+				                 })) {
+					for (idx_t i = 0; i < state.input_tuple_count_per_path.size(); i++) {
+						state.input_tuple_count_per_path[i] = 1;
+					}
+					state.num_tuples_processed = state.input_tuple_count_per_path.size();
 				}
-				state.num_tuples_processed = state.input_tuple_count_per_path.size();
 			}
-#endif
 		}
 
 		// Rolling average

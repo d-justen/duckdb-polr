@@ -74,6 +74,7 @@ private:
 	vector<unique_ptr<DataChunk>> cached_join_chunks;
 	stack<idx_t> in_process_joins;
 	unique_ptr<DataChunk> mpx_output_chunk;
+	idx_t num_intermediates_produced = 0;
 
 	//! The local source state
 	unique_ptr<LocalSourceState> local_source_state;

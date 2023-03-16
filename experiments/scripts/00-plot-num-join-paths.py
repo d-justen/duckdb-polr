@@ -14,6 +14,7 @@ for benchmark_name in query_counts:
     path = os.getcwd() + "/experiment-results/00-num-join-paths/" + benchmark_name
     print("Processing " + benchmark_name)
     csv_files = glob.glob(os.path.join(path, "*.csv"))
+    csv_files.sort()
 
     path_counts = [0] * (query_counts[benchmark_name] - len(csv_files))
 
