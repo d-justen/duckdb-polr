@@ -12,11 +12,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	if (context.client.config.enable_polr) {
 		if (!pipeline.joins.empty()) {
 			join_intermediate_chunks.resize(pipeline.join_paths.size());
-			cached_join_chunks.resize(pipeline.join_paths.front().size());
-
-			for (idx_t i = 0; i < pipeline.join_paths.front().size(); i++) {
-				cached_join_chunks[i] = make_unique<DataChunk>();
-			}
+			cached_join_chunks.resize(pipeline.join_paths.size());
 
 			for (idx_t i = 0; i < pipeline.join_paths.size(); i++) {
 				vector<LogicalType> types;
@@ -26,6 +22,7 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 
 				auto &current_join_path = pipeline.join_paths[i];
 				join_intermediate_chunks[i].reserve(current_join_path.size());
+				cached_join_chunks[i].reserve(current_join_path.size());
 
 				for (idx_t j = 0; j < current_join_path.size(); j++) {
 					auto &build_types =
@@ -33,10 +30,11 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 					        ->build_types; // TODO: check if this is the new types that come with the join
 					types.insert(types.cend(), build_types.cbegin(), build_types.cend());
 
-					auto chunk = make_unique<DataChunk>();
-					chunk->Initialize(Allocator::Get(context.client), types);
+					join_intermediate_chunks[i].push_back(make_unique<DataChunk>());
+					join_intermediate_chunks[i].back()->Initialize(Allocator::Get(context.client), types);
 
-					join_intermediate_chunks[i].push_back(move(chunk));
+					cached_join_chunks[i].push_back(make_unique<DataChunk>());
+					cached_join_chunks[i].back()->Initialize(Allocator::Get(context.client), types);
 				}
 			}
 
@@ -263,8 +261,11 @@ void PipelineExecutor::CacheChunk(DataChunk &current_chunk, idx_t operator_idx, 
 #if STANDARD_VECTOR_SIZE >= 128
 	DataChunk *chunk_cache = nullptr;
 
-	if (is_polr_join && cached_join_chunks[operator_idx]) {
-		chunk_cache = &*cached_join_chunks[operator_idx];
+	if (is_polr_join) {
+		idx_t current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
+		if (cached_join_chunks[current_path][operator_idx]) {
+			chunk_cache = &*cached_join_chunks[current_path][operator_idx];
+		}
 	} else if (cached_chunks[operator_idx]) {
 		chunk_cache = &*cached_chunks[operator_idx];
 	}
@@ -356,7 +357,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 	D_ASSERT(!pipeline.operators.empty());
 
 	idx_t current_idx;
-
+	idx_t current_path = pipeline.multiplexer ? pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state) : -1;
 	bool did_work_from_prior_run = false;
 	bool prior_run_tuples_produced_output = false;
 
@@ -375,9 +376,9 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 		prior_run_tuples_produced_output = output_chunk.size() > 0;
 	}
 
-	if (!prior_run_tuples_produced_output) {
-		for (idx_t i = 0; i < cached_join_chunks.size(); i++) {
-			auto &cached_chunk = cached_join_chunks[i];
+	if (!prior_run_tuples_produced_output && pipeline.multiplexer) {
+		for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
+			auto &cached_chunk = cached_join_chunks[current_path][i];
 
 			if (cached_chunk->size() > 0) {
 				did_work_from_prior_run = true;
@@ -389,6 +390,10 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				RunPath(*cached_chunk, output_chunk, i + 1);
 				prior_run_tuples_produced_output = output_chunk.size() > 0;
 				cached_chunk->Reset();
+
+				if (prior_run_tuples_produced_output) {
+					break;
+				}
 			}
 		}
 	}
@@ -401,9 +406,9 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 		current_idx = pipeline.multiplexer_idx + 2;
 	}
 
-	if (result.size() > 0) {
+	if (result.size() > 0 && pipeline.multiplexer) {
 		if (in_process_operators.empty() && in_process_joins.empty()) {
-			for (auto &chunk : cached_join_chunks) {
+			for (auto &chunk : cached_join_chunks[current_path]) {
 				if (chunk->size() > 0) {
 					return OperatorResultType::HAVE_MORE_OUTPUT;
 				}
@@ -447,6 +452,11 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			auto current_operator = pipeline.operators[operator_idx];
 
 			if (current_operator->type == PhysicalOperatorType::MULTIPLEXER) {
+				D_ASSERT(in_process_joins.empty());
+				for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
+					D_ASSERT(cached_join_chunks[current_path][i]->size() == 0);
+				}
+
 				mpx_output_chunk->Reset();
 				StartOperator(current_operator);
 				auto result =
@@ -459,16 +469,17 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 					in_process_operators.push(current_idx);
 				}
 
+				current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
 				RunPath(*mpx_output_chunk, current_chunk);
 				current_chunk.Verify();
 
 				if (current_chunk.size() == 0) {
 					D_ASSERT(in_process_joins.empty());
 
-					for (idx_t i = 0; i < cached_join_chunks.size(); i++) {
-						if (cached_join_chunks[i]->size() > 0) {
-							RunPath(*cached_join_chunks[i], current_chunk, i + 1);
-							cached_join_chunks[i]->Reset();
+					for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
+						if (cached_join_chunks[current_path][i]->size() > 0) {
+							RunPath(*cached_join_chunks[current_path][i], current_chunk, i + 1);
+							cached_join_chunks[current_path][i]->Reset();
 
 							if (current_chunk.size() > 0) {
 								break;
@@ -529,9 +540,11 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 		path_ran_through = false;
 	}
 
-	for (auto &join_cache : cached_join_chunks) {
-		if (join_cache->size() > 0) {
-			path_ran_through = false;
+	if (pipeline.multiplexer) {
+		for (auto &join_cache : cached_join_chunks[current_path]) {
+			if (join_cache->size() > 0) {
+				path_ran_through = false;
+			}
 		}
 	}
 
@@ -542,8 +555,11 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 void PipelineExecutor::FetchFromSource(DataChunk &result) {
 	D_ASSERT(in_process_operators.empty());
 	D_ASSERT(in_process_joins.empty());
-	for (auto &cache : cached_join_chunks) {
-		D_ASSERT(!cache || cache->size() == 0);
+
+	for (auto &cache_chunks : cached_join_chunks) {
+		for (auto &cache : cache_chunks) {
+			D_ASSERT(!cache || cache->size() == 0);
+		}
 	}
 
 	StartOperator(pipeline.source);
@@ -586,6 +602,8 @@ void PipelineExecutor::EndOperator(PhysicalOperator *op, DataChunk *chunk) {
 
 void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_idx) {
 	idx_t current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
+	bool running_cache = start_idx != 0 && in_process_joins.empty();
+	bool must_rerun_cache = false;
 
 	context.thread.current_join_path = &pipeline.join_paths[current_path];
 
@@ -597,15 +615,6 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 		                                 *adaptive_union_state);
 		EndOperator(&*pipeline.adaptive_union, &result);
 		return;
-	}
-
-	if (start_idx == 0 && in_process_joins.empty()) {
-		for (idx_t i = 0; i < cached_join_chunks.size(); i++) {
-			D_ASSERT(cached_join_chunks[i]->size() == 0);
-			cached_join_chunks[i]->Destroy();
-			cached_join_chunks[i]->Initialize(Allocator::Get(context.client),
-			                                  join_intermediate_chunks[current_path][i]->GetTypes());
-		}
 	}
 
 	idx_t local_join_idx = start_idx;
@@ -630,6 +639,14 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 		auto join_result =
 		    current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state, *current_state);
 		EndOperator(current_operator, &current_chunk);
+
+		if (running_cache && local_join_idx == start_idx) {
+			if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {
+				must_rerun_cache = true;
+			} else {
+				must_rerun_cache = false;
+			}
+		}
 
 		pipeline.multiplexer->AddNumIntermediates(*multiplexer_state, current_chunk.size());
 		num_intermediates_produced += current_chunk.size();
@@ -661,6 +678,11 @@ void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_
 				pipeline.adaptive_union->Execute(context, current_chunk, result, *pipeline.adaptive_union->op_state,
 				                                 *adaptive_union_state);
 				EndOperator(&*pipeline.adaptive_union, &result);
+
+				if (must_rerun_cache) {
+					cached_join_chunks[current_path][start_idx - 1].swap(
+					    join_intermediate_chunks[current_path][start_idx - 1]);
+				}
 				return;
 			}
 		}

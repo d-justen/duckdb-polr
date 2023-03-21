@@ -248,7 +248,9 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, idx_t num_inte
 
 	// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
 	// weight calculation
-	double intermediates_per_input_tuple = num_intermediates == 0 ? 0.1 / 1024 : num_intermediates / static_cast<double>(state.current_path_tuple_count);
+	double constant_overhead = 0.1;
+	double intermediates_per_input_tuple =
+	    (num_intermediates + constant_overhead) / static_cast<double>(state.current_path_tuple_count);
 
 	if (state.num_paths_initialized == path_count) {
 		if (state.intermediates_per_input_tuple[state.current_path_idx] * 1.5 < intermediates_per_input_tuple) {

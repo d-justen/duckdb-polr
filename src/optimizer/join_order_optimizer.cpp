@@ -265,11 +265,11 @@ unique_ptr<JoinNode> JoinOrderOptimizer::CreateJoinTree(JoinRelationSet *set,
 		expected_cardinality = cardinality_estimator.EstimateCrossProduct(left, right);
 	} else {
 		// normal join, expect foreign key join
-		// if (context.config.enable_cardinality_estimator) {
-		expected_cardinality = cardinality_estimator.EstimateCardinalityWithSet(set);
-		// } else {
-		//	expected_cardinality = MaxValue(left->GetCardinality(), right->GetCardinality());
-		// }
+		if (context.config.enable_cardinality_estimator) {
+			expected_cardinality = cardinality_estimator.EstimateCardinalityWithSet(set);
+		} else {
+			expected_cardinality = MaxValue(left->GetCardinality(), right->GetCardinality());
+		}
 
 		best_connection = possible_connections.back();
 	}

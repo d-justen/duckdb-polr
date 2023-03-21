@@ -71,7 +71,7 @@ private:
 	vector<vector<unique_ptr<OperatorState>>> join_intermediate_states;
 	OperatorState *multiplexer_state;
 	unique_ptr<OperatorState> adaptive_union_state;
-	vector<unique_ptr<DataChunk>> cached_join_chunks;
+	vector<vector<unique_ptr<DataChunk>>> cached_join_chunks;
 	stack<idx_t> in_process_joins;
 	unique_ptr<DataChunk> mpx_output_chunk;
 	idx_t num_intermediates_produced = 0;

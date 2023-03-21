@@ -548,7 +548,7 @@ void CardinalityEstimator::EstimateBaseTableCardinality(JoinNode *node, LogicalO
 			return;
 		}
 
-		node->SetEstimatedCardinality(node->GetBaseTableCardinality());
+		node->SetEstimatedCardinality(node->GetBaseTableCardinality() * DEFAULT_SELECTIVITY);
 		return;
 	}
 
