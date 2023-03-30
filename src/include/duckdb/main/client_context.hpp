@@ -79,6 +79,7 @@ public:
 
 	//! Generated POLR paths
 	shared_ptr<vector<vector<idx_t>>> polr_paths;
+	idx_t path_length;
 
 public:
 	DUCKDB_API Transaction &ActiveTransaction() {

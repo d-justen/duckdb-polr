@@ -171,6 +171,22 @@ static void PragmaDisableLogTuplesRouted(ClientContext &context, const FunctionP
 	ClientConfig::GetConfig(context).log_tuples_routed = false;
 }
 
+static void PragmaEnableGreedyOrdering(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering = true;
+}
+
+static void PragmaDisableGreedyOrdering(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering = false;
+}
+
+static void PragmaEnableMeasurePipeline(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).measure_polr_pipeline = true;
+}
+
+static void PragmaDisableMeasurePipeline(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).measure_polr_pipeline = false;
+}
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -226,6 +242,12 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_log_tuples_routed", PragmaEnableLogTuplesRouted));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_log_tuples_routed", PragmaDisableLogTuplesRouted));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_greedy_ordering", PragmaEnableGreedyOrdering));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_greedy_ordering", PragmaDisableGreedyOrdering));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_measure_pipeline", PragmaEnableMeasurePipeline));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_measure_pipeline", PragmaDisableMeasurePipeline));
 }
 
 } // namespace duckdb

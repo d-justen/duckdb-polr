@@ -58,6 +58,8 @@ public:
 	bool mpx_alternate_chunks = false;
 	double regret_budget = 0.2;
 	bool log_tuples_routed = false;
+	bool greedy_ordering = false;
+	bool measure_pipeline = false;
 	uint32_t nruns = 5;
 };
 

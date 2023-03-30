@@ -223,6 +223,12 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 		} else if (arg == "--query") {
 			// write group of benchmark
 			instance.configuration.meta = BenchmarkMetaType::QUERY;
+		} else if (arg == "--greedy_ordering") {
+			// write group of benchmark
+			instance.greedy_ordering = true;
+		} else if (arg == "--measure_pipeline") {
+			// write group of benchmark
+			instance.measure_pipeline = true;
 		} else if (StringUtil::StartsWith(arg, "--out=") || StringUtil::StartsWith(arg, "--log=")) {
 			auto splits = StringUtil::Split(arg, '=');
 			if (splits.size() != 2) {

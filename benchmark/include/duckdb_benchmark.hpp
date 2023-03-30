@@ -74,6 +74,14 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 			res = conn.Query("PRAGMA enable_log_tuples_routed");
 			D_ASSERT(!res->HasError());
 		}
+		if (instance.greedy_ordering) {
+			res = conn.Query("PRAGMA enable_greedy_ordering");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.measure_pipeline) {
+			res = conn.Query("PRAGMA enable_measure_pipeline");
+			D_ASSERT(!res->HasError());
+		}
 	}
 	virtual ~DuckDBBenchmarkState() {
 	}

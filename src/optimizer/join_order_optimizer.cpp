@@ -347,12 +347,12 @@ bool JoinOrderOptimizer::TryEmitPair(JoinRelationSet *left, JoinRelationSet *rig
 	// If a full plan is created, it's possible a node in the plan gets updated. When this happens, make sure you keep
 	// emitting pairs until you emit another final plan. Another final plan is guaranteed to be produced because of
 	// our symmetry guarantees.
-	if (pairs >= 10000 && !must_update_full_plan) {
-		// when the amount of pairs gets too large we exit the dynamic programming and resort to a greedy algorithm
-		// FIXME: simple heuristic currently
-		// at 10K pairs stop searching exactly and switch to heuristic
-		return false;
-	}
+	/*if (pairs >= 10000 && !must_update_full_plan) {
+	    // when the amount of pairs gets too large we exit the dynamic programming and resort to a greedy algorithm
+	    // FIXME: simple heuristic currently
+	    // at 10K pairs stop searching exactly and switch to heuristic
+	    return false;
+	}*/
 	EmitPair(left, right, info);
 	return true;
 }
@@ -485,6 +485,83 @@ bool JoinOrderOptimizer::SolveJoinOrderExactly() {
 		}
 	}
 	return true;
+}
+
+vector<unordered_set<idx_t>> subsets(idx_t size, idx_t k) {
+	vector<idx_t> input(size);
+	for (idx_t i = 0; i < size; i++) {
+		input[i] = i;
+	}
+
+	size_t n = input.size();
+
+	vector<unordered_set<idx_t>> result;
+
+	size_t i = (1 << k) - 1;
+
+	while (!(i >> n)) {
+		unordered_set<idx_t> v;
+
+		for (size_t j = 0; j < n; j++)
+			if (i & (1 << j))
+				v.insert(input[j]);
+
+		result.push_back(v);
+
+		i = (i + (i & (-i))) | (((i ^ (i + (i & (-i)))) >> 2) / (i & (-i)));
+	}
+
+	return result;
+}
+
+void JoinOrderOptimizer::SolveJoinOrderDPSize() {
+	// 1. Base relations were already added to plan table before
+
+	// 2. Iterate over relations
+	for (idx_t s = 2; s <= relations.size(); s++) {
+		for (idx_t small_sz = 1; small_sz <= s / 2; small_sz++) {
+			idx_t large_sz = s - small_sz;
+			auto small_sz_subsets = subsets(relations.size(), small_sz);
+			auto large_sz_subsets = subsets(relations.size(), large_sz);
+
+			for (auto &small_sz_subset : small_sz_subsets) {
+				// Check if subset is valid
+				auto *left_set = set_manager.GetJoinRelation(small_sz_subset);
+				auto left_plan = plans.find(left_set);
+				if (left_plan == plans.end()) {
+					continue;
+				}
+
+				for (auto &large_sz_subset : large_sz_subsets) {
+					// Check if subset is valid
+					auto *right_set = set_manager.GetJoinRelation(large_sz_subset);
+					auto right_plan = plans.find(left_set);
+					if (right_plan == plans.end()) {
+						continue;
+					}
+
+					// Disjoint filter
+					bool disjoint = true;
+					for (auto rel_idx : small_sz_subset) {
+						if (std::find(large_sz_subset.begin(), large_sz_subset.end(), rel_idx) !=
+						    large_sz_subset.end()) {
+							disjoint = false;
+							break;
+						}
+					}
+					if (!disjoint) {
+						continue;
+					}
+
+					// Check if there is a connections between the join relation sets
+					auto connections = query_graph.GetConnections(left_set, right_set);
+					if (!connections.empty()) {
+						EmitPair(left_set, right_set, connections);
+					}
+				}
+			}
+		}
+	}
 }
 
 void JoinOrderOptimizer::FindAllLeftDeepTrees() {
@@ -685,8 +762,6 @@ void JoinOrderOptimizer::SolveJoinOrderApproximately() {
 						best_left = i;
 						best_right = j;
 					}
-					// TODO: Maybe here, if this is not the best connection but costs only x more AND we have space left
-					// for more join orders (e.g., < 20), add this somewhere
 				}
 			}
 		}
@@ -743,8 +818,11 @@ void JoinOrderOptimizer::SolveJoinOrderApproximately() {
 }
 
 void JoinOrderOptimizer::SolveJoinOrder() {
+	// SolveJoinOrderDPSize();
 	// first try to solve the join order exactly
-	if (!SolveJoinOrderExactly()) {
+	if (context.config.greedy_ordering) {
+		SolveJoinOrderApproximately();
+	} else if (!SolveJoinOrderExactly()) {
 		// otherwise, if that times out we resort to a greedy algorithm
 		SolveJoinOrderApproximately();
 	}
@@ -1290,6 +1368,7 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		}
 
 		context.polr_paths = polr_paths;
+		context.path_length = polr_paths->front().size();
 	} else if (relations.size() > 2 && context.config.enable_polr && context.config.bushy_polr) {
 		FindLongestInnerLDT();
 
@@ -1321,6 +1400,15 @@ unique_ptr<LogicalOperator> JoinOrderOptimizer::Optimize(unique_ptr<LogicalOpera
 		}
 
 		context.polr_paths = polr_paths;
+		context.path_length = polr_paths->front().size();
+	} else if (relations.size() > 2 && context.config.measure_polr_pipeline) {
+		FindLongestInnerLDT();
+
+		if (!join_paths || join_paths->size() <= 1) {
+			join_paths.reset();
+			return RewritePlan(move(plan), final_plan->second.get());
+		}
+		context.path_length = join_paths->front().size();
 	}
 
 	// now perform the actual reordering

@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 #include "duckdb/parallel/pipeline.hpp"
 
@@ -122,6 +123,7 @@ void Pipeline::Schedule(shared_ptr<Event> &event) {
 	D_ASSERT(ready);
 	D_ASSERT(sink);
 	Reset();
+	begin = std::chrono::system_clock::now();
 	if (!ScheduleParallel(event)) {
 		// could not parallelize this pipeline: push a sequential task instead
 		ScheduleSequentialTask(event);
@@ -175,7 +177,7 @@ void Pipeline::Ready() {
 	std::reverse(operators.begin(), operators.end());
 	Reset(); // TODO: Why do we have to reset here?
 
-	if (executor.context.config.enable_polr && executor.context.polr_paths) {
+	if (executor.context.config.enable_polr || executor.context.config.measure_polr_pipeline) {
 		BuildPOLRPaths();
 	}
 }
@@ -188,6 +190,18 @@ void Pipeline::Finalize(Event &event) {
 	try {
 		auto sink_state = sink->Finalize(*this, event, executor.context, *sink->sink_state);
 		sink->sink_state->state = sink_state;
+
+		if (is_polr_pipeline && executor.context.config.measure_polr_pipeline) {
+			auto end = std::chrono::system_clock::now();
+
+			std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+			std::ofstream file;
+			file.open("./experiments/" + filename + "-pipeline-duration.csv");
+
+			double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
+			file << duration_ms;
+			file.close();
+		}
 	} catch (Exception &ex) { // LCOV_EXCL_START
 		executor.PushError(PreservedError(ex));
 	} catch (std::exception &ex) {
@@ -241,12 +255,14 @@ void Pipeline::BuildPOLRPaths() {
 	}
 
 	if (!hash_join_idxs.empty() && ((PhysicalHashJoin &)*(operators[hash_join_idxs.front()])).is_polr_root_join &&
-	    hash_join_idxs.size() == executor.context.polr_paths->front().size() - 1) {
-		auto &initial_join_path = executor.context.polr_paths->at(0);
-		if (hash_join_idxs.size() != initial_join_path.size() - 1) {
+	    hash_join_idxs.size() == executor.context.path_length - 1) {
+		is_polr_pipeline = true;
+
+		if (!executor.context.polr_paths) {
 			return;
 		}
 
+		auto &initial_join_path = executor.context.polr_paths->at(0);
 		D_ASSERT(hash_join_idxs.size() == initial_join_path.size() - 1);
 
 		map<idx_t, idx_t> join_order_mapping;

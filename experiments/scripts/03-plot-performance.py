@@ -3,59 +3,106 @@
 import pandas as pd
 import os
 import glob
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
+from statistics import mean
 import numpy as np
 
-query_counts = {"job": 113, "tpch": 22, "ssb": 12}
+query_counts = {"job": 113, "ssb": 12}
+modes = ["dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant"]
 results = {}
 
+for mode in modes:
+    results[mode] = {}
+    for benchmark_name in query_counts:
+        path = os.getcwd() + "/experiment-results/03-performance/" + mode + "/" + benchmark_name
+
+        polr_durations = glob.glob(os.path.join(path + "/polr", "*.csv"))
+        polr_durations.sort()
+
+        polr_results = []
+
+        for file in polr_durations:
+            benchmark_id = file.split("/")[-1].split(".")[0]
+            df = pd.read_csv(file, names=["name", "run", "timing"])
+            polr_results.append(float(df.groupby("name").mean()["timing"]))
+
+        std_files = glob.glob(os.path.join(path + "/std", "*.csv"))
+        std_files.sort()
+
+        std_results = []
+
+        for file in std_files:
+            benchmark_id = file.split("/")[-1].split(".")[0]
+            df = pd.read_csv(file, names=["name", "run", "timing"])
+            std_results.append(float(df.groupby("name").mean()["timing"]))
+
+        results[mode][benchmark_name] = {"polr": polr_results, "std": std_results}
+
+result_str = ""
+
 for benchmark_name in query_counts:
-    path = os.getcwd() + "/experiment-results/03-performance/" + benchmark_name
-    print("Processing " + benchmark_name)
-    csv_files = glob.glob(os.path.join(path, "*.csv"))
-    csv_files.sort()
+    result_str += benchmark_name + "\n"
+    result_str += "\\begin{tabular}{lrrr}\n"
+    for mode in modes:
+        result_str += "\\multicolumn{3}{l}{\\textbf{" + mode + "}}\\\\\n\\hline\n"
+        result_str += " & POLAR & Optimizer pick & Diff" + "\\\\\n"
 
-    timings = {}
+        polr_min = min(results[mode][benchmark_name]["polr"]) * 1000
+        std_min = min(results[mode][benchmark_name]["std"]) * 1000
+        diff_min = polr_min / std_min * 100
+        result_str += "Min & "
+        if polr_min < std_min:
+            result_str += "\\textbf{" + "{:10.2f}".format(polr_min) + "} &" + "{:10.2f}".format(std_min) + \
+                          " & \\textbf{-" + "{:.2f}".format(100 - diff_min) + "\\%}\\\\\n"
+        else:
+            result_str += "{:10.2f}".format(polr_min) + " & \\textbf{" + "{:10.2f}".format(std_min) + \
+                          "} & +" + "{:.2f}".format(diff_min - 100) + "\\%\\\\\n"
 
-    for csv_file in csv_files:
-        file_name = csv_file.split("/")[-1].split(".")[0]
-        df = pd.read_csv(csv_file, names=["name", "run", "timing"])
-        df = df.groupby("name").mean()
+        polr_avg = mean(results[mode][benchmark_name]["polr"]) * 1000
+        std_avg = mean(results[mode][benchmark_name]["std"]) * 1000
+        diff_avg = polr_avg / std_avg * 100
+        result_str += "Avg & "
+        if polr_avg < std_avg:
+            result_str += "\\textbf{" + "{:10.2f}".format(polr_avg) + "} &" + "{:10.2f}".format(std_avg) + \
+                          " & \\textbf{-" + "{:.2f}".format(100 - diff_avg) + "\\%}\\\\\n"
+        else:
+            result_str += "{:10.2f}".format(polr_avg) + " & \\textbf{" + "{:10.2f}".format(std_avg) + \
+                          "} & +" + "{:.2f}".format(diff_avg - 100) + "\\%\\\\\n"
 
-        timings[file_name] = df["timing"].values.tolist()
-        print(file_name + ": " + str(df["timing"].sum()) + "s")
+        polr_95p = np.percentile(np.array(results[mode][benchmark_name]["polr"]), 95) * 1000
+        std_95p = np.percentile(np.array(results[mode][benchmark_name]["std"]), 95) * 1000
+        diff_95p = polr_95p / std_95p * 100
+        result_str += "95p & "
+        if polr_95p < std_95p:
+            result_str += "\\textbf{" + "{:10.2f}".format(polr_95p) + "} &" + "{:10.2f}".format(std_95p) + \
+                          " & \\textbf{-" + "{:.2f}".format(100 - diff_95p) + "\\%}\\\\\n"
+        else:
+            result_str += "{:10.2f}".format(polr_95p) + " & \\textbf{" + "{:10.2f}".format(std_95p) + \
+                          "} & +" + "{:.2f}".format(diff_95p - 100) + "\\%\\\\\n"
 
-    results[benchmark_name] = timings
+        polr_max = max(results[mode][benchmark_name]["polr"]) * 1000
+        std_max = max(results[mode][benchmark_name]["std"]) * 1000
+        diff_max = polr_max / std_max * 100
+        result_str += "Max & "
+        if polr_max < std_max:
+            result_str += "\\textbf{" + "{:10.2f}".format(polr_max) + "} &" + "{:10.2f}".format(std_max) + \
+                          " & \\textbf{-" + "{:.2f}".format(100 - diff_max) + "\\%}\\\\\n"
+        else:
+            result_str += "{:10.2f}".format(polr_max) + " & \\textbf{" + "{:10.2f}".format(std_max) + \
+                          "} & +" + "{:.2f}".format(diff_max - 100) + "\\%\\\\\n"
 
-fig, ax = plt.subplots(3, 1)
+        polr_sum = sum(results[mode][benchmark_name]["polr"]) * 1000
+        std_sum = sum(results[mode][benchmark_name]["std"]) * 1000
+        diff_sum = polr_sum / std_sum * 100
+        result_str += "Total & "
+        if polr_sum < std_sum:
+            result_str += "\\textbf{" + "{:10.2f}".format(polr_sum) + "} &" + "{:10.2f}".format(std_sum) + \
+                          " & \\textbf{-" + "{:.2f}".format(100 - diff_sum) + "\\%}\\\\\n"
+        else:
+            result_str += "{:10.2f}".format(polr_sum) + " & \\textbf{" + "{:10.2f}".format(std_sum) + \
+                          "} & +" + "{:.2f}".format(diff_sum - 100) + "\\%\\\\\n"
 
-bar_width = 0.25
+        result_str += "\\hline\\\\\n"
+    result_str += "\\end{tabular}\n\n"
 
-ax0_br1 = np.arange(len(results["job"]["job-polr"]))
-ax0_br2 = [x + bar_width for x in ax0_br1]
-bar1 = ax[0].bar(ax0_br1, results["job"]["job-polr"], width=bar_width)
-bar2 = ax[0].bar(ax0_br2, results["job"]["job"], width=bar_width)
-ax[0].set_xticks([r + (bar_width / 2) for r in range(len(results["job"]["job-polr"]))])
-ax[0].set_xticklabels(range(len(results["job"]["job-polr"])), fontsize=4)
-ax[0].set_title("job")
-
-ax1_br1 = np.arange(len(results["tpch"]["tpch-polr"]))
-ax1_br2 = [x + bar_width for x in ax1_br1]
-ax[1].bar(ax1_br1, results["tpch"]["tpch-polr"], width=bar_width)
-ax[1].bar(ax1_br2, results["tpch"]["tpch"], width=bar_width)
-ax[1].set_xticks([r + (bar_width / 2) for r in range(len(results["tpch"]["tpch-polr"]))])
-ax[1].set_xticklabels(range(len(results["tpch"]["tpch-polr"])))
-ax[1].set_title("tpch")
-
-ax2_br1 = np.arange(len(results["ssb"]["ssb-polr"]))
-ax2_br2 = [x + bar_width for x in ax2_br1]
-ax[2].bar(ax2_br1, results["ssb"]["ssb-polr"], width=bar_width)
-ax[2].bar(ax2_br2, results["ssb"]["ssb"], width=bar_width)
-ax[2].set_xticks([r + (bar_width / 2) for r in range(len(results["ssb"]["ssb-polr"]))])
-ax[2].set_xticklabels(range(len(results["ssb"]["ssb-polr"])))
-ax[2].set_title("ssb")
-
-plt.tight_layout()
-plt.figlegend([bar1, bar2], ["polr", "duckdb"])
-plt.savefig("experiment-results/03-performance.pdf")
+with open("experiment-results/03-performance.txt", "w") as file:
+    file.write(result_str)

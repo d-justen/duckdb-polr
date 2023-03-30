@@ -105,6 +105,7 @@ private:
 	void FindAllLeftDeepTrees();
 	void EnumerateJoinOrders(vector<JoinRelationSet *> &joined, vector<JoinRelationSet *> &remaining);
 	void FilterLeftDeepTrees();
+	void SolveJoinOrderDPSize();
 
 	void FindLongestInnerLDT();
 	vector<JoinRelationSet *> FindLDTRecursive(JoinNode *node);

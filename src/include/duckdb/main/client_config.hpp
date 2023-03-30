@@ -80,6 +80,8 @@ struct ClientConfig {
 	int seed = 1337;
 	bool mpx_alternate_chunks = false;
 	bool log_tuples_routed = false;
+	bool greedy_ordering = false;
+	bool measure_polr_pipeline = false;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

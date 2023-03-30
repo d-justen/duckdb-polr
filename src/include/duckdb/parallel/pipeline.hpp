@@ -17,6 +17,7 @@
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/common/atomic.hpp"
 
+#include <chrono>
 #include <map>
 
 namespace duckdb {
@@ -117,6 +118,8 @@ private:
 	idx_t multiplexer_idx;
 	std::unique_ptr<PhysicalMultiplexer> multiplexer;
 	std::unique_ptr<PhysicalAdaptiveUnion> adaptive_union;
+	bool is_polr_pipeline = false;
+	std::chrono::system_clock::time_point begin;
 
 	//! The sink (i.e. destination) for data; this is e.g. a hash table to-be-built
 	PhysicalOperator *sink;

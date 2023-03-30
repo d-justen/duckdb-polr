@@ -6,67 +6,70 @@ import glob
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 import numpy as np
+from statistics import mean
 
+modes = ["dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant"]
 query_counts = {"job": 113, "tpch": 22, "ssb": 12}
 results = {}
 
-for benchmark_name in query_counts:
-    path = os.getcwd() + "/experiment-results/00-num-join-paths/" + benchmark_name
-    print("Processing " + benchmark_name)
-    csv_files = glob.glob(os.path.join(path, "*.csv"))
-    csv_files.sort()
+for mode in modes:
+    results[mode] = {"polr_amounts": [], "avg_path_counts": []}
+    for benchmark_name in query_counts:
+        path = os.getcwd() + "/experiment-results/00-num-join-paths/" + mode + "/" + benchmark_name
+        print("Processing " + benchmark_name)
+        csv_files = glob.glob(os.path.join(path, "*.csv"))
+        csv_files.sort()
 
-    path_counts = [0] * (query_counts[benchmark_name] - len(csv_files))
+        # path_counts = [0] * (query_counts[benchmark_name] - len(csv_files))
+        path_counts = []
 
-    for csv_file in csv_files:
-        df = pd.read_csv(csv_file)
-        num_paths = int(len(df.columns) / 2)
-        path_counts.append(num_paths)
+        for csv_file in csv_files:
+            df = pd.read_csv(csv_file)
+            num_paths = int(len(df.columns) / 2)
+            path_counts.append(num_paths)
 
-    results[benchmark_name] = path_counts
-
-max_paths = 0
-for benchmark_name in results:
-    maximum = max(results[benchmark_name])
-    if maximum > max_paths:
-        max_paths = maximum
+        polr_amount = len(path_counts) / query_counts[benchmark_name]
+        avg_path_count = mean(path_counts)
+        results[mode]["polr_amounts"].append(polr_amount)
+        results[mode]["avg_path_counts"].append(avg_path_count)
+print(results)
 
 groups = list(query_counts.keys())
-values = [list() for _ in range(max_paths + 1)]
-for benchmark_name in results:
-    for i in range(max_paths + 1):
-        amount = results[benchmark_name].count(i) / query_counts[benchmark_name]
-        values[i].append(amount)
 
-path_counts = []
-for i in reversed(range(max_paths + 1)):
-    if sum(values[i]) == 0:
-        del values[i]
-    else:
-        path_counts.append(i)
+bar_width = 0.2
+fig, ax = plt.subplots(1, 2)
+fig.set_size_inches(8, 4)
 
-path_counts.reverse()
-np_values = np.array(values)
+br1 = np.arange(len(results[modes[0]]["polr_amounts"]))
+br2 = [x + bar_width for x in br1]
+br3 = [x + bar_width for x in br2]
+br4 = [x + bar_width for x in br3]
 
-fig, ax = plt.subplots()
-for i in range(np_values.shape[0]):
-    ax.bar(groups, np_values[i], bottom=np.sum(np_values[:i], axis=0), label=str(path_counts[i]))
+bar1 = ax[0].bar(br1, results["dphyp-equisets"]["polr_amounts"], width=bar_width, label="dpeq")
+bar2 = ax[0].bar(br2, results["dphyp-constant"]["polr_amounts"], width=bar_width, label="dpco")
+bar3 = ax[0].bar(br3, results["greedy-equisets"]["polr_amounts"], width=bar_width, label="greq")
+bar4 = ax[0].bar(br4, results["greedy-constant"]["polr_amounts"], width=bar_width, label="grco")
 
-for bar in ax.patches:
-    if bar.get_height() > 0.05:
-        ax.text(bar.get_x() + bar.get_width() / 2,
-                (bar.get_height() / 2 + bar.get_y()) - 0.015,
-                f"{round(bar.get_height(), 3):.1%}", ha = 'center',
-                color = 'w', weight = "bold", size = 8)
+ax[0].set_ylabel("# queries with POLAR pipeline")
+ax[0].set_xticks([r + 1.5 * bar_width for r in range(len(groups))], groups)
+ax[0].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
 
-ax.set_ylabel("join paths generated in benchmark queries")
-ax.yaxis.set_major_formatter(mtick.PercentFormatter())
+ax[1].bar(br1, results["dphyp-equisets"]["avg_path_counts"], width=bar_width, label="dpeq")
+ax[1].bar(br2, results["dphyp-constant"]["avg_path_counts"], width=bar_width, label="dpco")
+ax[1].bar(br3, results["greedy-equisets"]["avg_path_counts"], width=bar_width, label="greq")
+ax[1].bar(br4, results["greedy-constant"]["avg_path_counts"], width=bar_width, label="grco")
 
-box = ax.get_position()
-ax.set_position([box.x0, box.y0 + box.height * 0.1,
-                 box.width, box.height * 0.9])
+ax[1].set_ylabel("Average path count per POLAR pipeline")
+ax[1].set_xticks([r + 1.5 * bar_width for r in range(len(groups))], groups)
 
-ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08),
-          ncol=len(path_counts))
+box = ax[0].get_position()
+ax[0].set_position([box.x0, box.y0 + box.height * 0.05,
+                 box.width, box.height * 0.95])
 
+box2 = ax[1].get_position()
+ax[1].set_position([box2.x0, box2.y0 + box2.height * 0.05,
+                    box2.width, box2.height * 0.95])
+
+# Put a legend below current axis
+plt.figlegend([bar1, bar2, bar3, bar4], ["dpeq", "dpco", "greq", "grco"], loc="lower center", ncol=4)
 plt.savefig("experiment-results/00-num-join-paths.pdf")

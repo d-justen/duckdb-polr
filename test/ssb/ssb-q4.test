@@ -99,6 +99,9 @@ statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
+PRAGMA enable_greedy_ordering
+
+statement ok
 SET threads To 1
 
 #q4.1.1
