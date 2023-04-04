@@ -23,67 +23,81 @@ for mode in modes:
         csv_files = glob.glob(os.path.join(opt_path, "*.csv"))
         csv_files.sort()
 
-        opt_intm_count = 0
-        duckdb_intm_count = 0
+        opt_intms = []
+        duckdb_intms = []
+        opt_order_intms = []
 
-        skiplist = []
-        idx = 0
         for csv_file in csv_files:
-            idx += 1
             df = pd.read_csv(csv_file)
 
             # Cleaning
             df.pop(df.columns[-1])
-            if df.shape[0] > df.shape[1] / 2:
-                df = df.iloc[int(df.shape[1] / 2) - 1:]
-                df.reset_index(drop=True, inplace=True)
-            else:
-                skiplist.append(idx)
-                continue
 
-            tuples_sent = df.drop(df.columns[list(range(0, df.shape[1], 2))], axis=1)
-            ratios = df.drop(df.columns[list(range(1, df.shape[1], 2))], axis=1)
-            df["input_tuple_count"] = tuples_sent.sum(axis=1)
-            df["diff_input_tuple_count"] = df["input_tuple_count"].diff()
-            df.at[0, "diff_input_tuple_count"] = df.at[0, "input_tuple_count"]
-            df["polr"] = ratios.min(axis=1)
-            df["intms_polr_opt"] = (df["polr"]) * df["diff_input_tuple_count"]
-            df["intms_duckdb"] = (df["intermediates_0"]) * df["diff_input_tuple_count"]
-
-            opt_intm_count += df["intms_polr_opt"].sum()
-            duckdb_intm_count += df["intms_duckdb"].sum()
+            opt_intms.append(df.min(axis=1).sum())
+            duckdb_intms.append(df["path_0"].sum())
+            opt_order_intms.append(df.sum().min())
 
         routing_overheads = []
 
+        all_polr_intms = {}
         for regret_budget in regret_budgets:
-            intms_polr = 0
+            polr_intms = []
 
             path = os.getcwd() + "/experiment-results/02-regret-budget/" + \
                    mode + "/" + benchmark_name + "/" + regret_budget
             txt_files = glob.glob(os.path.join(path, "*.txt"))
             txt_files.sort()
 
-            idx = 0
             for txt_file in txt_files:
-                idx += 1
                 with open(txt_file) as f:
-                    if idx in skiplist:
-                        continue
                     line = f.readline()
-                    intms_polr += int(line)
+                    polr_intms.append(int(line))
 
-            routing_overheads.append(intms_polr / opt_intm_count)
+            all_polr_intms[regret_budget] = polr_intms
+            routing_overheads.append(sum(polr_intms) / sum(opt_intms))
 
-        optimizer_pick = duckdb_intm_count / opt_intm_count
-        results[mode][benchmark_name] = {"optimizer": optimizer_pick, "polr": routing_overheads}
+        optimizer_pick = sum(duckdb_intms) / sum(opt_intms)
+        optimal_order = sum(opt_order_intms) / sum(opt_intms)
+
+        relative_overhead_per_query = []
+        for i in range(len(duckdb_intms)):
+            if opt_intms[i] > 0:
+                relative_overhead_per_query.append(all_polr_intms["0-01"][i] / opt_intms[i])
+            else:
+                relative_overhead_per_query.append(all_polr_intms["0-01"][i] * -1)
+
+        print(mode + " " + benchmark_name + ":")
+        print(relative_overhead_per_query)
+        results[mode][benchmark_name] = {"optimizer": optimizer_pick, "polr": routing_overheads,
+                                         "optimal_order": optimal_order}
 
 print(results)
+
+min_optimizer_overhead_job = results[modes[0]]["job"]["optimizer"]
+min_optimizer_overhead_ssb = results[modes[0]]["ssb"]["optimizer"]
+min_optimal_overhead_job = results[modes[0]]["job"]["optimal_order"]
+min_optimal_overhead_ssb = results[modes[0]]["ssb"]["optimal_order"]
+
+for mode in modes:
+    if results[mode]["job"]["optimizer"] < min_optimizer_overhead_job:
+        min_optimizer_overhead_job = results[mode]["job"]["optimizer"]
+    if results[mode]["ssb"]["optimizer"] < min_optimizer_overhead_ssb:
+        min_optimizer_overhead_ssb = results[mode]["ssb"]["optimizer"]
+    if results[mode]["job"]["optimal_order"] < min_optimal_overhead_job:
+        min_optimal_overhead_job = results[mode]["job"]["optimal_order"]
+    if results[mode]["ssb"]["optimal_order"] < min_optimal_overhead_ssb:
+        min_optimal_overhead_ssb = results[mode]["ssb"]["optimal_order"]
 
 x_values = []
 baseline = []
 for regret_budget in regret_budgets:
     x_values.append(float(regret_budget.replace("-", ".")))
     baseline.append(1)
+
+optimizer_baseline_job = [min_optimizer_overhead_job] * len(baseline)
+optimizer_baseline_ssb = [min_optimizer_overhead_ssb] * len(baseline)
+optimal_order_baseline_job = [min_optimal_overhead_job] * len(baseline)
+optimal_order_baseline_ssb = [min_optimal_overhead_ssb] * len(baseline)
 
 fig, ax = plt.subplots(2, 1)
 
@@ -92,6 +106,8 @@ ax[0].plot(x_values, results["dphyp-equisets"]["job"]["polr"])
 ax[0].plot(x_values, results["dphyp-constant"]["job"]["polr"])
 ax[0].plot(x_values, results["greedy-equisets"]["job"]["polr"])
 ax[0].plot(x_values, results["greedy-constant"]["job"]["polr"])
+ax[0].plot(x_values, optimizer_baseline_job, "-.")
+ax[0].plot(x_values, optimal_order_baseline_job, "-.")
 ax[0].set_xlabel("Regret budget")
 ax[0].set_ylabel("Intermediate overhead")
 ax[0].set_xscale("log")
@@ -103,12 +119,15 @@ ax[1].plot(x_values, results["dphyp-equisets"]["ssb"]["polr"])
 ax[1].plot(x_values, results["dphyp-constant"]["ssb"]["polr"])
 ax[1].plot(x_values, results["greedy-equisets"]["ssb"]["polr"])
 ax[1].plot(x_values, results["greedy-constant"]["ssb"]["polr"])
+ax[1].plot(x_values, optimizer_baseline_ssb, "-.")
+ax[1].plot(x_values, optimal_order_baseline_ssb, "-.")
 ax[1].set_xlabel("Regret budget")
 ax[1].set_ylabel("Intermediate overhead")
 ax[1].set_xscale("log")
 ax[1].yaxis.set_major_formatter(mtick.PercentFormatter(1.0))
 ax[1].set_title("Star-schema benchmark")
 
-plt.figlegend(["optimum", "dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant"], loc="center right")
+plt.figlegend(["optimal switches", "dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant",
+               "POLAR disabled", "optimal join order"], loc="center right")
 plt.tight_layout()
 plt.savefig("experiment-results/02-regret-budget.pdf")

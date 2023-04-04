@@ -85,8 +85,8 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 # statement ok
 # COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
@@ -100,23 +100,23 @@ COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ES
 statement ok
 COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY kind_type FROM 'third_party/imdb/data/kind_type.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY kind_type FROM 'third_party/imdb/data/kind_type.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY movie_companies FROM 'third_party/imdb/data/movie_companies.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
@@ -131,10 +131,33 @@ statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
-PRAGMA enable_measure_pipeline
+PRAGMA enable_mpx_alternate_chunks
+
+statement ok
+PRAGMA enable_log_tuples_routed
 
 statement ok
 SET threads TO 1
+
+statement ok
+SELECT MIN(mc.note) AS production_note,
+       MIN(t.title) AS movie_title,
+       MIN(t.production_year) AS movie_year
+FROM company_type AS ct,
+     info_type AS it,
+     movie_companies AS mc,
+     movie_info_idx AS mi_idx,
+     title AS t
+WHERE ct.kind = 'production companies'
+  AND it.info = 'top 250 rank'
+  AND mc.note NOT LIKE '%(as Metro-Goldwyn-Mayer Pictures)%'
+  AND (mc.note LIKE '%(co-production)%')
+  AND t.production_year >2010
+  AND ct.id = mc.company_type_id
+  AND t.id = mc.movie_id
+  AND t.id = mi_idx.movie_id
+  AND mc.movie_id = mi_idx.movie_id
+  AND it.id = mi_idx.info_type_id;
 
 statement ok
 SELECT MIN(cn.name) AS movie_company,

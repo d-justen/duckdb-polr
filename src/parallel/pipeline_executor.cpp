@@ -226,6 +226,11 @@ void PipelineExecutor::PushFinalize() {
 			cached_chunks[i].reset();
 		}
 	}
+
+	if (pipeline.multiplexer) {
+		pipeline.multiplexer->FinalizePathRun(*multiplexer_state, pipeline.executor.context.config.log_tuples_routed);
+	}
+
 	D_ASSERT(local_sink_state);
 	// run the combine for the sink
 	pipeline.sink->Combine(context, *pipeline.sink->sink_state, *local_sink_state);

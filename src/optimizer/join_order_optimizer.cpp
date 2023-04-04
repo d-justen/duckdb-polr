@@ -347,12 +347,12 @@ bool JoinOrderOptimizer::TryEmitPair(JoinRelationSet *left, JoinRelationSet *rig
 	// If a full plan is created, it's possible a node in the plan gets updated. When this happens, make sure you keep
 	// emitting pairs until you emit another final plan. Another final plan is guaranteed to be produced because of
 	// our symmetry guarantees.
-	/*if (pairs >= 10000 && !must_update_full_plan) {
-	    // when the amount of pairs gets too large we exit the dynamic programming and resort to a greedy algorithm
-	    // FIXME: simple heuristic currently
-	    // at 10K pairs stop searching exactly and switch to heuristic
-	    return false;
-	}*/
+	if (pairs >= 10000 && !must_update_full_plan) {
+		// when the amount of pairs gets too large we exit the dynamic programming and resort to a greedy algorithm
+		// FIXME: simple heuristic currently
+		// at 10K pairs stop searching exactly and switch to heuristic
+		return false;
+	}
 	EmitPair(left, right, info);
 	return true;
 }
