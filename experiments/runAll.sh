@@ -21,12 +21,12 @@ echo "Running 02-regret-budget..."
 sh 02-regret-budget.sh
 
 # Run 02-routing-efficacy
-echo "Running 02-routing-efficacy..."
-sh 02-routing-efficacy.sh
+echo "03-pipeline-performance..."
+sh 03-pipeline-performance.sh
 
 # Run 03-performance
-echo "Running 03-performance.."
-sh 03-performance.sh
+echo "Running 04-performance..."
+sh 04-performance.sh
 
 #######
 echo "Wrote results to ./experiment-results"

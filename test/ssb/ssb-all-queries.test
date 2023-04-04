@@ -98,6 +98,9 @@ COPY date FROM 'test/ssb/data/date.tbl'
 statement ok
 PRAGMA enable_polr_bushy
 
+statement ok
+SET threads TO 1
+
 # q1.1
 statement ok
 SELECT SUM(LO_EXTENDEDPRICE*LO_DISCOUNT) AS REVENUE

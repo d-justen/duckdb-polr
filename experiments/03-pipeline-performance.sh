@@ -166,4 +166,4 @@ do
   fi
 done
 
-python3 scripts/03-plot-performance.py
+python3 scripts/03-plot-pipeline-performance.py

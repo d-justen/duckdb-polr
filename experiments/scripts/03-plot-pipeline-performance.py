@@ -39,6 +39,14 @@ for mode in modes:
 
         results[mode][benchmark_name] = {"polr": polr_results, "std": std_results}
 
-        for i in range(len(benchmark_ids)):
+        rel_results = []
+        for i in range(len(std_results)):
             rel = polr_results[i] / std_results[i] - 1
+            rel_results.append(rel)
             print(benchmark_ids[i] + ": " + str(rel))
+
+        if len(rel_results) > 0:
+            print("Max Gain: " + str(min(rel_results)))
+            print("Median Gain: " + str(mean(rel_results)))
+            print("Max Overhead: " + str(max(rel_results)))
+            print("Std Total: " + str(sum(std_results)) + " POLAR Total: " + str(sum(polr_results)))

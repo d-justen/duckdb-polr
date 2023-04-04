@@ -4,8 +4,8 @@ mkdir -p experiment-results
 
 # Cleanup
 rm -f *.{csv,txt}
-rm -rf ./experiment-results/03-performance
-mkdir ./experiment-results/03-performance
+rm -rf ./experiment-results/04-performance
+mkdir ./experiment-results/04-performance
 
 declare -a job_queries=(
   "01a" "01b" "01c" "01d" "02a" "02b" "02c" "02d" "03a" "03b" "03c"
@@ -28,126 +28,126 @@ declare -a ssb_queries=(
 
 ### DPhyp-equisets ###
 ## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-performance/dphyp-equisets/job/polr
-mkdir -p ./experiment-results/03-performance/dphyp-equisets/job/std
+mkdir -p ./experiment-results/04-performance/dphyp-equisets/job/polr
+mkdir -p ./experiment-results/034-performance/dphyp-equisets/job/std
 for query in "${job_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-equisets/job/polr
+    mv "${query}".csv experiment-results/04-performance/dphyp-equisets/job/polr
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=8 --nruns=20 --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-equisets/job/std
+    mv "${query}".csv experiment-results/04-performance/dphyp-equisets/job/std
   fi
 done
 
 ## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-performance/dphyp-equisets/ssb/polr
-mkdir -p ./experiment-results/03-performance/dphyp-equisets/ssb/std
+mkdir -p ./experiment-results/04-performance/dphyp-equisets/ssb/polr
+mkdir -p ./experiment-results/04-performance/dphyp-equisets/ssb/std
 for query in "${ssb_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-equisets/ssb/polr
+    mv "${query}".csv experiment-results/04-performance/dphyp-equisets/ssb/polr
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=8 --nruns=20 --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-equisets/ssb/std
+    mv "${query}".csv experiment-results/04-performance/dphyp-equisets/ssb/std
   fi
 done
 
 ### DPhyp-constant ###
 ## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-performance/dphyp-constant/job/polr
-mkdir -p ./experiment-results/03-performance/dphyp-constant/job/std
+mkdir -p ./experiment-results/04-performance/dphyp-constant/job/polr
+mkdir -p ./experiment-results/04-performance/dphyp-constant/job/std
 for query in "${job_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --cardinalities=disabled
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-constant/job/polr
+    mv "${query}".csv experiment-results/04-performance/dphyp-constant/job/polr
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=8 --nruns=20 --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-constant/job/std
+    mv "${query}".csv experiment-results/04-performance/dphyp-constant/job/std
   fi
 done
 
 ## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-performance/dphyp-constant/ssb/polr
-mkdir -p ./experiment-results/03-performance/dphyp-constant/ssb/std
+mkdir -p ./experiment-results/04-performance/dphyp-constant/ssb/polr
+mkdir -p ./experiment-results/04-performance/dphyp-constant/ssb/std
 for query in "${ssb_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --cardinalities=disabled
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-constant/ssb/polr
+    mv "${query}".csv experiment-results/04-performance/dphyp-constant/ssb/polr
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=8 --nruns=20 --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/dphyp-constant/ssb/std
+    mv "${query}".csv experiment-results/04-performance/dphyp-constant/ssb/std
   fi
 done
 
 ### Greedy-equisets ###
 ## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-performance/greedy-equisets/job/polr
-mkdir -p ./experiment-results/03-performance/greedy-equisets/job/std
+mkdir -p ./experiment-results/04-performance/greedy-equisets/job/polr
+mkdir -p ./experiment-results/04-performance/greedy-equisets/job/std
 for query in "${job_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --greedy_ordering --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-equisets/job/polr
+    mv "${query}".csv experiment-results/04-performance/greedy-equisets/job/polr
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=8 --nruns=20 --greedy_ordering --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-equisets/job/std
+    mv "${query}".csv experiment-results/04-performance/greedy-equisets/job/std
   fi
 done
 
 ## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-performance/greedy-equisets/ssb/polr
-mkdir -p ./experiment-results/03-performance/greedy-equisets/ssb/std
+mkdir -p ./experiment-results/04-performance/greedy-equisets/ssb/polr
+mkdir -p ./experiment-results/04-performance/greedy-equisets/ssb/std
 for query in "${ssb_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --greedy_ordering --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-equisets/ssb/polr
+    mv "${query}".csv experiment-results/04-performance/greedy-equisets/ssb/polr
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=8 --nruns=20 --greedy_ordering --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-equisets/ssb/std
+    mv "${query}".csv experiment-results/04-performance/greedy-equisets/ssb/std
   fi
 done
 
 ### Greedy-constant ###
 ## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-performance/greedy-constant/job/polr
-mkdir -p ./experiment-results/03-performance/greedy-constant/job/std
+mkdir -p ./experiment-results/04-performance/greedy-constant/job/polr
+mkdir -p ./experiment-results/04-performance/greedy-constant/job/std
 for query in "${job_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering --cardinalities=disabled
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --greedy_ordering --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-constant/job/polr
+    mv "${query}".csv experiment-results/04-performance/greedy-constant/job/polr
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=8 --nruns=20 --greedy_ordering --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-constant/job/std
+    mv "${query}".csv experiment-results/04-performance/greedy-constant/job/std
   fi
 done
 
 ## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-performance/greedy-constant/ssb/polr
-mkdir -p ./experiment-results/03-performance/greedy-constant/ssb/std
+mkdir -p ./experiment-results/04-performance/greedy-constant/ssb/polr
+mkdir -p ./experiment-results/04-performance/greedy-constant/ssb/std
 for query in "${ssb_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering --cardinalities=disabled
   if compgen -G *.csv > /dev/null; then
     rm -f *.{csv,txt}
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget=0.01 --greedy_ordering --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-constant/ssb/polr
+    mv "${query}".csv experiment-results/04-performance/greedy-constant/ssb/polr
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=8 --nruns=20 --greedy_ordering --cardinalities=disabled --out=experiments/"${query}".csv
-    mv "${query}".csv experiment-results/03-performance/greedy-constant/ssb/std
+    mv "${query}".csv experiment-results/04-performance/greedy-constant/ssb/std
   fi
 done
 
-python3 scripts/03-plot-performance.py
+python3 scripts/04-plot-performance.py

@@ -28,8 +28,7 @@ public:
 	MultiplexerState(idx_t path_count) {
 		intermediates_per_input_tuple.resize(path_count);
 		input_tuple_count_per_path.resize(path_count);
-		window_tuples_routed.resize(path_count);
-		window_size = path_count * 10;
+		path_resistances.resize(path_count);
 	}
 
 	bool first_mpx_run = true;
@@ -53,12 +52,12 @@ public:
 	std::stringstream log;
 	vector<vector<idx_t>> intermediates_alternate_mode;
 
-	idx_t window_size = 20;
+	idx_t window_lower_bound = 0;
+	idx_t window_upper_bound = 0;
+	idx_t window_idx = 0;
+	idx_t current_input_chunk_size = 0;
+	vector<double> path_resistances;
 	const double smoothing_factor = 0.5;
-
-	std::queue<HistoryEntry> window_history;
-	std::vector<idx_t> window_tuples_routed;
-	idx_t window_tuples_routed_count = 0;
 
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
@@ -96,23 +95,18 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		}
 	}
 
-	// Shortcut: If we have tuples left from previous multiplexing, just route the whole next chunk
-	if (state.current_path_remaining_tuples > 0) {
-		chunk.Reference(input);
-		state.current_path_tuple_count = input.size();
-
-		if (state.current_path_remaining_tuples > input.size()) {
-			state.current_path_remaining_tuples -= input.size();
-		} else {
-			state.current_path_remaining_tuples = 0;
-		}
-
-		return OperatorResultType::NEED_MORE_INPUT;
-	}
+	state.current_input_chunk_size = input.size();
 
 	// Initialize each path with one tuple to get initial weights
 	if (state.num_paths_initialized < path_count) {
-		idx_t next_path_idx = state.num_paths_initialized;
+		idx_t next_path_idx;
+		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+			if (state.path_resistances[i] == 0) {
+				next_path_idx = i;
+				break;
+			}
+		}
+		D_ASSERT(next_path_idx < path_count);
 		D_ASSERT(input.size() > state.chunk_offset);
 		idx_t remaining_input_tuples = input.size() - state.chunk_offset;
 		idx_t tuple_count =
@@ -136,74 +130,40 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		}
 	}
 
-	vector<double> path_weights;
-	CalculateJoinPathWeights(state.intermediates_per_input_tuple, path_weights);
-
-	idx_t next_path_idx = 0;
-	double sent_to_path_ratio = std::numeric_limits<double>::max();
-	double min_intermediates = std::numeric_limits<double>::max();
-	bool next_path_has_min_intermediates = false;
-
-	for (idx_t i = 0; i < path_weights.size(); ++i) {
-		const double current_ratio =
-		    (static_cast<double>(state.window_tuples_routed[i]) / state.window_tuples_routed_count) / path_weights[i];
-
-		if (current_ratio < sent_to_path_ratio) {
+	idx_t next_path_idx;
+	double min_resistance = std::numeric_limits<double>::max();
+	for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+		if (state.path_resistances[i] < min_resistance) {
 			next_path_idx = i;
-			sent_to_path_ratio = current_ratio;
-
-			// Let's send more tuples, if we happen to choose the fastest path -> mark it here first
-			if (state.intermediates_per_input_tuple[i] <= min_intermediates) {
-				min_intermediates = state.intermediates_per_input_tuple[i];
-				next_path_has_min_intermediates = true;
-			} else {
-				next_path_has_min_intermediates = false;
-			}
+			min_resistance = state.path_resistances[i];
 		}
 	}
 
-	auto output_tuple_count = static_cast<int64_t>(std::ceil(
-	    state.window_tuples_routed_count * path_weights[next_path_idx] - state.window_tuples_routed[next_path_idx]));
+	D_ASSERT(next_path_idx < path_count);
+	state.current_path_idx = next_path_idx;
 
-	D_ASSERT(input.size() > state.chunk_offset);
-	int64_t remaining_input_tuples = input.size() - state.chunk_offset;
-	D_ASSERT(remaining_input_tuples > 0);
-	D_ASSERT(remaining_input_tuples <= STANDARD_VECTOR_SIZE);
-
-	if (output_tuple_count > remaining_input_tuples) {
-		state.current_path_remaining_tuples = output_tuple_count - remaining_input_tuples;
-		output_tuple_count = remaining_input_tuples;
-
-		// We want to process the whole chunk if we are on the fastest path
-	} else if (next_path_has_min_intermediates) {
-		output_tuple_count = remaining_input_tuples;
-	}
-
-	D_ASSERT(output_tuple_count > 0 && output_tuple_count <= 1024);
-
-	if (state.chunk_offset == 0 && output_tuple_count == input.size()) {
+	if (state.chunk_offset == 0) {
+		state.current_path_tuple_count = input.size();
 		chunk.Reference(input);
-	} else if (input.size() - state.chunk_offset > 0) {
-		SelectionVector sel;
-		sel.Initialize(output_tuple_count);
+	} else {
+		D_ASSERT(input.size() > state.chunk_offset);
+		D_ASSERT(((int64_t) input.size() - state.chunk_offset) > 0);
+		idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+		D_ASSERT(remaining_input_tuples <= STANDARD_VECTOR_SIZE);
 
-		for (idx_t i = 0; i < output_tuple_count; i++) {
+		SelectionVector sel;
+		sel.Initialize(remaining_input_tuples);
+
+		for (idx_t i = 0; i < remaining_input_tuples; i++) {
 			sel.set_index(i, state.chunk_offset + i);
 		}
 
-		chunk.Slice(input, sel, output_tuple_count);
-	}
-
-	state.current_path_idx = next_path_idx;
-	state.current_path_tuple_count = output_tuple_count;
-
-	if (input.size() - state.chunk_offset - output_tuple_count > 0) {
-		state.chunk_offset += output_tuple_count;
-		return OperatorResultType::HAVE_MORE_OUTPUT;
-	} else {
+		chunk.Slice(input, sel, remaining_input_tuples);
+		state.current_path_tuple_count = remaining_input_tuples;
 		state.chunk_offset = 0;
-		return OperatorResultType::NEED_MORE_INPUT;
 	}
+
+	return OperatorResultType::NEED_MORE_INPUT;
 }
 
 void PhysicalMultiplexer::CalculateJoinPathWeights(const vector<double> &join_path_costs,
@@ -261,10 +221,11 @@ string PhysicalMultiplexer::ParamsToString() const {
 	return "";
 }
 
-// TODO: We introduced a shortcut to not calculate path_weights after each chunk. If we see that the performance
-// deteriorates much, set remaining_tuples to 0
 void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuples_routed) const {
 	auto &state = (MultiplexerState &)state_p;
+
+	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
+	state.num_tuples_processed += state.current_path_tuple_count;
 
 	if (!state.intermediates_alternate_mode.empty()) {
 		state.intermediates_alternate_mode[state.current_path_idx].push_back(state.num_intermediates_current_path);
@@ -276,75 +237,98 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 	// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
 	// weight calculation
 	double constant_overhead = 0.1;
-	double intermediates_per_input_tuple = (state.num_intermediates_current_path + constant_overhead) /
+	double path_resistance = (state.num_intermediates_current_path + constant_overhead) /
 	                                       static_cast<double>(state.current_path_tuple_count);
 
-	if (state.num_paths_initialized == path_count) {
-		if (state.intermediates_per_input_tuple[state.current_path_idx] * 1.5 < intermediates_per_input_tuple) {
-			// Our path is now 50% (<- magic number) slower than before. We want to calculate weights again next time
-			state.current_path_remaining_tuples = 0;
-
-			// TODO: Is this a viable strategy?
-			// TODO: Also use this strategy when logging for efficacy experiment
-			// If our go-to path (most tuples were routed there) has seen a deterioration, reset input tuple counts.
-			// After this reset, we will be able to revisit that path fairly, in case it will perform better again.
-			if (/*!log_tuples_routed*/ false) {
-				if (std::none_of(state.input_tuple_count_per_path.cbegin(), state.input_tuple_count_per_path.cend(),
-				                 [&](const idx_t tuples) {
-					                 return tuples > state.input_tuple_count_per_path[state.current_path_idx];
-				                 })) {
-					for (idx_t i = 0; i < state.input_tuple_count_per_path.size(); i++) {
-						state.input_tuple_count_per_path[i] = 1;
-					}
-					state.num_tuples_processed = state.input_tuple_count_per_path.size();
-				}
-			}
-		}
-
-		// Rolling average
-		state.intermediates_per_input_tuple[state.current_path_idx] *= state.smoothing_factor;
-		state.intermediates_per_input_tuple[state.current_path_idx] +=
-		    (1 - state.smoothing_factor) * intermediates_per_input_tuple;
-
-		/*if (log_tuples_routed) {
-		    state.intermediates_per_input_tuple[state.current_path_idx] = intermediates_per_input_tuple;
-		}*/
-	} else {
-		state.intermediates_per_input_tuple[state.current_path_idx] = intermediates_per_input_tuple;
+	if (state.num_paths_initialized < path_count) {
+		// We found ourselves in a (re-) initialization phase
+		state.path_resistances[state.current_path_idx] = path_resistance;
 		state.num_paths_initialized++;
+	} else {
+		// Rolling average
+		path_resistance = state.path_resistances[state.current_path_idx] * state.smoothing_factor + (1 - state.smoothing_factor) * path_resistance;
+		state.path_resistances[state.current_path_idx] = path_resistance;
 	}
-
-	state.window_history.push(HistoryEntry {state.current_path_idx, state.current_path_tuple_count});
-	state.window_tuples_routed[state.current_path_idx] += state.current_path_tuple_count;
-	state.window_tuples_routed_count += state.current_path_tuple_count;
-
-	if (state.window_history.size() == state.window_size) {
-		auto &entry = state.window_history.front();
-		state.window_tuples_routed[entry.path_idx] -= entry.input_tuple_count;
-		state.window_tuples_routed_count -= entry.input_tuple_count;
-		state.window_history.pop();
-	}
-
-	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
-	state.num_tuples_processed += state.current_path_tuple_count;
 
 	if (log_tuples_routed) {
 		if (state.num_tuples_processed - state.current_path_tuple_count == 0) {
 			// First run!
-			for (idx_t i = 0; i < state.intermediates_per_input_tuple.size(); i++) {
-				state.log << "intermediates_" << i << ",";
+			for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+				state.log << "resistance_" << i << ",";
 				state.log << "sent_" << i << ",";
 			}
 
 			state.log << "\n";
 		}
 
-		for (idx_t i = 0; i < state.intermediates_per_input_tuple.size(); i++) {
-			state.log << state.intermediates_per_input_tuple[i] << ",";
+		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+			state.log << state.path_resistances[i] << ",";
 			state.log << state.input_tuple_count_per_path[i] << ",";
 		}
 
 		state.log << "\n";
+	}
+
+	if (state.num_paths_initialized < path_count) {
+		return;
+	}
+
+	state.window_idx++;
+
+	if (state.window_idx == 1) {
+		// Check if our lead was right, and our chosen path is still the least resistant
+		double min_resistance = std::numeric_limits<double>::max();
+		idx_t min_resistance_path_idx;
+
+		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+			if (state.path_resistances[i] < min_resistance) {
+				min_resistance_path_idx = i;
+				min_resistance = state.path_resistances[i];
+			}
+		}
+
+		// We routed the first full chunk to the least resistant path. Let's calculate the window size
+		double reinit_cost_estimate = 0;
+		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+			if (i == min_resistance_path_idx) {
+				continue;
+			}
+			reinit_cost_estimate += state.path_resistances[i] * state.init_tuple_count;
+		}
+
+		double tuple_count_before_reinit = reinit_cost_estimate / (regret_budget * min_resistance);
+		idx_t chunk_count_before_reinit = (idx_t) std::ceil(tuple_count_before_reinit / state.current_input_chunk_size);
+		state.window_lower_bound = chunk_count_before_reinit;
+		state.window_upper_bound = state.window_lower_bound * 10;
+	}
+
+	if (state.num_intermediates_current_path == 0) {
+		// Never reinit, if the path does not produce intermediates
+		return;
+	}
+
+	bool trigger_reinit = false;
+	if (state.window_idx > state.window_upper_bound) {
+		trigger_reinit = true;
+	} else if (state.window_idx > state.window_lower_bound) {
+		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+			if (state.path_resistances[i] < path_resistance) {
+				// We will switch paths next round and are within our window. Let's reinitialize
+				trigger_reinit = true;
+				break;
+			}
+		}
+	}
+
+	if (trigger_reinit) {
+		state.window_idx = 0;
+		state.num_paths_initialized -= state.path_resistances.size() - 1;
+		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+			if (i == state.current_path_idx) {
+				continue;
+			}
+			state.path_resistances[i] = 0;
+		}
 	}
 }
 
