@@ -29,7 +29,7 @@ declare -a ssb_queries=(
 ### DPhyp-equisets ###
 ## Run Join Order Benchmark
 mkdir -p ./experiment-results/04-performance/dphyp-equisets/job/polr
-mkdir -p ./experiment-results/034-performance/dphyp-equisets/job/std
+mkdir -p ./experiment-results/04-performance/dphyp-equisets/job/std
 for query in "${job_queries[@]}"
 do
   ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1
