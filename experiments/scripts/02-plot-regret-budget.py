@@ -10,7 +10,7 @@ from statistics import mean
 
 query_counts = {"job": 113, "ssb": 12}
 modes = ["dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant"]
-regret_budgets = ["0-0001", "0-001", "0-01", "0-1", "0-2", "0-4", "0-8", "1-6", "2-4", "3-2"]
+regret_budgets = ["0-00001", "0-0001", "0-001", "0-01", "0-1", "0-2", "0-4", "0-8", "1-6", "2-4", "3-2"]
 
 results = {}
 
@@ -70,6 +70,7 @@ for mode in modes:
         print(relative_overhead_per_query)
         results[mode][benchmark_name] = {"optimizer": optimizer_pick, "polr": routing_overheads,
                                          "optimal_order": optimal_order}
+        print(results)
 
 print(results)
 

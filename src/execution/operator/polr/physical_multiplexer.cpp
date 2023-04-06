@@ -320,7 +320,7 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		state.window_size = chunk_count_before_reinit;
 	}
 
-	if (path_resistance == constant_overhead * (1 + regret_budget)) {
+	if (path_resistance <= constant_overhead + (constant_overhead * regret_budget)) {
 		// Never reinit, if the path does not produce intermediates
 		return;
 	}
