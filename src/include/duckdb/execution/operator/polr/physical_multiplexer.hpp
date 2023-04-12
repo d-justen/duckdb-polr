@@ -9,16 +9,18 @@
 #pragma once
 
 #include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/main/config.hpp"
 
 namespace duckdb {
 
 class PhysicalMultiplexer : public PhysicalOperator {
 public:
 	PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p,
-	                    double regret_budget_p = 0.2);
+	                    double regret_budget_p, MultiplexerRouting routing);
 
 	idx_t path_count;
 	double regret_budget;
+	MultiplexerRouting routing_strategy;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
@@ -43,6 +45,22 @@ public:
 
 private:
 	void CalculateJoinPathWeights(const vector<double> &join_path_costs, vector<double> &path_weights) const;
+
+	OperatorResultType InitPath(DataChunk &input, DataChunk &chunk, OperatorState &state) const;
+	OperatorResultType RouteTuples(DataChunk &input, DataChunk &chunk, OperatorState &state) const;
+
+	OperatorResultType RouteInitializeOnce(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                                       OperatorState &state) const;
+	OperatorResultType RouteAdaptiveReinit(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                                       OperatorState &state) const;
+	OperatorResultType RouteDynamic(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                                OperatorState &state) const;
+	OperatorResultType RouteAlternate(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                                  OperatorState &state) const;
+	OperatorResultType RouteOpportunistic(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                                      OperatorState &state) const;
+
+	std::function<OperatorResultType(ExecutionContext &, DataChunk &, DataChunk &, OperatorState &)> router_function;
 };
 
 } // namespace duckdb

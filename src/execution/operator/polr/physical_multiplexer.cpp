@@ -13,23 +13,51 @@
 namespace duckdb {
 
 PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estimated_cardinality, idx_t path_count_p,
-                                         double regret_budget_p)
+                                         double regret_budget_p, MultiplexerRouting routing)
     : PhysicalOperator(PhysicalOperatorType::MULTIPLEXER, move(types), estimated_cardinality), path_count(path_count_p),
-      regret_budget(regret_budget_p) {
+      regret_budget(regret_budget_p), routing_strategy(routing) {
+	switch (routing) {
+	case MultiplexerRouting::ADAPTIVE_REINIT: {
+		router_function = [=](ExecutionContext &e, DataChunk &i, DataChunk &c, OperatorState &s) {
+			return RouteAdaptiveReinit(e, i, c, s);
+		};
+		break;
+	}
+	case MultiplexerRouting::ALTERNATE: {
+		router_function = [=](ExecutionContext &e, DataChunk &i, DataChunk &c, OperatorState &s) {
+			return RouteAlternate(e, i, c, s);
+		};
+		break;
+	}
+	case MultiplexerRouting::DYNAMIC: {
+		router_function = [=](ExecutionContext &e, DataChunk &i, DataChunk &c, OperatorState &s) {
+			return RouteDynamic(e, i, c, s);
+		};
+		break;
+	}
+	case MultiplexerRouting::INIT_ONCE: {
+		router_function = [=](ExecutionContext &e, DataChunk &i, DataChunk &c, OperatorState &s) {
+			return RouteInitializeOnce(e, i, c, s);
+		};
+		break;
+	}
+	case MultiplexerRouting::OPPORTUNISTIC: {
+		router_function = [=](ExecutionContext &e, DataChunk &i, DataChunk &c, OperatorState &s) {
+			return RouteOpportunistic(e, i, c, s);
+		};
+		break;
+	}
+	}
 }
-
-struct HistoryEntry {
-	idx_t path_idx;
-	idx_t input_tuple_count;
-};
 
 class MultiplexerState : public OperatorState {
 public:
 	MultiplexerState(idx_t path_count) {
-		intermediates_per_input_tuple.resize(path_count);
-		input_tuple_count_per_path.resize(path_count);
-		path_resistances.resize(path_count);
+		intermediates_per_input_tuple.resize(path_count, 0);
+		input_tuple_count_per_path.resize(path_count, 0);
+		path_resistances.resize(path_count, 0);
 		visited_paths.resize(path_count, false);
+		remaining_tuples.resize(path_count, 0);
 		init_tuple_count = 128 / path_count;
 	}
 
@@ -41,6 +69,7 @@ public:
 	idx_t current_path_idx = 0;
 	idx_t current_path_tuple_count = 0;
 	idx_t current_path_remaining_tuples = 0;
+	vector<idx_t> remaining_tuples;
 
 	// To be set during path run
 	idx_t num_intermediates_current_path = 0;
@@ -49,6 +78,7 @@ public:
 	vector<double> intermediates_per_input_tuple;
 	idx_t num_tuples_processed = 0;
 	vector<idx_t> input_tuple_count_per_path;
+	std::unique_ptr<idx_t> best_path_after_init;
 
 	idx_t init_tuple_count = 8;
 	std::stringstream log;
@@ -56,7 +86,6 @@ public:
 
 	idx_t window_size = 0;
 	idx_t window_idx = 0;
-	idx_t current_input_chunk_size = 0;
 	vector<double> path_resistances;
 	vector<bool> visited_paths;
 	const double smoothing_factor = 0.5;
@@ -70,6 +99,238 @@ unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ExecutionContext
 	return make_unique<MultiplexerState>(path_count);
 }
 
+OperatorResultType PhysicalMultiplexer::InitPath(DataChunk &input, DataChunk &chunk, OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+
+	D_ASSERT(state.num_paths_initialized < path_count);
+	idx_t next_path_idx = -1;
+	for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+		if (state.path_resistances[i] == 0) {
+			next_path_idx = i;
+			break;
+		}
+	}
+	D_ASSERT(next_path_idx < path_count);
+	D_ASSERT(input.size() > state.chunk_offset);
+	idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+	idx_t tuple_count =
+	    remaining_input_tuples > state.init_tuple_count ? state.init_tuple_count : remaining_input_tuples;
+
+	SelectionVector sel(tuple_count);
+	for (idx_t i = 0; i < tuple_count; i++) {
+		sel.set_index(i, state.chunk_offset + i);
+	}
+	chunk.Slice(input, sel, tuple_count);
+
+	state.chunk_offset += tuple_count;
+	state.current_path_idx = next_path_idx;
+	state.current_path_tuple_count = tuple_count;
+
+	if (state.chunk_offset == input.size()) {
+		state.chunk_offset = 0;
+		return OperatorResultType::NEED_MORE_INPUT;
+	} else {
+		return OperatorResultType::HAVE_MORE_OUTPUT;
+	}
+}
+
+OperatorResultType PhysicalMultiplexer::RouteTuples(DataChunk &input, DataChunk &chunk, OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+
+	if (state.current_path_tuple_count == input.size()) {
+		D_ASSERT(state.chunk_offset == 0);
+		chunk.Reference(input);
+		return OperatorResultType::NEED_MORE_INPUT;
+	}
+
+	D_ASSERT(state.chunk_offset + state.current_path_tuple_count <= input.size());
+
+	SelectionVector sel;
+	sel.Initialize(state.current_path_tuple_count);
+
+	for (idx_t i = 0; i < state.current_path_tuple_count; i++) {
+		sel.set_index(i, state.chunk_offset + i);
+	}
+
+	chunk.Slice(input, sel, state.current_path_tuple_count);
+
+	if (state.chunk_offset + state.current_path_tuple_count == input.size()) {
+		state.chunk_offset = 0;
+		return OperatorResultType::NEED_MORE_INPUT;
+	}
+
+	state.chunk_offset += state.current_path_tuple_count;
+	return OperatorResultType::HAVE_MORE_OUTPUT;
+}
+
+OperatorResultType PhysicalMultiplexer::RouteInitializeOnce(ExecutionContext &context, DataChunk &input,
+                                                            DataChunk &chunk, OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+
+	if (state.num_paths_initialized < path_count) {
+		return InitPath(input, chunk, state);
+	}
+
+	if (!state.best_path_after_init) {
+		double min_resistance = state.path_resistances.front();
+		idx_t path_idx = 0;
+
+		for (idx_t i = 1; i < state.path_resistances.size(); i++) {
+			if (state.path_resistances[i] < min_resistance) {
+				min_resistance = state.path_resistances[i];
+				path_idx = i;
+			}
+		}
+		state.best_path_after_init = make_unique<idx_t>(path_idx);
+		state.current_path_idx = path_idx;
+	}
+
+	D_ASSERT(input.size() > state.chunk_offset);
+	D_ASSERT(((int64_t)input.size() - state.chunk_offset) > 0);
+	idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+	D_ASSERT(remaining_input_tuples <= STANDARD_VECTOR_SIZE);
+	state.current_path_tuple_count = remaining_input_tuples;
+
+	return RouteTuples(input, chunk, state);
+}
+
+OperatorResultType PhysicalMultiplexer::RouteAdaptiveReinit(ExecutionContext &context, DataChunk &input,
+                                                            DataChunk &chunk, OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+
+	if (state.num_paths_initialized < path_count) {
+		return InitPath(input, chunk, state);
+	}
+
+	double min_resistance = state.path_resistances.front();
+	idx_t min_resistance_path_idx = 0;
+
+	for (idx_t i = 1; i < state.path_resistances.size(); i++) {
+		if (state.path_resistances[i] < min_resistance) {
+			min_resistance_path_idx = i;
+			min_resistance = state.path_resistances[i];
+		}
+	}
+
+	D_ASSERT(input.size() > state.chunk_offset);
+	idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+	state.current_path_tuple_count = remaining_input_tuples;
+	state.current_path_idx = min_resistance_path_idx;
+
+	// TODO declare constant
+	if (min_resistance <= 0.2) {
+		state.visited_paths[state.current_path_idx] = true;
+		return RouteTuples(input, chunk, state);
+	}
+
+	// Either first run after initialization or path switch
+	if (state.window_idx == 0 || !state.visited_paths[state.current_path_idx]) {
+		// After (re-) initialization, we are about to send the first chunk to the path of least resistance
+		// Find the next path and estimate the cost for the next initialization
+		state.current_path_idx = min_resistance_path_idx;
+		state.visited_paths[state.current_path_idx] = true;
+
+		double reinit_cost_estimate = 0;
+		for (idx_t i = 0; i < state.visited_paths.size(); i++) {
+			if (!state.visited_paths[i]) {
+				reinit_cost_estimate += state.path_resistances[i] * state.init_tuple_count;
+			}
+		}
+
+		double tuple_count_before_reinit = reinit_cost_estimate / (regret_budget * min_resistance);
+		state.window_size = tuple_count_before_reinit;
+	}
+
+	if (state.window_idx > state.window_size) {
+		state.window_idx = 0;
+
+		for (idx_t i = 0; i < state.visited_paths.size(); i++) {
+			if (!state.visited_paths[i]) {
+				state.path_resistances[i] = 0;
+				state.num_paths_initialized--;
+			} else {
+				state.visited_paths[i] = false;
+			}
+		}
+
+		return RouteAdaptiveReinit(context, input, chunk, state);
+	}
+
+	state.window_idx += state.current_path_tuple_count;
+	state.current_path_idx = min_resistance_path_idx;
+	return RouteTuples(input, chunk, state);
+}
+
+OperatorResultType PhysicalMultiplexer::RouteDynamic(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                                     OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+
+	if (state.num_paths_initialized < path_count) {
+		return InitPath(input, chunk, state);
+	}
+
+	idx_t max_remaining_tuples = state.remaining_tuples.front();
+	idx_t max_remaining_tuples_path_idx = 0;
+	for (idx_t i = 1; i < state.remaining_tuples.size(); i++) {
+		if (state.remaining_tuples[i] > max_remaining_tuples) {
+			max_remaining_tuples = state.remaining_tuples[i];
+			max_remaining_tuples_path_idx = i;
+		}
+	}
+
+	if (max_remaining_tuples > 0) {
+		state.current_path_idx = max_remaining_tuples_path_idx;
+		idx_t remaining_input_tuples = input.size() - state.chunk_offset;
+
+		if (max_remaining_tuples > remaining_input_tuples) {
+			state.current_path_tuple_count = remaining_input_tuples;
+			state.remaining_tuples[max_remaining_tuples_path_idx] -= remaining_input_tuples;
+		} else {
+			state.current_path_tuple_count = max_remaining_tuples;
+			state.remaining_tuples[max_remaining_tuples_path_idx] = 0;
+		}
+
+		return RouteTuples(input, chunk, state);
+	}
+
+	// We routed all the tuples from our last weight calculations. Let's recalculate then
+	vector<double> path_weights(path_count, 1);
+	CalculateJoinPathWeights(state.path_resistances, path_weights);
+
+	for (idx_t i = 0; i < path_weights.size(); i++) {
+		// TODO: 1024 is a constant. It means that we want to distribute the path runs over the next 10 chunks
+		state.remaining_tuples[i] = (idx_t)std::round(path_weights[i] * input.size());
+	}
+
+	return RouteDynamic(context, input, chunk, state);
+}
+
+OperatorResultType PhysicalMultiplexer::RouteAlternate(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                                       OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+
+	state.current_path_idx =
+	    state.num_tuples_processed == 0 ? 0 : ++state.current_path_idx % state.input_tuple_count_per_path.size();
+	state.current_path_tuple_count = input.size();
+	chunk.Reference(input);
+
+	if (state.current_path_idx == state.input_tuple_count_per_path.size() - 1) {
+		return OperatorResultType::NEED_MORE_INPUT;
+	} else {
+		return OperatorResultType::HAVE_MORE_OUTPUT;
+	}
+}
+
+OperatorResultType PhysicalMultiplexer::RouteOpportunistic(ExecutionContext &context, DataChunk &input,
+                                                           DataChunk &chunk, OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+
+	state.current_path_idx = *std::min_element(state.path_resistances.cbegin(), state.path_resistances.cend());
+	state.current_path_tuple_count = input.size();
+	chunk.Reference(input);
+	return OperatorResultType::NEED_MORE_INPUT;
+}
+
 OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                 GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	auto &state = (MultiplexerState &)state_p;
@@ -79,93 +340,12 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 		state.num_intermediates_current_path = 0;
 	} else {
 		state.first_mpx_run = false;
-		if (context.client.config.mpx_alternate_chunks) {
+		if (routing_strategy == MultiplexerRouting::ALTERNATE) {
 			state.intermediates_alternate_mode = vector<vector<idx_t>>(state.intermediates_per_input_tuple.size());
 		}
 	}
 
-	if (context.client.config.mpx_alternate_chunks) {
-		state.current_path_idx =
-		    state.num_tuples_processed == 0 ? 0 : ++state.current_path_idx % state.input_tuple_count_per_path.size();
-		state.current_path_tuple_count = input.size();
-		chunk.Reference(input);
-
-		if (state.current_path_idx == state.input_tuple_count_per_path.size() - 1) {
-			return OperatorResultType::NEED_MORE_INPUT;
-		} else {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
-		}
-	}
-
-	state.current_input_chunk_size = input.size();
-
-	// Initialize each path with one tuple to get initial weights
-	if (state.num_paths_initialized < path_count) {
-		idx_t next_path_idx;
-		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
-			if (state.path_resistances[i] == 0) {
-				next_path_idx = i;
-				break;
-			}
-		}
-		D_ASSERT(next_path_idx < path_count);
-		D_ASSERT(input.size() > state.chunk_offset);
-		idx_t remaining_input_tuples = input.size() - state.chunk_offset;
-		idx_t tuple_count =
-		    remaining_input_tuples > state.init_tuple_count ? state.init_tuple_count : remaining_input_tuples;
-
-		SelectionVector sel(tuple_count);
-		for (idx_t i = 0; i < tuple_count; i++) {
-			sel.set_index(i, state.chunk_offset + i);
-		}
-		chunk.Slice(input, sel, tuple_count);
-
-		state.chunk_offset += tuple_count;
-		state.current_path_idx = next_path_idx;
-		state.current_path_tuple_count = tuple_count;
-
-		if (state.chunk_offset == input.size()) {
-			state.chunk_offset = 0;
-			return OperatorResultType::NEED_MORE_INPUT;
-		} else {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
-		}
-	}
-
-	idx_t next_path_idx;
-	double min_resistance = std::numeric_limits<double>::max();
-	for (idx_t i = 0; i < state.path_resistances.size(); i++) {
-		if (state.path_resistances[i] < min_resistance) {
-			next_path_idx = i;
-			min_resistance = state.path_resistances[i];
-		}
-	}
-
-	D_ASSERT(next_path_idx < path_count);
-	state.current_path_idx = next_path_idx;
-
-	if (state.chunk_offset == 0) {
-		state.current_path_tuple_count = input.size();
-		chunk.Reference(input);
-	} else {
-		D_ASSERT(input.size() > state.chunk_offset);
-		D_ASSERT(((int64_t) input.size() - state.chunk_offset) > 0);
-		idx_t remaining_input_tuples = input.size() - state.chunk_offset;
-		D_ASSERT(remaining_input_tuples <= STANDARD_VECTOR_SIZE);
-
-		SelectionVector sel;
-		sel.Initialize(remaining_input_tuples);
-
-		for (idx_t i = 0; i < remaining_input_tuples; i++) {
-			sel.set_index(i, state.chunk_offset + i);
-		}
-
-		chunk.Slice(input, sel, remaining_input_tuples);
-		state.current_path_tuple_count = remaining_input_tuples;
-		state.chunk_offset = 0;
-	}
-
-	return OperatorResultType::NEED_MORE_INPUT;
+	return router_function(context, input, chunk, state);
 }
 
 void PhysicalMultiplexer::CalculateJoinPathWeights(const vector<double> &join_path_costs,
@@ -239,8 +419,8 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 	// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
 	// weight calculation
 	double constant_overhead = 0.1;
-	double path_resistance = state.num_intermediates_current_path /
-	                                       static_cast<double>(state.current_path_tuple_count) + constant_overhead;
+	double path_resistance =
+	    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
 
 	if (state.num_paths_initialized < path_count) {
 		// We found ourselves in a (re-) initialization phase
@@ -248,7 +428,8 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		state.num_paths_initialized++;
 	} else {
 		// Rolling average
-		path_resistance = state.path_resistances[state.current_path_idx] * state.smoothing_factor + (1 - state.smoothing_factor) * path_resistance;
+		path_resistance = state.path_resistances[state.current_path_idx] * state.smoothing_factor +
+		                  (1 - state.smoothing_factor) * path_resistance;
 		state.path_resistances[state.current_path_idx] = path_resistance;
 	}
 
@@ -269,73 +450,6 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		}
 
 		state.log << "\n";
-	}
-
-	if (state.num_paths_initialized < path_count) {
-		return;
-	}
-
-	state.window_idx++;
-
-	if (state.window_idx == 1) {
-		// After (re-) initialization, we are about to send the first chunk to the path of least resistance
-		// Find the next path and estimate the cost for the next initialization
-		double min_resistance = std::numeric_limits<double>::max();
-		idx_t min_resistance_path_idx;
-
-		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
-			if (state.path_resistances[i] < min_resistance) {
-				min_resistance_path_idx = i;
-				min_resistance = state.path_resistances[i];
-			}
-		}
-
-		double reinit_cost_estimate = 0;
-		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
-			if (i != min_resistance_path_idx) {
-				reinit_cost_estimate += state.path_resistances[i] * state.init_tuple_count;
-			}
-		}
-
-		double tuple_count_before_reinit = reinit_cost_estimate / (regret_budget * min_resistance);
-		idx_t chunk_count_before_reinit = (idx_t) std::ceil(tuple_count_before_reinit / state.current_input_chunk_size);
-		state.window_size = chunk_count_before_reinit;
-		return;
-	}
-
-	const bool was_first_visit = !state.visited_paths[state.current_path_idx];
-	state.visited_paths[state.current_path_idx] = true;
-
-	if (was_first_visit) {
-		// We switched paths. Therefore, we do not need to reinit that one in the next path
-		double reinit_cost_estimate = 0;
-		for (idx_t i = 0; i < state.visited_paths.size(); i++) {
-			if (!state.visited_paths[i]) {
-				reinit_cost_estimate += state.path_resistances[i] * state.init_tuple_count;
-			}
-		}
-		double min_resistance = *std::min(state.path_resistances.cbegin(), state.path_resistances.cend());
-		double tuple_count_before_reinit = reinit_cost_estimate / (regret_budget * min_resistance);
-		idx_t chunk_count_before_reinit = (idx_t) std::ceil(tuple_count_before_reinit / state.current_input_chunk_size);
-		state.window_size = chunk_count_before_reinit;
-	}
-
-	if (path_resistance <= constant_overhead + (constant_overhead * regret_budget)) {
-		// Never reinit, if the path does not produce intermediates
-		return;
-	}
-
-	if (state.window_idx > state.window_size) {
-		state.window_idx = 0;
-
-		for (idx_t i = 0; i < state.visited_paths.size(); i++) {
-			if (!state.visited_paths[i]) {
-				state.path_resistances[i] = 0;
-				state.num_paths_initialized--;
-			} else {
-				state.visited_paths[i] = false;
-			}
-		}
 	}
 }
 

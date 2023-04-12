@@ -66,10 +66,6 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 			res = conn.Query("PRAGMA enable_random_cardinalities");
 			D_ASSERT(!res->HasError());
 		}
-		if (instance.mpx_alternate_chunks) {
-			res = conn.Query("PRAGMA enable_mpx_alternate_chunks");
-			D_ASSERT(!res->HasError());
-		}
 		if (instance.log_tuples_routed) {
 			res = conn.Query("PRAGMA enable_log_tuples_routed");
 			D_ASSERT(!res->HasError());
@@ -80,6 +76,10 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 		}
 		if (instance.measure_pipeline) {
 			res = conn.Query("PRAGMA enable_measure_pipeline");
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.multiplexer_routing.empty()) {
+			res = conn.Query("SET multiplexer_routing TO " + instance.multiplexer_routing);
 			D_ASSERT(!res->HasError());
 		}
 	}

@@ -279,8 +279,20 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				print_help();
 				exit(1);
 			}
-		} else if (arg == "--mpx_alternate_chunks") {
-			instance.mpx_alternate_chunks = true;
+		} else if (StringUtil::StartsWith(arg, "--multiplexer_routing=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			if (splits[1] == "alternate" || splits[1] == "adaptive_reinit" || splits[1] == "dynamic" ||
+			    splits[1] == "init_once" || splits[1] == "opportunistic") {
+				instance.multiplexer_routing = splits[1];
+			} else {
+				print_help();
+				exit(1);
+			}
 		} else if (arg == "--log_tuples_routed") {
 			instance.log_tuples_routed = true;
 		} else {

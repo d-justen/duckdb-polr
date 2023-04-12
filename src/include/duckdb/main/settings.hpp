@@ -332,4 +332,12 @@ struct RegretBudgetSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct RoutingStrategySetting {
+	static constexpr const char *Name = "multiplexer_routing";
+	static constexpr const char *Description = "Set the routing strategy for the POLAR multiplexer";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::VARCHAR;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static Value GetSetting(ClientContext &context);
+};
+
 } // namespace duckdb

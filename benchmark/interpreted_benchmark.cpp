@@ -65,10 +65,6 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 			res = con.Query("PRAGMA enable_random_cardinalities");
 			D_ASSERT(!res->HasError());
 		}
-		if (instance.mpx_alternate_chunks) {
-			res = con.Query("PRAGMA enable_mpx_alternate_chunks");
-			D_ASSERT(!res->HasError());
-		}
 		if (instance.log_tuples_routed) {
 			res = con.Query("PRAGMA enable_log_tuples_routed");
 			D_ASSERT(!res->HasError());
@@ -79,6 +75,10 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		}
 		if (instance.measure_pipeline) {
 			res = con.Query("PRAGMA enable_measure_pipeline");
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.multiplexer_routing.empty()) {
+			res = con.Query("SET multiplexer_routing TO " + instance.multiplexer_routing);
 			D_ASSERT(!res->HasError());
 		}
 	}

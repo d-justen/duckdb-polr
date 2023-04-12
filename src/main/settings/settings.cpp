@@ -662,4 +662,42 @@ Value RegretBudgetSetting::GetSetting(ClientContext &context) {
 	return Value::DOUBLE(config.options.regret_budget);
 }
 
+//===--------------------------------------------------------------------===//
+// Regret Budget Setting
+//===--------------------------------------------------------------------===//
+void RoutingStrategySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto parameter = StringUtil::Lower(input.ToString());
+	if (parameter == "alternate") {
+		config.options.multiplexer_routing = MultiplexerRouting::ALTERNATE;
+	} else if (parameter == "adaptive_reinit") {
+		config.options.multiplexer_routing = MultiplexerRouting::ADAPTIVE_REINIT;
+	} else if (parameter == "dynamic") {
+		config.options.multiplexer_routing = MultiplexerRouting::DYNAMIC;
+	} else if (parameter == "init_once") {
+		config.options.multiplexer_routing = MultiplexerRouting::INIT_ONCE;
+	} else if (parameter == "opportunistic") {
+		config.options.multiplexer_routing = MultiplexerRouting::OPPORTUNISTIC;
+	} else {
+		throw InvalidInputException(
+		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
+	}
+}
+Value RoutingStrategySetting::GetSetting(ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	switch (config.options.multiplexer_routing) {
+	case MultiplexerRouting::ALTERNATE:
+		return "alternate";
+	case MultiplexerRouting::ADAPTIVE_REINIT:
+		return "adaptive_reinit";
+	case MultiplexerRouting::DYNAMIC:
+		return "dynamic";
+	case MultiplexerRouting::INIT_ONCE:
+		return "init_once";
+	case MultiplexerRouting::OPPORTUNISTIC:
+		return "opportunistic";
+	default:
+		throw InternalException("Unknown access mode setting");
+	}
+}
+
 } // namespace duckdb

@@ -38,6 +38,14 @@ struct DBConfig;
 
 enum class AccessMode : uint8_t { UNDEFINED = 0, AUTOMATIC = 1, READ_ONLY = 2, READ_WRITE = 3 };
 
+enum class MultiplexerRouting : uint8_t {
+	ALTERNATE = 0,
+	ADAPTIVE_REINIT = 1,
+	DYNAMIC = 2,
+	INIT_ONCE = 3,
+	OPPORTUNISTIC = 4
+};
+
 enum class CheckpointAbort : uint8_t {
 	NO_ABORT = 0,
 	DEBUG_ABORT_BEFORE_TRUNCATE = 1,
@@ -129,6 +137,7 @@ struct DBConfigOptions {
 
 	//! POLR
 	double regret_budget = 0.2;
+	MultiplexerRouting multiplexer_routing = MultiplexerRouting::DYNAMIC;
 
 	bool operator==(const DBConfigOptions &other) const;
 };

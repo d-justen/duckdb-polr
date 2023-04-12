@@ -101,6 +101,9 @@ PRAGMA enable_polr_bushy
 statement ok
 SET threads TO 1
 
+statement ok
+SET multiplexer_routing TO alternate
+
 # q1.1
 statement ok
 SELECT SUM(LO_EXTENDEDPRICE*LO_DISCOUNT) AS REVENUE
