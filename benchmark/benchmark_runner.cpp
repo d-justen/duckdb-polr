@@ -223,9 +223,6 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 		} else if (arg == "--query") {
 			// write group of benchmark
 			instance.configuration.meta = BenchmarkMetaType::QUERY;
-		} else if (arg == "--greedy_ordering") {
-			// write group of benchmark
-			instance.greedy_ordering = true;
 		} else if (arg == "--measure_pipeline") {
 			// write group of benchmark
 			instance.measure_pipeline = true;
@@ -271,9 +268,7 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				exit(1);
 			}
 
-			if (splits[1] == "disabled") {
-				instance.disable_cardinality_estimator = true;
-			} else if (splits[1] == "random") {
+			if (splits[1] == "random") {
 				instance.enable_random_cardinalities = true;
 			} else {
 				print_help();
@@ -289,6 +284,19 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			if (splits[1] == "alternate" || splits[1] == "adaptive_reinit" || splits[1] == "dynamic" ||
 			    splits[1] == "init_once" || splits[1] == "opportunistic") {
 				instance.multiplexer_routing = splits[1];
+			} else {
+				print_help();
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--optimizer_mode=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			if (splits[1] == "dphyp-equisets" || splits[1] == "dphyp-constant" || splits[1] == "greedy-equisets" ||
+			    splits[1] == "greedy-constant") {
+				instance.optimizer_mode = splits[1];
 			} else {
 				print_help();
 				exit(1);

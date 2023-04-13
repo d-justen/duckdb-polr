@@ -325,7 +325,14 @@ OperatorResultType PhysicalMultiplexer::RouteOpportunistic(ExecutionContext &con
                                                            DataChunk &chunk, OperatorState &state_p) const {
 	auto &state = (MultiplexerState &)state_p;
 
-	state.current_path_idx = *std::min_element(state.path_resistances.cbegin(), state.path_resistances.cend());
+	double min_resistance = std::numeric_limits<double>::max();
+	for (idx_t i = 0; i < state.path_resistances.size(); i++) {
+		if (state.path_resistances[i] < min_resistance) {
+			min_resistance = state.path_resistances[i];
+			state.current_path_idx = i;
+		}
+	}
+
 	state.current_path_tuple_count = input.size();
 	chunk.Reference(input);
 	return OperatorResultType::NEED_MORE_INPUT;

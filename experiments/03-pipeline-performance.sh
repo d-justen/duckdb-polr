@@ -7,6 +7,10 @@ rm -f *.{csv,txt}
 rm -rf ./experiment-results/03-pipeline-performance
 mkdir ./experiment-results/03-pipeline-performance
 
+declare -a optimizer_modes=(
+  "dphyp-equisets" "dphyp-constant" "greedy-equisets" "greedy-constant"
+)
+
 declare -a job_queries=(
   "01a" "01b" "01c" "01d" "02a" "02b" "02c" "02d" "03a" "03b" "03c"
   "04a" "04b" "04c" "05a" "05b" "05c" "06a" "06b" "06c" "06d" "06e"
@@ -26,144 +30,66 @@ declare -a ssb_queries=(
   "q4-2" "q4-3"
 )
 
-### DPhyp-equisets ###
-## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-equisets/job/polr
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-equisets/job/std
-for query in "${job_queries[@]}"
-do
-  ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-equisets/job/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-equisets/job/std/"${query}".csv; done
-    rm -f *.csv
-  fi
-done
+declare -a routing_strategies=(
+  "init_once" "opportunistic" "adaptive_reinit" "dynamic"
+)
 
-## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-equisets/ssb/polr
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-equisets/ssb/std
-for query in "${ssb_queries[@]}"
-do
-  ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-equisets/ssb/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-equisets/ssb/std/"${query}".csv; done
-    rm -f *.csv
-  fi
-done
+REGRET_BUDGET="0.01"
 
-### DPhyp-constant ###
-## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-constant/job/polr
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-constant/job/std
-for query in "${job_queries[@]}"
+for optimizer_mode in "${optimizer_modes[@]}"
 do
-  ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --cardinalities=disabled
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-constant/job/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-constant/job/std/"${query}".csv; done
-    rm -f *.csv
-  fi
-done
+  ## Run Join Order Benchmark
+  mkdir -p ./experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/job
 
-## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-constant/ssb/polr
-mkdir -p ./experiment-results/03-pipeline-performance/dphyp-constant/ssb/std
-for query in "${ssb_queries[@]}"
-do
-  ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --cardinalities=disabled
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-constant/ssb/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/dphyp-constant/ssb/std/"${query}".csv; done
-    rm -f *.csv
-  fi
-done
+  for strategy in "${routing_strategies[@]}"
+  do
+    mkdir -p ./experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/job
+  done
 
-### Greedy-equisets ###
-## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-equisets/job/polr
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-equisets/job/std
-for query in "${job_queries[@]}"
-do
-  ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --greedy_ordering --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-equisets/job/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --greedy_ordering --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-equisets/job/std/"${query}".csv; done
-    rm -f *.csv
-  fi
-done
+  for query in "${job_queries[@]}"
+  do
+    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+    if compgen -G *.csv > /dev/null; then
+      rm -f *.{csv,txt}
 
-## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-equisets/ssb/polr
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-equisets/ssb/std
-for query in "${ssb_queries[@]}"
-do
-  ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --greedy_ordering --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-equisets/ssb/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --greedy_ordering --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-equisets/ssb/std/"${query}".csv; done
-    rm -f *.csv
-  fi
-done
+      for strategy in "${routing_strategies[@]}"
+      do
+        ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
+        for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/job/"${query}".csv; done
+        rm -f *.csv
+      done
 
-### Greedy-constant ###
-## Run Join Order Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-constant/job/polr
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-constant/job/std
-for query in "${job_queries[@]}"
-do
-  ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering --cardinalities=disabled
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --greedy_ordering --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-constant/job/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --greedy_ordering --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-constant/job/std/"${query}".csv; done
-    rm -f *.csv
-  fi
-done
+      ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
+      for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/job/"${query}".csv; done
+      rm -f *.csv
+    fi
+  done
 
-## Run Star-Schema Benchmark
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-constant/ssb/polr
-mkdir -p ./experiment-results/03-pipeline-performance/greedy-constant/ssb/std
-for query in "${ssb_queries[@]}"
-do
-  ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --greedy_ordering --cardinalities=disabled
-  if compgen -G *.csv > /dev/null; then
-    rm -f *.{csv,txt}
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget=0.01 --greedy_ordering --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-constant/ssb/polr/"${query}".csv; done
-    rm -f *.csv
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --greedy_ordering --cardinalities=disabled --measure_pipeline
-    for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/greedy-constant/ssb/std/"${query}".csv; done
-    rm -f *.csv
-  fi
+  ## Run Star-Schema Benchmark
+  mkdir -p ./experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/ssb
+
+  for strategy in "${routing_strategies[@]}"
+  do
+    mkdir -p ./experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/ssb
+  done
+
+  for query in "${ssb_queries[@]}"
+  do
+    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+    if compgen -G *.csv > /dev/null; then
+      rm -f *.{csv,txt}
+      for strategy in "${routing_strategies[@]}"
+      do
+        ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
+        for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/ssb/"${query}".csv; done
+        rm -f *.csv
+      done
+
+      ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
+      for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/ssb/"${query}".csv; done
+      rm -f *.csv
+    fi
+  done
 done
 
 python3 scripts/03-plot-pipeline-performance.py

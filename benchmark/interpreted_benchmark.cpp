@@ -57,20 +57,12 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 			res = con.Query("PRAGMA enable_polr_bushy");
 			D_ASSERT(!res->HasError());
 		}
-		if (instance.disable_cardinality_estimator) {
-			res = con.Query("PRAGMA disable_cardinality_estimator");
-			D_ASSERT(!res->HasError());
-		}
 		if (instance.enable_random_cardinalities) {
 			res = con.Query("PRAGMA enable_random_cardinalities");
 			D_ASSERT(!res->HasError());
 		}
 		if (instance.log_tuples_routed) {
 			res = con.Query("PRAGMA enable_log_tuples_routed");
-			D_ASSERT(!res->HasError());
-		}
-		if (instance.greedy_ordering) {
-			res = con.Query("PRAGMA enable_greedy_ordering");
 			D_ASSERT(!res->HasError());
 		}
 		if (instance.measure_pipeline) {
@@ -80,6 +72,20 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		if (!instance.multiplexer_routing.empty()) {
 			res = con.Query("SET multiplexer_routing TO " + instance.multiplexer_routing);
 			D_ASSERT(!res->HasError());
+		}
+		if (!instance.optimizer_mode.empty()) {
+			if (instance.optimizer_mode == "dphyp-constant") {
+				res = con.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-equisets") {
+				res = con.Query("PRAGMA enable_greedy_ordering");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-constant") {
+				res = con.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+				res = con.Query("PRAGMA enable_greedy_ordering");
+				D_ASSERT(!res->HasError());
+			}
 		}
 	}
 

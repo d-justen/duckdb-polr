@@ -10,7 +10,7 @@ from statistics import mean
 
 query_counts = {"job": 113, "ssb": 12}
 modes = ["dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant"]
-regret_budgets = ["0-00001", "0-0001", "0-001", "0-01", "0-1", "0-2", "0-4", "0-8", "1-6", "2-4", "3-2"]
+regret_budgets = ["0.00001", "0.0001", "0.001", "0.01", "0.1", "0.2", "0.4", "0.8", "1.6", "2.4", "3.2"]
 
 results = {}
 
@@ -62,9 +62,9 @@ for mode in modes:
         relative_overhead_per_query = []
         for i in range(len(duckdb_intms)):
             if opt_intms[i] > 0:
-                relative_overhead_per_query.append(all_polr_intms["0-01"][i] / opt_intms[i])
+                relative_overhead_per_query.append(all_polr_intms["0.01"][i] / opt_intms[i])
             else:
-                relative_overhead_per_query.append(all_polr_intms["0-01"][i] * -1)
+                relative_overhead_per_query.append(all_polr_intms["0.01"][i] * -1)
 
         print(mode + " " + benchmark_name + ":")
         print(relative_overhead_per_query)

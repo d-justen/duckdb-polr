@@ -53,12 +53,11 @@ public:
 
 	bool enable_polr = false;
 	bool enable_polr_bushy = false;
-	bool disable_cardinality_estimator = false;
 	bool enable_random_cardinalities = false;
 	string multiplexer_routing = "";
 	double regret_budget = 0.2;
 	bool log_tuples_routed = false;
-	bool greedy_ordering = false;
+	string optimizer_mode = "";
 	bool measure_pipeline = false;
 	uint32_t nruns = 5;
 };
