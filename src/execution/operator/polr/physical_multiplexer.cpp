@@ -58,7 +58,10 @@ public:
 		path_resistances.resize(path_count, 0);
 		visited_paths.resize(path_count, false);
 		remaining_tuples.resize(path_count, 0);
+		remaining_tuples_diff.resize(path_count, 0);
+		path_weights.resize(path_count, 1);
 		init_tuple_count = 128 / path_count;
+		sel.Initialize();
 	}
 
 	bool first_mpx_run = true;
@@ -70,6 +73,7 @@ public:
 	idx_t current_path_tuple_count = 0;
 	idx_t current_path_remaining_tuples = 0;
 	vector<idx_t> remaining_tuples;
+	vector<int> remaining_tuples_diff;
 
 	// To be set during path run
 	idx_t num_intermediates_current_path = 0;
@@ -88,7 +92,10 @@ public:
 	idx_t window_idx = 0;
 	vector<double> path_resistances;
 	vector<bool> visited_paths;
+	vector<double> path_weights;
 	const double smoothing_factor = 0.5;
+
+	SelectionVector sel;
 
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
@@ -116,11 +123,13 @@ OperatorResultType PhysicalMultiplexer::InitPath(DataChunk &input, DataChunk &ch
 	idx_t tuple_count =
 	    remaining_input_tuples > state.init_tuple_count ? state.init_tuple_count : remaining_input_tuples;
 
-	SelectionVector sel(tuple_count);
+	auto *sel_vector = state.sel.data();
+
 	for (idx_t i = 0; i < tuple_count; i++) {
-		sel.set_index(i, state.chunk_offset + i);
+		sel_vector[i] = state.chunk_offset + i;
 	}
-	chunk.Slice(input, sel, tuple_count);
+
+	chunk.Slice(input, state.sel, tuple_count);
 
 	state.chunk_offset += tuple_count;
 	state.current_path_idx = next_path_idx;
@@ -145,14 +154,13 @@ OperatorResultType PhysicalMultiplexer::RouteTuples(DataChunk &input, DataChunk 
 
 	D_ASSERT(state.chunk_offset + state.current_path_tuple_count <= input.size());
 
-	SelectionVector sel;
-	sel.Initialize(state.current_path_tuple_count);
+	auto *sel_vector = state.sel.data();
 
 	for (idx_t i = 0; i < state.current_path_tuple_count; i++) {
-		sel.set_index(i, state.chunk_offset + i);
+		sel_vector[i] = state.chunk_offset + i;
 	}
 
-	chunk.Slice(input, sel, state.current_path_tuple_count);
+	chunk.Slice(input, state.sel, state.current_path_tuple_count);
 
 	if (state.chunk_offset + state.current_path_tuple_count == input.size()) {
 		state.chunk_offset = 0;
@@ -294,12 +302,60 @@ OperatorResultType PhysicalMultiplexer::RouteDynamic(ExecutionContext &context, 
 	}
 
 	// We routed all the tuples from our last weight calculations. Let's recalculate then
-	vector<double> path_weights(path_count, 1);
-	CalculateJoinPathWeights(state.path_resistances, path_weights);
+	std::fill(state.path_weights.begin(), state.path_weights.end(), 1);
+	CalculateJoinPathWeights(state.path_resistances, state.path_weights);
 
-	for (idx_t i = 0; i < path_weights.size(); i++) {
-		// TODO: 1024 is a constant. It means that we want to distribute the path runs over the next 10 chunks
-		state.remaining_tuples[i] = (idx_t)std::round(path_weights[i] * input.size());
+	idx_t remaining_tuples_sum = 0;
+	for (idx_t i = 0; i < state.path_weights.size(); i++) {
+		int remaining_tuples = state.remaining_tuples_diff[i] + std::round(state.path_weights[i] * input.size());
+
+		if (remaining_tuples < 0) {
+			// We do not allow negative remaining tuples
+			state.remaining_tuples_diff[i] += state.remaining_tuples[i];
+			state.remaining_tuples[i] = 0;
+		} else {
+			state.remaining_tuples[i] = remaining_tuples;
+			state.remaining_tuples_diff[i] = 0;
+		}
+		remaining_tuples_sum += state.remaining_tuples[i];
+	}
+
+	idx_t remaining_tuples_sum_after_normalization = 0;
+	// Normalize
+	for (idx_t i = 0; i < state.remaining_tuples.size(); i++) {
+		state.remaining_tuples[i] = std::round(state.remaining_tuples[i] / (double)remaining_tuples_sum * input.size());
+		if (state.remaining_tuples[i] < 64) {
+			state.remaining_tuples_diff[i] = state.remaining_tuples[i];
+			state.remaining_tuples[i] = 0;
+		}
+		remaining_tuples_sum_after_normalization += state.remaining_tuples[i];
+	}
+
+	if (remaining_tuples_sum_after_normalization != input.size()) {
+
+		idx_t control_sum = 0;
+		idx_t max_normalized = 0;
+		idx_t max_normalized_idx = 0;
+
+		for (idx_t i = 0; i < state.remaining_tuples.size(); i++) {
+			if (state.remaining_tuples[i] > 0) {
+				idx_t normalized = std::round(state.remaining_tuples[i] /
+				                              (double)remaining_tuples_sum_after_normalization * input.size());
+				state.remaining_tuples_diff[i] -= normalized - state.remaining_tuples[i];
+				state.remaining_tuples[i] = normalized;
+				control_sum += normalized;
+
+				if (normalized > max_normalized) {
+					max_normalized = normalized;
+					max_normalized_idx = i;
+				}
+			}
+		}
+		if (control_sum != input.size()) {
+			state.remaining_tuples[max_normalized_idx] -= control_sum - (int)input.size();
+			control_sum -= control_sum - (int)input.size();
+		}
+		D_ASSERT(control_sum == input.size());
 	}
 
 	return RouteDynamic(context, input, chunk, state);

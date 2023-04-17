@@ -28,16 +28,16 @@ do
   for strategy in "${static_routing_strategies[@]}"
   do
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
-    mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/job/"${strategy}"
-    mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/job/"${strategy}"
+    mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/job
+    mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/job
 
     ../build/release/benchmark/benchmark_runner "benchmark/tpch/sf1/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
-    mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/tpch/"${strategy}"
-    mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/tpch/"${strategy}"
+    mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/tpch
+    mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/tpch
 
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
-    mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/ssb/"${strategy}"
-    mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/ssb/"${strategy}"
+    mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/ssb
+    mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/ssb
   done
 
   for strategy in "${adaptive_routing_strategies[@]}"

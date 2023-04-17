@@ -102,7 +102,7 @@ statement ok
 SET threads TO 1
 
 statement ok
-SET multiplexer_routing TO alternate
+SET multiplexer_routing TO dynamic
 
 # q1.1
 statement ok
