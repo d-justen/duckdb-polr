@@ -1,4 +1,5 @@
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include "duckdb/parallel/pipeline.hpp"
 
@@ -196,7 +197,10 @@ void Pipeline::Finalize(Event &event) {
 
 			std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 			std::ofstream file;
-			file.open("./experiments/" + filename + "-pipeline-duration.csv");
+
+			auto source_str = source->ParamsToString();
+			auto source_hash = std::hash<string> {}(source_str);
+			file.open("./experiments/" + filename + "-" + to_string(source_hash) + ".csv");
 
 			double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
 			file << duration_ms;
@@ -237,8 +241,108 @@ vector<PhysicalOperator *> Pipeline::GetOperators() const {
 	return result;
 }
 
+void GeneratePathsRecursive(unordered_map<idx_t, vector<idx_t>> &join_prerequisites, vector<vector<idx_t>> &result,
+                            vector<idx_t> join_seq, vector<idx_t> joins_left) {
+	for (idx_t i = 0; i < joins_left.size(); i++) {
+		const idx_t join_idx = joins_left[i];
+		// If prerequisites are met
+		bool prereqs_met = true;
+		for (const auto prereq : join_prerequisites[join_idx]) {
+			auto prereq_found = std::find(join_seq.begin(), join_seq.end(), prereq);
+			if (prereq_found == join_seq.end()) {
+				prereqs_met = false;
+				break;
+			}
+		}
+
+		if (!prereqs_met) {
+			continue;
+		}
+
+		vector<idx_t> join_seq_new(join_seq.begin(), join_seq.end());
+		join_seq_new.push_back(join_idx);
+		vector<idx_t> joins_left_new(joins_left.begin(), joins_left.end());
+		joins_left_new.erase(joins_left_new.begin() + i);
+
+		if (joins_left_new.empty()) {
+			result.push_back(join_seq_new);
+		} else {
+			GeneratePathsRecursive(join_prerequisites, result, move(join_seq_new), move(joins_left_new));
+		}
+	}
+}
+
+void Pipeline::EnumerateJoinPaths() {
+	if (operators.empty()) {
+		return;
+	}
+
+	// Step I: Go through operators, save pointers to Joins (not only HJs?) in vector
+	vector<PhysicalHashJoin *> hash_joins;
+	for (const auto op : operators) {
+		if (op->type == PhysicalOperatorType::HASH_JOIN) {
+			hash_joins.push_back((PhysicalHashJoin *)op);
+		}
+	}
+
+	if (hash_joins.size() <= 1) {
+		return;
+	}
+
+	// Step II: If HJ-count > 1: Iterate through vector and build map of idx_t -> vector<idx_t>
+	vector<idx_t> column_counts;
+	column_counts.reserve(hash_joins.size() + 1);
+	column_counts.push_back(hash_joins.front()->children[0]->GetTypes().size());
+
+	unordered_map<idx_t, vector<idx_t>> join_prerequisites;
+	for (idx_t i = 0; i < hash_joins.size(); i++) {
+		join_prerequisites[i] = vector<idx_t>();
+	}
+
+	for (idx_t i = 0; i < hash_joins.size(); i++) {
+		auto join = hash_joins[i];
+		idx_t num_columns_from_right =
+		    join->right_projection_map.empty() ? join->children[1]->types.size() : join->right_projection_map.size();
+		column_counts.push_back(column_counts.back() + num_columns_from_right);
+
+		for (idx_t j = 0; j < join->conditions.size(); j++) {
+			auto &condition = join->conditions[j];
+			auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*condition.left);
+
+			if (left_bound_expression.index >= column_counts.front()) {
+				for (idx_t k = 1; k < column_counts.size(); k++) {
+					if (column_counts[k] > left_bound_expression.index) {
+						join_prerequisites[i].push_back(k - 1);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	// Step III: Find all possible join order permutations
+	join_paths.reserve(std::pow(2, hash_joins.size() - 1));
+
+	vector<idx_t> joins_left;
+	joins_left.reserve(hash_joins.size());
+	for (idx_t i = 0; i < hash_joins.size(); i++) {
+		joins_left.push_back(i);
+	}
+
+	GeneratePathsRecursive(join_prerequisites, join_paths, vector<idx_t>(), joins_left);
+}
+
 void Pipeline::BuildPOLRPaths() {
 	if (operators.empty()) {
+		return;
+	}
+
+	EnumerateJoinPaths();
+	if (join_paths.size() >= 2) {
+		is_polr_pipeline = true;
+	}
+
+	if (!is_polr_pipeline || !executor.context.config.enable_polr) {
 		return;
 	}
 
@@ -254,137 +358,102 @@ void Pipeline::BuildPOLRPaths() {
 		}
 	}
 
-	if (!hash_join_idxs.empty() && ((PhysicalHashJoin &)*(operators[hash_join_idxs.front()])).is_polr_root_join &&
-	    hash_join_idxs.size() == executor.context.path_length - 1) {
-		is_polr_pipeline = true;
+	vector<idx_t> num_columns_per_join;
+	num_columns_per_join.reserve(hash_join_idxs.size());
 
-		if (!executor.context.polr_paths) {
-			return;
-		}
+	for (auto hash_join_idx : hash_join_idxs) {
+		joins.push_back(static_cast<PhysicalHashJoin *>(operators[hash_join_idx]));
+		num_columns_per_join.push_back(joins.back()->types.size());
+	}
 
-		auto &initial_join_path = executor.context.polr_paths->at(0);
-		D_ASSERT(hash_join_idxs.size() == initial_join_path.size() - 1);
+	// Remove joins from operator vector
+	operators.erase(operators.begin() + hash_join_idxs.front(),
+	                operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
 
-		map<idx_t, idx_t> join_order_mapping;
+	auto prev_types = joins.front()->children[0]->GetTypes();
+	double regret_budget = DBConfig::GetConfig(executor.context).options.regret_budget;
+	auto routing = DBConfig::GetConfig(executor.context).options.multiplexer_routing;
+	multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
+	                                               join_paths.size(), regret_budget, routing);
+	multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
+	multiplexer_idx = hash_join_idxs.front();
+	operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
 
-		for (idx_t i = 1; i < initial_join_path.size(); i++) {
-			join_order_mapping[initial_join_path[i]] = i - 1;
-		}
+	adaptive_union =
+	    make_unique<PhysicalAdaptiveUnion>(joins.back()->types, multiplexer->types.size(), move(num_columns_per_join),
+	                                       joins.back()->estimated_cardinality);
+	adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
-		join_paths.reserve(executor.context.polr_paths->size());
+	// Depending on the join order, the join conditions may have to use different columns idxs for probing.
+	// Here we build a map that the pipeline executor can use to build JoinOperatorStates containing
+	// expressions for the different probe column idxs.
+	left_expression_bindings.reserve(join_paths.size());
 
-		// Fill join paths
-		for (auto &path : *executor.context.polr_paths) {
-			vector<idx_t> translated_join_order;
-			translated_join_order.reserve(path.size());
+	const idx_t seed_table_column_count = prev_types.size();
+	vector<idx_t> column_offsets;
+	column_offsets.reserve(joins.size() + 1);
+	column_offsets.push_back(seed_table_column_count);
 
-			for (idx_t i = 1; i < path.size(); i++) {
-				idx_t relation_idx = path[i];
-				idx_t translated_join_idx = join_order_mapping[relation_idx];
-				translated_join_order.push_back(translated_join_idx);
-			}
+	// join_idx, join_condition_idx, probe_side_join_idx, relative_column_idx
+	map<idx_t, map<idx_t, pair<idx_t, idx_t>>> relative_column_binding_map;
 
-			join_paths.push_back(translated_join_order);
-		}
+	for (idx_t i = 0; i < joins.size(); i++) {
+		auto &join = joins[i];
+		idx_t num_columns_from_right =
+		    join->right_projection_map.empty() ? join->children[1]->types.size() : join->right_projection_map.size();
+		column_offsets.push_back(column_offsets.back() + num_columns_from_right);
 
-		vector<idx_t> num_columns_per_join;
-		num_columns_per_join.reserve(hash_join_idxs.size());
+		for (idx_t j = 0; j < join->conditions.size(); j++) {
+			auto &condition = join->conditions[j];
+			auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*condition.left);
 
-		for (auto hash_join_idx : hash_join_idxs) {
-			joins.push_back(static_cast<PhysicalHashJoin *>(operators[hash_join_idx]));
-			num_columns_per_join.push_back(joins.back()->types.size());
-		}
-
-		// Remove joins from operator vector
-		operators.erase(operators.begin() + hash_join_idxs.front(),
-		                operators.begin() + hash_join_idxs.front() + hash_join_idxs.size());
-
-		auto prev_types = joins.front()->children[0]->GetTypes();
-		double regret_budget = DBConfig::GetConfig(executor.context).options.regret_budget;
-		auto routing = DBConfig::GetConfig(executor.context).options.multiplexer_routing;
-		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
-		                                               join_paths.size(), regret_budget, routing);
-		multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
-		multiplexer_idx = hash_join_idxs.front();
-		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
-
-		adaptive_union =
-		    make_unique<PhysicalAdaptiveUnion>(joins.back()->types, multiplexer->types.size(),
-		                                       move(num_columns_per_join), joins.back()->estimated_cardinality);
-		adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
-
-		// Depending on the join order, the join conditions may have to use different columns idxs for probing.
-		// Here we build a map that the pipeline executor can use to build JoinOperatorStates containing
-		// expressions for the different probe column idxs.
-		left_expression_bindings.reserve(join_paths.size());
-
-		const idx_t seed_table_column_count = prev_types.size();
-		vector<idx_t> column_offsets;
-		column_offsets.reserve(joins.size() + 1);
-		column_offsets.push_back(seed_table_column_count);
-
-		// join_idx, join_condition_idx, probe_side_join_idx, relative_column_idx
-		map<idx_t, map<idx_t, pair<idx_t, idx_t>>> relative_column_binding_map;
-
-		for (idx_t i = 0; i < joins.size(); i++) {
-			auto &join = joins[i];
-			idx_t num_columns_from_right = join->right_projection_map.empty() ? join->children[1]->types.size()
-			                                                                  : join->right_projection_map.size();
-			column_offsets.push_back(column_offsets.back() + num_columns_from_right);
-
-			for (idx_t j = 0; j < join->conditions.size(); j++) {
-				auto &condition = join->conditions[j];
-				auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*condition.left);
-
-				if (left_bound_expression.index >= seed_table_column_count) {
-					for (idx_t k = 1; k < column_offsets.size(); k++) {
-						if (column_offsets[k] > left_bound_expression.index) {
-							idx_t join_idx = k - 1;
-							idx_t relative_column_idx = left_bound_expression.index - column_offsets[join_idx];
-							relative_column_binding_map[i][j] = make_pair(join_idx, relative_column_idx);
-							break;
-						}
+			if (left_bound_expression.index >= seed_table_column_count) {
+				for (idx_t k = 1; k < column_offsets.size(); k++) {
+					if (column_offsets[k] > left_bound_expression.index) {
+						idx_t join_idx = k - 1;
+						idx_t relative_column_idx = left_bound_expression.index - column_offsets[join_idx];
+						relative_column_binding_map[i][j] = make_pair(join_idx, relative_column_idx);
+						break;
 					}
 				}
 			}
 		}
+	}
 
-		for (auto &join_path : join_paths) {
-			vector<map<idx_t, idx_t>> expression_bindings(join_path.size());
-			vector<idx_t> current_join_path_column_offsets;
+	for (auto &join_path : join_paths) {
+		vector<map<idx_t, idx_t>> expression_bindings(join_path.size());
+		vector<idx_t> current_join_path_column_offsets;
 
-			current_join_path_column_offsets.reserve(join_path.size() + 1);
-			current_join_path_column_offsets.push_back(seed_table_column_count);
+		current_join_path_column_offsets.reserve(join_path.size() + 1);
+		current_join_path_column_offsets.push_back(seed_table_column_count);
 
-			for (idx_t j = 0; j < join_path.size(); j++) {
-				auto &join_idx = join_path[j];
-				auto column_bindings = relative_column_binding_map.find(join_idx);
-				if (column_bindings != relative_column_binding_map.cend()) {
-					auto &binding_map = column_bindings->second;
+		for (idx_t j = 0; j < join_path.size(); j++) {
+			auto &join_idx = join_path[j];
+			auto column_bindings = relative_column_binding_map.find(join_idx);
+			if (column_bindings != relative_column_binding_map.cend()) {
+				auto &binding_map = column_bindings->second;
 
-					for (auto &binding : binding_map) {
-						auto probe_join_idx = binding.second.first;
-						auto relative_column_idx = binding.second.second;
+				for (auto &binding : binding_map) {
+					auto probe_join_idx = binding.second.first;
+					auto relative_column_idx = binding.second.second;
 
-						for (idx_t i = 0; i < current_join_path_column_offsets.size(); i++) {
-							if (join_path[i] == probe_join_idx) {
-								idx_t probe_column_idx = current_join_path_column_offsets[i] + relative_column_idx;
-								expression_bindings[j][binding.first] = probe_column_idx;
-							}
+					for (idx_t i = 0; i < current_join_path_column_offsets.size(); i++) {
+						if (join_path[i] == probe_join_idx) {
+							idx_t probe_column_idx = current_join_path_column_offsets[i] + relative_column_idx;
+							expression_bindings[j][binding.first] = probe_column_idx;
 						}
 					}
 				}
-
-				idx_t additional_columns = joins[join_idx]->right_projection_map.empty()
-				                               ? joins[join_idx]->children[1]->types.size()
-				                               : joins[join_idx]->right_projection_map.size();
-
-				current_join_path_column_offsets.push_back(current_join_path_column_offsets.back() +
-				                                           additional_columns);
 			}
 
-			left_expression_bindings.push_back(expression_bindings);
+			idx_t additional_columns = joins[join_idx]->right_projection_map.empty()
+			                               ? joins[join_idx]->children[1]->types.size()
+			                               : joins[join_idx]->right_projection_map.size();
+
+			current_join_path_column_offsets.push_back(current_join_path_column_offsets.back() + additional_columns);
 		}
+
+		left_expression_bindings.push_back(expression_bindings);
 	}
 }
 

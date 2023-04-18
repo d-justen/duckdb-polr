@@ -98,6 +98,7 @@ public:
 
 	//! POLR related
 	void BuildPOLRPaths();
+	void EnumerateJoinPaths();
 	//! Returns whether any of the operators in the pipeline care about preserving insertion order
 	bool IsOrderDependent() const;
 

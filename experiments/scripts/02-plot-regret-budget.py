@@ -10,6 +10,8 @@ from statistics import mean
 
 query_counts = {"job": 113, "ssb": 12}
 modes = ["dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant"]
+static_routing_strategies = ["init_once", "opportunistic"]
+adaptive_routing_strategies = ["adaptive_reinit", "dynamic"]
 regret_budgets = ["0.00001", "0.0001", "0.001", "0.01", "0.1", "0.2", "0.4", "0.8", "1.6", "2.4", "3.2"]
 
 results = {}
@@ -19,7 +21,9 @@ for mode in modes:
     results[mode] = {}
 
     for benchmark_name in query_counts:
-        opt_path = os.getcwd() + "/experiment-results/02-regret-budget/" + mode + "/" + benchmark_name + "/optimum"
+        strategy = "alternate"
+
+        opt_path = os.getcwd() + "/experiment-results/02-regret-budget/" + mode + "/" + strategy + "/" + benchmark_name
         csv_files = glob.glob(os.path.join(opt_path, "*.csv"))
         csv_files.sort()
 
@@ -37,40 +41,38 @@ for mode in modes:
             duckdb_intms.append(df["path_0"].sum())
             opt_order_intms.append(df.sum().min())
 
-        routing_overheads = []
+        benchmark_result = {"optimum": sum(opt_intms), "default": sum(duckdb_intms), "optimal_order": sum(opt_order_intms)}
 
-        all_polr_intms = {}
-        for regret_budget in regret_budgets:
-            polr_intms = []
-
-            path = os.getcwd() + "/experiment-results/02-regret-budget/" + \
-                   mode + "/" + benchmark_name + "/" + regret_budget
+        for strategy in static_routing_strategies:
+            path = os.getcwd() + "/experiment-results/02-regret-budget/" + mode + "/" + strategy + "/" + benchmark_name
             txt_files = glob.glob(os.path.join(path, "*.txt"))
             txt_files.sort()
 
+            intms = []
             for txt_file in txt_files:
                 with open(txt_file) as f:
                     line = f.readline()
-                    polr_intms.append(int(line))
+                    intms.append(int(line))
 
-            all_polr_intms[regret_budget] = polr_intms
-            routing_overheads.append(sum(polr_intms) / sum(opt_intms))
+            benchmark_result[strategy] = sum(intms)
 
-        optimizer_pick = sum(duckdb_intms) / sum(opt_intms)
-        optimal_order = sum(opt_order_intms) / sum(opt_intms)
+        for strategy in adaptive_routing_strategies:
+            benchmark_result[strategy] = {}
+            for regret_budget in regret_budgets:
+                path = os.getcwd() + "/experiment-results/02-regret-budget/" + mode + "/" + strategy + "/" + \
+                       benchmark_name + "/" + regret_budget
+                txt_files = glob.glob(os.path.join(path, "*.txt"))
+                txt_files.sort()
 
-        relative_overhead_per_query = []
-        for i in range(len(duckdb_intms)):
-            if opt_intms[i] > 0:
-                relative_overhead_per_query.append(all_polr_intms["0.01"][i] / opt_intms[i])
-            else:
-                relative_overhead_per_query.append(all_polr_intms["0.01"][i] * -1)
+                intms = []
+                for txt_file in txt_files:
+                    with open(txt_file) as f:
+                        line = f.readline()
+                        intms.append(int(line))
 
-        print(mode + " " + benchmark_name + ":")
-        print(relative_overhead_per_query)
-        results[mode][benchmark_name] = {"optimizer": optimizer_pick, "polr": routing_overheads,
-                                         "optimal_order": optimal_order}
-        print(results)
+                benchmark_result[strategy][regret_budget] = sum(intms)
+
+        results[mode][benchmark_name] = benchmark_result
 
 print(results)
 

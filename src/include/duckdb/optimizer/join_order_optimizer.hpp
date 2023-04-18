@@ -101,15 +101,6 @@ private:
 	//! not time-out)
 	bool SolveJoinOrderExactly();
 
-	//! POLR
-	void FindAllLeftDeepTrees();
-	void EnumerateJoinOrders(vector<JoinRelationSet *> &joined, vector<JoinRelationSet *> &remaining);
-	void FilterLeftDeepTrees();
-	void SolveJoinOrderDPSize();
-
-	void FindLongestInnerLDT();
-	vector<JoinRelationSet *> FindLDTRecursive(JoinNode *node);
-
 	//! Solve the join order approximately using a greedy algorithm
 	void SolveJoinOrderApproximately();
 

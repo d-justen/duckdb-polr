@@ -55,12 +55,20 @@ do
       for strategy in "${routing_strategies[@]}"
       do
         ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
-        for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/job/"${query}".csv; done
+        for f in *.csv
+        do
+          SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
+          (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/job/"${query}"-"${SUFFIX}"
+        done
         rm -f *.csv
       done
 
       ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
-      for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/job/"${query}".csv; done
+      for f in *.csv
+      do
+        SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
+        (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/job/"${query}"-"${SUFFIX}"
+      done
       rm -f *.csv
     fi
   done
@@ -81,12 +89,20 @@ do
       for strategy in "${routing_strategies[@]}"
       do
         ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
-        for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/ssb/"${query}".csv; done
+        for f in *.csv
+        do
+          SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
+          (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/"${strategy}"/ssb/"${query}"-"${SUFFIX}"
+        done
         rm -f *.csv
       done
 
       ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
-      for f in *.csv; do (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/ssb/"${query}".csv; done
+      for f in *.csv
+      do
+        SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
+        (cat "${f}"; echo) >> experiment-results/03-pipeline-performance/"${optimizer_mode}"/std/ssb/"${query}"-"${SUFFIX}"
+      done
       rm -f *.csv
     fi
   done

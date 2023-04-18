@@ -51,6 +51,10 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 					auto state = join->GetOperatorStateWithBindings(context, bindings);
 
 					states.push_back(move(state));
+
+					if (join->sink_state->state == SinkFinalizeType::NO_OUTPUT_POSSIBLE) {
+						FinishProcessing();
+					}
 				}
 				join_intermediate_states.push_back(move(states));
 			}

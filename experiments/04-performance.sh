@@ -43,7 +43,7 @@ do
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1
     if compgen -G *.csv > /dev/null; then
       rm -f *.{csv,txt}
-      ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget="${REGRET_BUDGET}" --out=experiments/"${query}".csv --optimizer_mode="${optimizer_mode}"
+      ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget="${REGRET_BUDGET}" --out=experiments/"${query}".csv --optimizer_mode="${optimizer_mode}" --multiplexer_routing=adaptive_reinit
       mv "${query}".csv experiment-results/04-performance/"${optimizer_mode}"/job/polr
       ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=8 --nruns=20 --out=experiments/"${query}".csv
       mv "${query}".csv experiment-results/04-performance/"${optimizer_mode}"/job/std
@@ -59,7 +59,7 @@ do
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1
     if compgen -G *.csv > /dev/null; then
       rm -f *.{csv,txt}
-      ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget="${REGRET_BUDGET}" --out=experiments/"${query}".csv --optimizer_mode="${optimizer_mode}"
+      ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=8 --nruns=20 --regret_budget="${REGRET_BUDGET}" --out=experiments/"${query}".csv --optimizer_mode="${optimizer_mode}" --multiplexer_routing=adaptive_reinit
       mv "${query}".csv experiment-results/04-performance/"${optimizer_mode}"/ssb/polr
       ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=8 --nruns=20 --out=experiments/"${query}".csv
       mv "${query}".csv experiment-results/04-performance/"${optimizer_mode}"/ssb/std
