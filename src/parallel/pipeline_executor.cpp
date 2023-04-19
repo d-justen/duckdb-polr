@@ -54,6 +54,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 
 					if (join->sink_state->state == SinkFinalizeType::NO_OUTPUT_POSSIBLE) {
 						FinishProcessing();
+						pipeline.executor.context.config.log_tuples_routed = false;
+						pipeline.executor.context.config.measure_polr_pipeline = false;
 					}
 				}
 				join_intermediate_states.push_back(move(states));

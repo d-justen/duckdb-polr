@@ -37,6 +37,12 @@ for mode in modes:
             # Cleaning
             df.pop(df.columns[-1])
 
+            if not "path_0" in df.columns:
+                opt_intms.append(0)
+                duckdb_intms.append(0)
+                opt_intms.append(0)
+                continue
+
             opt_intms.append(df.min(axis=1).sum())
             duckdb_intms.append(df["path_0"].sum())
             opt_order_intms.append(df.sum().min())
@@ -52,6 +58,9 @@ for mode in modes:
             for txt_file in txt_files:
                 with open(txt_file) as f:
                     line = f.readline()
+                    if line == "":
+                        intms.append(0)
+                        continue
                     intms.append(int(line))
 
             benchmark_result[strategy] = sum(intms)
@@ -68,6 +77,9 @@ for mode in modes:
                 for txt_file in txt_files:
                     with open(txt_file) as f:
                         line = f.readline()
+                        if line == "":
+                            intms.append(0)
+                            continue
                         intms.append(int(line))
 
                 benchmark_result[strategy][regret_budget] = sum(intms)
@@ -76,65 +88,24 @@ for mode in modes:
 
 print(results)
 
-min_optimizer_overhead_job = results[modes[0]]["job"]["optimizer"]
-min_optimizer_overhead_ssb = results[modes[0]]["ssb"]["optimizer"]
-min_optimal_overhead_job = results[modes[0]]["job"]["optimal_order"]
-min_optimal_overhead_ssb = results[modes[0]]["ssb"]["optimal_order"]
-
-for mode in modes:
-    if results[mode]["job"]["optimizer"] < min_optimizer_overhead_job:
-        min_optimizer_overhead_job = results[mode]["job"]["optimizer"]
-    if results[mode]["ssb"]["optimizer"] < min_optimizer_overhead_ssb:
-        min_optimizer_overhead_ssb = results[mode]["ssb"]["optimizer"]
-    if results[mode]["job"]["optimal_order"] < min_optimal_overhead_job:
-        min_optimal_overhead_job = results[mode]["job"]["optimal_order"]
-    if results[mode]["ssb"]["optimal_order"] < min_optimal_overhead_ssb:
-        min_optimal_overhead_ssb = results[mode]["ssb"]["optimal_order"]
-
 x_values = []
-baseline = []
 for regret_budget in regret_budgets:
     x_values.append(float(regret_budget.replace("-", ".")))
-    baseline.append(1)
 
-optimizer_baseline_job = [min_optimizer_overhead_job] * len(baseline)
-optimizer_baseline_ssb = [min_optimizer_overhead_ssb] * len(baseline)
-optimal_order_baseline_job = [min_optimal_overhead_job] * len(baseline)
-optimal_order_baseline_ssb = [min_optimal_overhead_ssb] * len(baseline)
-
-fig, ax = plt.subplots(2, 1)
-
-ax[0].plot(x_values, baseline, "-.")
-ax[0].plot(x_values, results["dphyp-equisets"]["job"]["polr"])
-ax[0].plot(x_values, results["dphyp-constant"]["job"]["polr"])
-ax[0].plot(x_values, results["greedy-equisets"]["job"]["polr"])
-ax[0].plot(x_values, results["greedy-constant"]["job"]["polr"])
-ax[0].plot(x_values, optimizer_baseline_job, "-.")
-ax[0].plot(x_values, optimal_order_baseline_job, "-.")
-ax[0].set_xlabel("Regret budget")
-ax[0].set_ylabel("Intermediate overhead")
-ax[0].set_xscale("log")
-ax[0].yaxis.set_major_formatter(mtick.PercentFormatter(1.0, decimals=0))
-ax[0].set_title("Join order benchmark")
-box0 = ax[0].get_position()
-ax[0].set_position([box0.x0, box0.y0 + 0.05, box0.width * 0.75, box0.height])
-
-ax[1].plot(x_values, baseline, "-.")
-ax[1].plot(x_values, results["dphyp-equisets"]["ssb"]["polr"])
-ax[1].plot(x_values, results["dphyp-constant"]["ssb"]["polr"])
-ax[1].plot(x_values, results["greedy-equisets"]["ssb"]["polr"])
-ax[1].plot(x_values, results["greedy-constant"]["ssb"]["polr"])
-ax[1].plot(x_values, optimizer_baseline_ssb, "-.")
-ax[1].plot(x_values, optimal_order_baseline_ssb, "-.")
-ax[1].set_xlabel("Regret budget")
-ax[1].set_ylabel("Intermediate overhead")
-ax[1].set_xscale("log")
-ax[1].yaxis.set_major_formatter(mtick.PercentFormatter(1.0, decimals=0))
-ax[1].set_title("Star-schema benchmark")
-box1 = ax[1].get_position()
-ax[1].set_position([box1.x0, box1.y0 - 0.05, box1.width * 0.75, box1.height])
-
-ax[0].legend(["optimal switches", "dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant",
-               "POLAR disabled", "optimal join order"], loc="center left", bbox_to_anchor=(1, 0.5))
-# plt.tight_layout()
-plt.savefig("experiment-results/02-regret-budget.pdf")
+for mode in modes:
+    for benchmark_name in query_counts:
+        result = results[mode][benchmark_name]
+        plt.plot(x_values, [result["optimum"]] * len(regret_budgets), "-.")
+        plt.plot(x_values, [result["optimal_order"]] * len(regret_budgets), "-.")
+        plt.plot(x_values, [result["default"]] * len(regret_budgets), "-.")
+        plt.plot(x_values, [result["init_once"]] * len(regret_budgets))
+        plt.plot(x_values, [result["opportunistic"]] * len(regret_budgets))
+        plt.plot(x_values, list(result["adaptive_reinit"].values()))
+        plt.plot(x_values, list(result["dynamic"].values()))
+        plt.xscale("log")
+        plt.xlabel("Regret Budget")
+        plt.ylabel("Intermediate count")
+        plt.legend(["opt", "opt_order", "def_order", "init_once", "opportunistic", "adaptive_reinit", "dynamic"])
+        plt.tight_layout()
+        plt.savefig("experiment-results/02-regret-budget-" + mode + "-" + benchmark_name + ".pdf")
+        plt.clf()

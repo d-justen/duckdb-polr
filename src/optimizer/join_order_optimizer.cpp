@@ -252,7 +252,9 @@ unique_ptr<JoinNode> JoinOrderOptimizer::CreateJoinTree(JoinRelationSet *set,
 	// if we have already calculated an expected cardinality for this set,
 	// just re-use that cardinality
 	if (left->GetCardinality() < right->GetCardinality()) {
-		return CreateJoinTree(set, possible_connections, right, left);
+		if (!context.config.greedy_ordering_ldt || set->count == 2) {
+			return CreateJoinTree(set, possible_connections, right, left);
+		}
 	}
 	if (plan != plans.end()) {
 		if (!plan->second) {
@@ -487,33 +489,6 @@ bool JoinOrderOptimizer::SolveJoinOrderExactly() {
 	return true;
 }
 
-vector<unordered_set<idx_t>> subsets(idx_t size, idx_t k) {
-	vector<idx_t> input(size);
-	for (idx_t i = 0; i < size; i++) {
-		input[i] = i;
-	}
-
-	size_t n = input.size();
-
-	vector<unordered_set<idx_t>> result;
-
-	size_t i = (1 << k) - 1;
-
-	while (!(i >> n)) {
-		unordered_set<idx_t> v;
-
-		for (size_t j = 0; j < n; j++)
-			if (i & (1 << j))
-				v.insert(input[j]);
-
-		result.push_back(v);
-
-		i = (i + (i & (-i))) | (((i ^ (i + (i & (-i)))) >> 2) / (i & (-i)));
-	}
-
-	return result;
-}
-
 static vector<unordered_set<idx_t>> AddSuperSets(vector<unordered_set<idx_t>> current,
                                                  const vector<idx_t> &all_neighbors) {
 	vector<unordered_set<idx_t>> ret;
@@ -697,9 +672,49 @@ void JoinOrderOptimizer::SolveJoinOrderApproximately() {
 	}
 }
 
+void JoinOrderOptimizer::SolveJoinOrderApproximatelyLDT() {
+	for (idx_t i = 0; i < relations.size(); i++) {
+		JoinRelationSet *left = set_manager.GetJoinRelation(i);
+
+		vector<JoinRelationSet *> remaining_relations;
+		for (idx_t j = 0; j < relations.size(); j++) {
+			if (j != i) {
+				remaining_relations.push_back(set_manager.GetJoinRelation(j));
+			}
+		}
+
+		while (!remaining_relations.empty()) {
+			JoinNode *best_connection = nullptr;
+			idx_t best_join_partner_idx;
+
+			for (idx_t j = 0; j < remaining_relations.size(); j++) {
+				auto *right = remaining_relations[j];
+				auto connections = query_graph.GetConnections(left, right);
+
+				if (!connections.empty()) {
+					auto *join_node = EmitPair(left, right, connections);
+
+					if (!best_connection || join_node->GetCost() < best_connection->GetCost()) {
+						best_connection = join_node;
+						best_join_partner_idx = j;
+					}
+				}
+			}
+
+			if (!best_connection) {
+				break;
+			}
+
+			left = best_connection->set;
+			remaining_relations.erase(remaining_relations.begin() + best_join_partner_idx);
+		}
+	}
+}
+
 void JoinOrderOptimizer::SolveJoinOrder() {
-	// first try to solve the join order exactly
-	if (context.config.greedy_ordering) {
+	if (context.config.greedy_ordering_ldt) {
+		SolveJoinOrderApproximatelyLDT();
+	} else if (context.config.greedy_ordering) {
 		SolveJoinOrderApproximately();
 	} else if (!SolveJoinOrderExactly()) {
 		// otherwise, if that times out we resort to a greedy algorithm

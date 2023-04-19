@@ -187,6 +187,14 @@ static void PragmaDisableMeasurePipeline(ClientContext &context, const FunctionP
 	ClientConfig::GetConfig(context).measure_polr_pipeline = false;
 }
 
+static void PragmaEnableGreedyOrderingLDT(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering_ldt = true;
+}
+
+static void PragmaDisableGreedyOrderingLDT(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering_ldt = false;
+}
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -248,6 +256,9 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_measure_pipeline", PragmaEnableMeasurePipeline));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_measure_pipeline", PragmaDisableMeasurePipeline));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_greedy_ordering_ldt", PragmaEnableGreedyOrderingLDT));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_greedy_ordering_ldt", PragmaDisableGreedyOrderingLDT));
 }
 
 } // namespace duckdb

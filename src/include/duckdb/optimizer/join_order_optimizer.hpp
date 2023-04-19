@@ -104,6 +104,8 @@ private:
 	//! Solve the join order approximately using a greedy algorithm
 	void SolveJoinOrderApproximately();
 
+	void SolveJoinOrderApproximatelyLDT();
+
 	void UpdateDPTree(JoinNode *new_plan);
 
 	void UpdateJoinNodesInFullPlan(JoinNode *node);

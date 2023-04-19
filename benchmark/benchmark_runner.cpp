@@ -295,7 +295,8 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				exit(1);
 			}
 			if (splits[1] == "dphyp-equisets" || splits[1] == "dphyp-constant" || splits[1] == "greedy-equisets" ||
-			    splits[1] == "greedy-constant") {
+			    splits[1] == "greedy-constant" || splits[1] == "greedy-equisets-ldt" ||
+			    splits[1] == "greedy-constant-ldt") {
 				instance.optimizer_mode = splits[1];
 			} else {
 				print_help();

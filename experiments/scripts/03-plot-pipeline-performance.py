@@ -60,7 +60,7 @@ for mode in modes:
         print("\n### " + mode + " " + benchmark_name + " ###")
         winners_per_query = {"dynamic": 0, "adaptive_reinit": 0, "init_once": 0, "opportunistic": 0, "std": 0, "same": 0}
         for i in range(len(results[mode]["std"][benchmark_name])):
-            min_duration = 1000
+            min_duration = 10000000
             winner = ""
 
             for strategy in routing_strategies:
@@ -69,7 +69,7 @@ for mode in modes:
                     winner = strategy
 
             if winner == "std":
-                min_duration_2 = 1000
+                min_duration_2 = 10000000
                 winner_2 = ""
 
                 for strategy in routing_strategies:
