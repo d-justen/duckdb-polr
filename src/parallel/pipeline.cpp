@@ -278,36 +278,55 @@ void Pipeline::EnumerateJoinPaths() {
 	}
 
 	// Step I: Go through operators, save pointers to Joins (not only HJs?) in vector
-	vector<PhysicalHashJoin *> hash_joins;
-	for (const auto op : operators) {
-		if (op->type == PhysicalOperatorType::HASH_JOIN) {
-			hash_joins.push_back((PhysicalHashJoin *)op);
+	// TODO: Make accessible to whole class
+	vector<idx_t> hash_join_idxs;
+	for (idx_t i = 0; i < operators.size(); i++) {
+		if (operators[i]->type == PhysicalOperatorType::HASH_JOIN) {
+			// We only want joins that directly follow each other
+			if (hash_join_idxs.empty() || hash_join_idxs.back() == i - 1) {
+				// TODO: Does not work for mark joins, but what about left outer, right outer etc
+				if (((PhysicalHashJoin*) operators[i])->join_type == JoinType::INNER) {
+					hash_join_idxs.push_back(i);
+				}
+			} else {
+				break;
+			}
 		}
 	}
 
-	if (hash_joins.size() <= 1) {
+	if (hash_join_idxs.size() <= 1) {
 		return;
 	}
 
 	// Step II: If HJ-count > 1: Iterate through vector and build map of idx_t -> vector<idx_t>
 	vector<idx_t> column_counts;
-	column_counts.reserve(hash_joins.size() + 1);
-	column_counts.push_back(hash_joins.front()->children[0]->GetTypes().size());
+	column_counts.reserve(hash_join_idxs.size() + 1);
+	column_counts.push_back(operators[hash_join_idxs.front()]->children[0]->GetTypes().size());
 
 	unordered_map<idx_t, vector<idx_t>> join_prerequisites;
-	for (idx_t i = 0; i < hash_joins.size(); i++) {
+	for (idx_t i = 0; i < hash_join_idxs.size(); i++) {
 		join_prerequisites[i] = vector<idx_t>();
 	}
 
-	for (idx_t i = 0; i < hash_joins.size(); i++) {
-		auto join = hash_joins[i];
+	for (idx_t i = 0; i < hash_join_idxs.size(); i++) {
+		auto join = (PhysicalHashJoin*)operators[hash_join_idxs[i]];
 		idx_t num_columns_from_right =
 		    join->right_projection_map.empty() ? join->children[1]->types.size() : join->right_projection_map.size();
 		column_counts.push_back(column_counts.back() + num_columns_from_right);
 
 		for (idx_t j = 0; j < join->conditions.size(); j++) {
 			auto &condition = join->conditions[j];
-			auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*condition.left);
+			auto* left_expr = &*condition.left;
+			if (left_expr->type != ExpressionType::BOUND_REF) {
+				if (left_expr->type != ExpressionType::CAST) {
+					// Let's not POLAR, weird stuff going on
+					return;
+				}
+				auto &cast_expression = dynamic_cast<BoundCastExpression &>(*left_expr);
+				left_expr = &*cast_expression.child;
+			}
+
+			auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*left_expr);
 
 			if (left_bound_expression.index >= column_counts.front()) {
 				for (idx_t k = 1; k < column_counts.size(); k++) {
@@ -321,11 +340,11 @@ void Pipeline::EnumerateJoinPaths() {
 	}
 
 	// Step III: Find all possible join order permutations
-	join_paths.reserve(std::pow(2, hash_joins.size() - 1));
+	join_paths.reserve(std::pow(2, hash_join_idxs.size() - 1));
 
 	vector<idx_t> joins_left;
-	joins_left.reserve(hash_joins.size());
-	for (idx_t i = 0; i < hash_joins.size(); i++) {
+	joins_left.reserve(hash_join_idxs.size());
+	for (idx_t i = 0; i < hash_join_idxs.size(); i++) {
 		joins_left.push_back(i);
 	}
 
@@ -351,7 +370,9 @@ void Pipeline::BuildPOLRPaths() {
 		if (operators[i]->type == PhysicalOperatorType::HASH_JOIN) {
 			// We only want joins that directly follow each other
 			if (hash_join_idxs.empty() || hash_join_idxs.back() == i - 1) {
-				hash_join_idxs.push_back(i);
+				if (((PhysicalHashJoin*) operators[i])->join_type == JoinType::INNER) {
+					hash_join_idxs.push_back(i);
+				}
 			} else {
 				break;
 			}
@@ -405,7 +426,13 @@ void Pipeline::BuildPOLRPaths() {
 
 		for (idx_t j = 0; j < join->conditions.size(); j++) {
 			auto &condition = join->conditions[j];
-			auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*condition.left);
+			auto* left_expr = &*condition.left;
+			if (left_expr->type != ExpressionType::BOUND_REF) {
+				auto &cast_expression = dynamic_cast<BoundCastExpression &>(*left_expr);
+				left_expr = &*cast_expression.child;
+			}
+
+			auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*left_expr);
 
 			if (left_bound_expression.index >= seed_table_column_count) {
 				for (idx_t k = 1; k < column_offsets.size(); k++) {
@@ -428,7 +455,7 @@ void Pipeline::BuildPOLRPaths() {
 		current_join_path_column_offsets.push_back(seed_table_column_count);
 
 		for (idx_t j = 0; j < join_path.size(); j++) {
-			auto &join_idx = join_path[j];
+			auto join_idx = join_path[j];
 			auto column_bindings = relative_column_binding_map.find(join_idx);
 			if (column_bindings != relative_column_binding_map.cend()) {
 				auto &binding_map = column_bindings->second;

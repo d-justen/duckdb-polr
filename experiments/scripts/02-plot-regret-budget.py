@@ -26,6 +26,7 @@ for mode in modes:
         opt_path = os.getcwd() + "/experiment-results/02-regret-budget/" + mode + "/" + strategy + "/" + benchmark_name
         csv_files = glob.glob(os.path.join(opt_path, "*.csv"))
         csv_files.sort()
+        print("Opt files: " + str(len(csv_files)))
 
         opt_intms = []
         duckdb_intms = []
@@ -72,6 +73,7 @@ for mode in modes:
                        benchmark_name + "/" + regret_budget
                 txt_files = glob.glob(os.path.join(path, "*.txt"))
                 txt_files.sort()
+                print(strategy + regret_budget + " files: " + str(len(txt_files)))
 
                 intms = []
                 for txt_file in txt_files:
@@ -83,6 +85,11 @@ for mode in modes:
                         intms.append(int(line))
 
                 benchmark_result[strategy][regret_budget] = sum(intms)
+
+                if regret_budget == "0.0001" or regret_budget == "0.001":
+                    if strategy == "adaptive_reinit":
+                        for i in range(len(intms)):
+                            print(str(i) + " -- opt: " + str(opt_intms[i]) + " -- adre: " + str(intms[i]))
 
         results[mode][benchmark_name] = benchmark_result
 

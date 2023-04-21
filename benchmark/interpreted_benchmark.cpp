@@ -522,7 +522,7 @@ string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
 	}
 	auto &state = (InterpretedBenchmarkState &)*state_p;
 	if (state.result->HasError()) {
-		return state.result->GetError();
+		return "Result has error: " + state.result->GetError();
 	}
 	if (!result_query.empty()) {
 		// we are running a result query
@@ -555,7 +555,7 @@ string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
 		// finally run the result query and verify the result of that query
 		new_result = state.con.Query(result_query);
 		if (new_result->HasError()) {
-			return new_result->GetError();
+			return "Result query: " + new_result->GetError();
 		}
 		return VerifyInternal(state_p, *new_result);
 	} else {

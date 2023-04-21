@@ -13,7 +13,7 @@ results = {}
 for mode in modes:
     results[mode] = {}
     for benchmark_name in query_counts:
-        path = os.getcwd() + "/experiment-results/03-performance/" + mode + "/" + benchmark_name
+        path = os.getcwd() + "/experiment-results/04-performance/" + mode + "/" + benchmark_name
 
         polr_durations = glob.glob(os.path.join(path + "/polr", "*.csv"))
         polr_durations.sort()
@@ -23,6 +23,9 @@ for mode in modes:
         for file in polr_durations:
             benchmark_id = file.split("/")[-1].split(".")[0]
             df = pd.read_csv(file, names=["name", "run", "timing"])
+            print(df)
+            if df.empty:
+                print(file)
             polr_results.append(float(df.groupby("name").mean()["timing"]))
 
         std_files = glob.glob(os.path.join(path + "/std", "*.csv"))
@@ -36,6 +39,8 @@ for mode in modes:
             std_results.append(float(df.groupby("name").mean()["timing"]))
 
         results[mode][benchmark_name] = {"polr": polr_results, "std": std_results}
+
+print(results)
 
 result_str = ""
 
