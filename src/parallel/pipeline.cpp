@@ -53,7 +53,9 @@ public:
 };
 
 Pipeline::Pipeline(Executor &executor_p)
-    : executor(executor_p), ready(false), initialized(false), source(nullptr), sink(nullptr) {
+    : executor(executor_p), ready(false), initialized(false), source(nullptr),
+      measure_polr_pipeline(executor.context.config.measure_polr_pipeline),
+      log_tuples_routed(executor.context.config.log_tuples_routed), sink(nullptr) {
 }
 
 ClientContext &Pipeline::GetClientContext() {
@@ -178,7 +180,7 @@ void Pipeline::Ready() {
 	std::reverse(operators.begin(), operators.end());
 	Reset(); // TODO: Why do we have to reset here?
 
-	if (executor.context.config.enable_polr || executor.context.config.measure_polr_pipeline) {
+	if (executor.context.config.enable_polr || measure_polr_pipeline) {
 		BuildPOLRPaths();
 	}
 }
@@ -192,7 +194,7 @@ void Pipeline::Finalize(Event &event) {
 		auto sink_state = sink->Finalize(*this, event, executor.context, *sink->sink_state);
 		sink->sink_state->state = sink_state;
 
-		if (is_polr_pipeline && executor.context.config.measure_polr_pipeline) {
+		if (is_polr_pipeline && measure_polr_pipeline) {
 			auto end = std::chrono::system_clock::now();
 
 			std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -285,7 +287,7 @@ void Pipeline::EnumerateJoinPaths() {
 			// We only want joins that directly follow each other
 			if (hash_join_idxs.empty() || hash_join_idxs.back() == i - 1) {
 				// TODO: Does not work for mark joins, but what about left outer, right outer etc
-				if (((PhysicalHashJoin*) operators[i])->join_type == JoinType::INNER) {
+				if (((PhysicalHashJoin *)operators[i])->join_type == JoinType::INNER) {
 					hash_join_idxs.push_back(i);
 				}
 			} else {
@@ -309,14 +311,14 @@ void Pipeline::EnumerateJoinPaths() {
 	}
 
 	for (idx_t i = 0; i < hash_join_idxs.size(); i++) {
-		auto join = (PhysicalHashJoin*)operators[hash_join_idxs[i]];
+		auto join = (PhysicalHashJoin *)operators[hash_join_idxs[i]];
 		idx_t num_columns_from_right =
 		    join->right_projection_map.empty() ? join->children[1]->types.size() : join->right_projection_map.size();
 		column_counts.push_back(column_counts.back() + num_columns_from_right);
 
 		for (idx_t j = 0; j < join->conditions.size(); j++) {
 			auto &condition = join->conditions[j];
-			auto* left_expr = &*condition.left;
+			auto *left_expr = &*condition.left;
 			if (left_expr->type != ExpressionType::BOUND_REF) {
 				if (left_expr->type != ExpressionType::CAST) {
 					// Let's not POLAR, weird stuff going on
@@ -370,7 +372,7 @@ void Pipeline::BuildPOLRPaths() {
 		if (operators[i]->type == PhysicalOperatorType::HASH_JOIN) {
 			// We only want joins that directly follow each other
 			if (hash_join_idxs.empty() || hash_join_idxs.back() == i - 1) {
-				if (((PhysicalHashJoin*) operators[i])->join_type == JoinType::INNER) {
+				if (((PhysicalHashJoin *)operators[i])->join_type == JoinType::INNER) {
 					hash_join_idxs.push_back(i);
 				}
 			} else {
@@ -426,7 +428,7 @@ void Pipeline::BuildPOLRPaths() {
 
 		for (idx_t j = 0; j < join->conditions.size(); j++) {
 			auto &condition = join->conditions[j];
-			auto* left_expr = &*condition.left;
+			auto *left_expr = &*condition.left;
 			if (left_expr->type != ExpressionType::BOUND_REF) {
 				auto &cast_expression = dynamic_cast<BoundCastExpression &>(*left_expr);
 				left_expr = &*cast_expression.child;

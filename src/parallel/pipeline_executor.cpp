@@ -54,8 +54,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 
 					if (join->sink_state->state == SinkFinalizeType::NO_OUTPUT_POSSIBLE) {
 						FinishProcessing();
-						pipeline.executor.context.config.log_tuples_routed = false;
-						pipeline.executor.context.config.measure_polr_pipeline = false;
+						pipeline.log_tuples_routed = false;
+						pipeline.measure_polr_pipeline = false;
 					}
 				}
 				join_intermediate_states.push_back(move(states));
@@ -145,7 +145,7 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 	}
 	PushFinalize();
 
-	if (pipeline.multiplexer && pipeline.executor.context.config.log_tuples_routed) {
+	if (pipeline.multiplexer && pipeline.log_tuples_routed && num_intermediates_produced > 0) {
 		pipeline.multiplexer->PrintStatistics(*multiplexer_state);
 		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;

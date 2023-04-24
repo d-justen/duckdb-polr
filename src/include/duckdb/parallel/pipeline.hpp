@@ -120,6 +120,8 @@ private:
 	std::unique_ptr<PhysicalMultiplexer> multiplexer;
 	std::unique_ptr<PhysicalAdaptiveUnion> adaptive_union;
 	bool is_polr_pipeline = false;
+	bool measure_polr_pipeline = false;
+	bool log_tuples_routed = false;
 	std::chrono::system_clock::time_point begin;
 
 	//! The sink (i.e. destination) for data; this is e.g. a hash table to-be-built
