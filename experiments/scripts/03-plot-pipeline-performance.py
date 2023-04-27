@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import glob
 from statistics import mean
-import numpy as np
+import matplotlib.pyplot as plt
 
 query_counts = {"job": 113, "ssb": 12}
 modes = ["dphyp-equisets", "dphyp-constant", "greedy-equisets", "greedy-constant"]
@@ -33,8 +33,6 @@ for mode in modes:
                 polr_results.append(float(df.mean()["timing"]))
 
             results[mode][strategy][benchmark_name] = polr_results
-
-print(results)
 
 for mode in modes:
     for strategy in routing_strategies:
@@ -87,3 +85,27 @@ for mode in modes:
             print(str(i) + ": " + winner)
             winners_per_query[winner] = winners_per_query[winner] + 1
         print(winners_per_query)
+
+print(results)
+
+for benchmark_name in query_counts:
+    fig, ax = plt.subplots(1, len(modes))
+    i = 0
+    for mode in modes:
+        data = []
+        xticks = []
+        for strategy in routing_strategies:
+            data_seconds = []
+            for val in results[mode][strategy][benchmark_name]:
+                data_seconds.append(val/1000)
+            data.append(data_seconds)
+            xticks.append(strategy[:3])
+        ax[i].boxplot(data)
+        ax[i].set_xticklabels(xticks, rotation=90)
+        ax[i].set_title(mode.split("-")[0][:2] + mode.split("-")[1][:2])
+        i += 1
+
+    ax[0].set_ylabel("Pipeline durations (s)")
+    plt.tight_layout()
+    plt.savefig("experiment-results/03-pipeline-performance-" + benchmark_name + ".pdf")
+    plt.clf()

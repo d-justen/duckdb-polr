@@ -57,7 +57,7 @@ public:
 		// for perfect hash join
 		perfect_join_executor = make_unique<PerfectHashJoinExecutor>(op, *hash_table, op.perfect_join_statistics);
 		// for external hash join
-		external = op.can_go_external && ClientConfig::GetConfig(context).force_external;
+		external = false; // op.can_go_external && ClientConfig::GetConfig(context).force_external;
 		// memory usage per thread scales with max mem / num threads
 		double max_memory = BufferManager::GetBufferManager(context).GetMaxMemory();
 		double num_threads = TaskScheduler::GetScheduler(context).NumberOfThreads();
@@ -210,10 +210,10 @@ SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, GlobalSinkState
 
 	// swizzle if we reach memory limit
 	auto approx_ptr_table_size = ht.Count() * 3 * sizeof(data_ptr_t);
-	if (can_go_external && ht.SizeInBytes() + approx_ptr_table_size >= gstate.sink_memory_per_thread) {
-		lstate.hash_table->SwizzleBlocks();
-		gstate.external = true;
-	}
+	/*if (can_go_external && ht.SizeInBytes() + approx_ptr_table_size >= gstate.sink_memory_per_thread) {
+	    lstate.hash_table->SwizzleBlocks();
+	    gstate.external = true;
+	}*/
 
 	return SinkResultType::NEED_MORE_INPUT;
 }

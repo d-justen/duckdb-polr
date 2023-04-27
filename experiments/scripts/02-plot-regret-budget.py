@@ -86,8 +86,8 @@ for mode in modes:
 
                 benchmark_result[strategy][regret_budget] = sum(intms)
 
-                if regret_budget == "0.0001" or regret_budget == "0.001":
-                    if strategy == "adaptive_reinit":
+                if regret_budget == "0.001":
+                    if strategy == "adaptive_reinit" and mode == "dphyp-constant":
                         for i in range(len(intms)):
                             print(str(i) + " -- opt: " + str(opt_intms[i]) + " -- adre: " + str(intms[i]))
 
@@ -99,20 +99,32 @@ x_values = []
 for regret_budget in regret_budgets:
     x_values.append(float(regret_budget.replace("-", ".")))
 
-for mode in modes:
-    for benchmark_name in query_counts:
+for benchmark_name in query_counts:
+    fig, ax = plt.subplots(1, len(modes))
+    fig.set_size_inches(12, 4)
+    i = 0
+    for mode in modes:
         result = results[mode][benchmark_name]
-        plt.plot(x_values, [result["optimum"]] * len(regret_budgets), "-.")
-        plt.plot(x_values, [result["optimal_order"]] * len(regret_budgets), "-.")
-        plt.plot(x_values, [result["default"]] * len(regret_budgets), "-.")
-        plt.plot(x_values, [result["init_once"]] * len(regret_budgets))
-        plt.plot(x_values, [result["opportunistic"]] * len(regret_budgets))
-        plt.plot(x_values, list(result["adaptive_reinit"].values()))
-        plt.plot(x_values, list(result["dynamic"].values()))
-        plt.xscale("log")
-        plt.xlabel("Regret Budget")
-        plt.ylabel("Intermediate count")
-        plt.legend(["opt", "opt_order", "def_order", "init_once", "opportunistic", "adaptive_reinit", "dynamic"])
-        plt.tight_layout()
-        plt.savefig("experiment-results/02-regret-budget-" + mode + "-" + benchmark_name + ".pdf")
-        plt.clf()
+        ax[i].plot(x_values, [result["init_once"]] * len(regret_budgets))
+        ax[i].plot(x_values, [result["opportunistic"]] * len(regret_budgets))
+        ax[i].plot(x_values, list(result["adaptive_reinit"].values()))
+        ax[i].plot(x_values, list(result["dynamic"].values()))
+        ax[i].plot(x_values, [result["optimum"]] * len(regret_budgets), "-.")
+        ax[i].plot(x_values, [result["optimal_order"]] * len(regret_budgets), "-.")
+        ax[i].plot(x_values, [result["default"]] * len(regret_budgets), "-.")
+        ax[i].set_xscale("log")
+        ax[i].set_xlabel("Regret Budget")
+        ax[i].set_title(mode.split("-")[0][:2] + mode.split("-")[1][:2])
+        i += 1
+    ax[0].set_ylabel("Intermediate count")
+    plt.legend(["init_once",
+                "opportunistic",
+                "adaptive_reinit",
+                "dynamic",
+                "optimal",
+                "opt_order",
+                "default"
+                ], loc="center")
+    plt.tight_layout()
+    plt.savefig("experiment-results/02-regret-budget-" + benchmark_name + ".pdf")
+    plt.clf()

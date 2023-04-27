@@ -25,7 +25,7 @@ for mode in modes:
 
         for csv_file in csv_files:
             df = pd.read_csv(csv_file)
-            num_paths = int(len(df.columns) / 2)
+            num_paths = int(len(df.columns) / 2) - 2
             path_counts.append(num_paths)
 
         polr_amount = len(path_counts) / query_counts[benchmark_name]

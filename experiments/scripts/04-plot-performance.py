@@ -109,5 +109,5 @@ for benchmark_name in query_counts:
         result_str += "\\hline\\\\\n"
     result_str += "\\end{tabular}\n\n"
 
-with open("experiment-results/03-performance.txt", "w") as file:
+with open("experiment-results/04-performance.txt", "w") as file:
     file.write(result_str)

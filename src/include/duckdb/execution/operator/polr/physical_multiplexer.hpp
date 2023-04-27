@@ -20,7 +20,8 @@ public:
 
 	idx_t path_count;
 	double regret_budget;
-	MultiplexerRouting routing_strategy;
+	MultiplexerRouting routing;
+	const double SMOOTHING_FACTOR = 0.5;
 
 public:
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
@@ -42,25 +43,6 @@ public:
 	string ParamsToString() const override;
 	void PrintStatistics(OperatorState &state) const;
 	void WriteLogToFile(OperatorState &state, std::ofstream &file) const;
-
-private:
-	void CalculateJoinPathWeights(const vector<double> &join_path_costs, vector<double> &path_weights) const;
-
-	OperatorResultType InitPath(DataChunk &input, DataChunk &chunk, OperatorState &state) const;
-	OperatorResultType RouteTuples(DataChunk &input, DataChunk &chunk, OperatorState &state) const;
-
-	OperatorResultType RouteInitializeOnce(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-	                                       OperatorState &state) const;
-	OperatorResultType RouteAdaptiveReinit(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-	                                       OperatorState &state) const;
-	OperatorResultType RouteDynamic(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-	                                OperatorState &state) const;
-	OperatorResultType RouteAlternate(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-	                                  OperatorState &state) const;
-	OperatorResultType RouteOpportunistic(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-	                                      OperatorState &state) const;
-
-	std::function<OperatorResultType(ExecutionContext &, DataChunk &, DataChunk &, OperatorState &)> router_function;
 };
 
 } // namespace duckdb
