@@ -29,6 +29,9 @@ OperatorResultType PhysicalAdaptiveUnion::Execute(ExecutionContext &context, Dat
                                                   GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	D_ASSERT(context.thread.current_join_path);
 	D_ASSERT(chunk.size() == 0);
+
+	// TODO: If path 0 -> reference
+
 	vector<idx_t> &current_join_path = *context.thread.current_join_path;
 
 	chunk.SetCapacity(input);

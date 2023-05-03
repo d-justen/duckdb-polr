@@ -167,4 +167,14 @@ protected:
 	}
 };
 
+class DefaultPathRoutingStrategy : public RoutingStrategy {
+public:
+	explicit DefaultPathRoutingStrategy(vector<double> *path_resistances) : RoutingStrategy(path_resistances) {
+	}
+
+protected:
+	idx_t DetermineNextPath() const override;
+	idx_t DetermineNextTupleCount() const override;
+};
+
 } // namespace duckdb

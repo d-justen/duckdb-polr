@@ -43,7 +43,8 @@ enum class MultiplexerRouting : uint8_t {
 	ADAPTIVE_REINIT = 1,
 	DYNAMIC = 2,
 	INIT_ONCE = 3,
-	OPPORTUNISTIC = 4
+	OPPORTUNISTIC = 4,
+	DEFAULT_PATH = 5
 };
 
 enum class CheckpointAbort : uint8_t {

@@ -677,6 +677,8 @@ void RoutingStrategySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, c
 		config.options.multiplexer_routing = MultiplexerRouting::INIT_ONCE;
 	} else if (parameter == "opportunistic") {
 		config.options.multiplexer_routing = MultiplexerRouting::OPPORTUNISTIC;
+	} else if (parameter == "default_path") {
+		config.options.multiplexer_routing = MultiplexerRouting::DEFAULT_PATH;
 	} else {
 		throw InvalidInputException(
 		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
@@ -695,6 +697,8 @@ Value RoutingStrategySetting::GetSetting(ClientContext &context) {
 		return "init_once";
 	case MultiplexerRouting::OPPORTUNISTIC:
 		return "opportunistic";
+	case MultiplexerRouting::DEFAULT_PATH:
+		return "default_path";
 	default:
 		throw InternalException("Unknown access mode setting");
 	}

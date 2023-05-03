@@ -342,6 +342,44 @@ void Pipeline::EnumerateJoinPaths() {
 	}
 
 	// Step III: Find all possible join order permutations
+	if (hash_join_idxs.size() >= 4) {
+		// Generate subset
+		std::vector<idx_t> default_path;
+		default_path.reserve(hash_join_idxs.size());
+		for (idx_t i = 0; i < hash_join_idxs.size(); i++) {
+			default_path.push_back(i);
+		}
+
+		join_paths.reserve(hash_join_idxs.size());
+		join_paths.push_back(default_path);
+
+		for (idx_t i = 0; i < default_path.size() - 1; i++) {
+			std::vector<idx_t> generated_path(default_path.cbegin(), default_path.cend());
+			generated_path.erase(generated_path.begin() + i);
+			generated_path.push_back(i);
+
+			bool prereqs_met = true;
+			for (idx_t j = 0; j < join_prerequisites.size(); j++) {
+				auto &prereqs = join_prerequisites[j];
+				for (auto prereq : prereqs) {
+					if (prereq == i) {
+						prereqs_met = false;
+						break;
+					}
+				}
+				if (!prereqs_met) {
+					break;
+				}
+			}
+
+			if (prereqs_met) {
+				join_paths.push_back(generated_path);
+			}
+		}
+
+		return;
+	}
+
 	join_paths.reserve(std::pow(2, hash_join_idxs.size() - 1));
 
 	vector<idx_t> joins_left;

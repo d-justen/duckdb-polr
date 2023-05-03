@@ -363,4 +363,12 @@ OperatorResultType AlternateRoutingStrategy::Route(DataChunk &input, DataChunk &
 	}
 }
 
+idx_t DefaultPathRoutingStrategy::DetermineNextPath() const {
+	return 0;
+}
+
+idx_t DefaultPathRoutingStrategy::DetermineNextTupleCount() const {
+	return routing_state->chunk_size;
+}
+
 } // namespace duckdb

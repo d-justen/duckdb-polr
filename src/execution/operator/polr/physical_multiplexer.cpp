@@ -39,6 +39,9 @@ public:
 		case MultiplexerRouting::OPPORTUNISTIC:
 			routing_strategy = make_unique<OpportunisticRoutingStrategy>(&path_resistances);
 			break;
+		case MultiplexerRouting::DEFAULT_PATH:
+			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
+			break;
 		}
 	}
 
