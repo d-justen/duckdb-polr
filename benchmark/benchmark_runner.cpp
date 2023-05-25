@@ -304,6 +304,8 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			}
 		} else if (arg == "--log_tuples_routed") {
 			instance.log_tuples_routed = true;
+		} else if (arg == "--disable_caching") {
+			instance.caching = false;
 		} else {
 			if (!instance.configuration.name_pattern.empty()) {
 				fprintf(stderr, "Only one benchmark can be specified.\n");

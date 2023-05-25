@@ -55,11 +55,12 @@ public:
 	bool enable_polr_bushy = false;
 	bool enable_random_cardinalities = false;
 	string multiplexer_routing = "";
-	double regret_budget = 0.2;
+	double regret_budget = 0.01;
 	bool log_tuples_routed = false;
 	string optimizer_mode = "";
 	bool measure_pipeline = false;
 	uint32_t nruns = 5;
+	bool caching = true;
 };
 
 } // namespace duckdb

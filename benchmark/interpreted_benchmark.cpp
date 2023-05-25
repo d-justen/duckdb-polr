@@ -73,6 +73,10 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 			res = con.Query("SET multiplexer_routing TO " + instance.multiplexer_routing);
 			D_ASSERT(!res->HasError());
 		}
+		if (!instance.caching) {
+			res = con.Query("PRAGMA disable_caching");
+			D_ASSERT(!res->HasError());
+		}
 		if (!instance.optimizer_mode.empty()) {
 			if (instance.optimizer_mode == "dphyp-constant") {
 				res = con.Query("PRAGMA disable_cardinality_estimator");

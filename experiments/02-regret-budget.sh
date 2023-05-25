@@ -27,15 +27,15 @@ for optimizer_mode in "${optimizer_modes[@]}"
 do
   for strategy in "${static_routing_strategies[@]}"
   do
-    ../build/release/benchmark/benchmark_runner "benchmark/imdb/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+    ../build/release/benchmark/benchmark_runner "benchmark/imdb/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
     mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/job
     mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/job
 
-    ../build/release/benchmark/benchmark_runner "benchmark/tpch/sf1/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+    ../build/release/benchmark/benchmark_runner "benchmark/tpch/sf1/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
     mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/tpch
     mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/tpch
 
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+    ../build/release/benchmark/benchmark_runner "benchmark/ssb/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
     mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/ssb
     mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/ssb
   done
@@ -44,15 +44,15 @@ do
   do
     for regret_budget in "${regret_budgets[@]}"
     do
-      ../build/release/benchmark/benchmark_runner "benchmark/imdb/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+      ../build/release/benchmark/benchmark_runner "benchmark/imdb/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
       mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/job/"${regret_budget}"
       mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/job/"${regret_budget}"
 
-      ../build/release/benchmark/benchmark_runner "benchmark/tpch/sf1/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+      ../build/release/benchmark/benchmark_runner "benchmark/tpch/sf1/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
       mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/tpch/"${regret_budget}"
       mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/tpch/"${regret_budget}"
 
-      ../build/release/benchmark/benchmark_runner "benchmark/ssb/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+      ../build/release/benchmark/benchmark_runner "benchmark/ssb/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
       mkdir -p ./experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/ssb/"${regret_budget}"
       mv *.{csv,txt} experiment-results/02-regret-budget/"${optimizer_mode}"/"${strategy}"/ssb/"${regret_budget}"
     done

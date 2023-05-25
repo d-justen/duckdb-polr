@@ -70,4 +70,4 @@ do
   done
 done
 
-# python3 scripts/04-plot-performance.py
+python3 scripts/05-plot-performance-per-regret.py

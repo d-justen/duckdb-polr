@@ -83,6 +83,7 @@ struct ClientConfig {
 	bool greedy_ordering = false;
 	bool measure_polr_pipeline = false;
 	bool greedy_ordering_ldt = false;
+	bool caching = true;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

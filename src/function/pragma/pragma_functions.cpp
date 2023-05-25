@@ -195,6 +195,14 @@ static void PragmaDisableGreedyOrderingLDT(ClientContext &context, const Functio
 	ClientConfig::GetConfig(context).greedy_ordering_ldt = false;
 }
 
+static void PragmaEnableCaching(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).caching = true;
+}
+
+static void PragmaDisableCaching(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).caching = false;
+}
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -259,6 +267,9 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_greedy_ordering_ldt", PragmaEnableGreedyOrderingLDT));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_greedy_ordering_ldt", PragmaDisableGreedyOrderingLDT));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_caching", PragmaEnableCaching));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_caching", PragmaDisableCaching));
 }
 
 } // namespace duckdb
