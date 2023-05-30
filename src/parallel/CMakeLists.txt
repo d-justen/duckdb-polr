@@ -10,6 +10,9 @@ add_library_unity(
   pipeline_event.cpp
   pipeline_executor.cpp
   pipeline_finish_event.cpp
+  polar_config.cpp
+  polar_enumeration_algo.cpp
+  polar_pipeline_executor.cpp
   task_scheduler.cpp
   thread_context.cpp)
 set(ALL_OBJECT_FILES

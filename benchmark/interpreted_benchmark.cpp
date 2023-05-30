@@ -73,6 +73,10 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 			res = con.Query("SET multiplexer_routing TO " + instance.multiplexer_routing);
 			D_ASSERT(!res->HasError());
 		}
+		if (!instance.enumerator.empty()) {
+			res = con.Query("SET join_enumerator TO " + instance.enumerator);
+			D_ASSERT(!res->HasError());
+		}
 		if (!instance.caching) {
 			res = con.Query("PRAGMA disable_caching");
 			D_ASSERT(!res->HasError());

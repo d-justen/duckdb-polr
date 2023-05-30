@@ -158,6 +158,9 @@ AllocatorDebugInfo::~AllocatorDebugInfo() {
 	//! Verify that there is no outstanding memory still associated with the batched allocator
 	//! Only works for access to the batched allocator through the batched allocator interface
 	//! If this assertion triggers, enable DUCKDB_DEBUG_ALLOCATION for more information about the allocations
+	if (allocation_count != 0) {
+		void;
+	}
 	D_ASSERT(allocation_count == 0);
 }
 

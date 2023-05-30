@@ -340,4 +340,12 @@ struct RoutingStrategySetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct JoinEnumeratorSetting {
+	static constexpr const char *Name = "join_enumerator";
+	static constexpr const char *Description = "Set the join enumeration algorithm for POLAR";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::VARCHAR;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static Value GetSetting(ClientContext &context);
+};
+
 } // namespace duckdb

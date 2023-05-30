@@ -9,9 +9,7 @@
 #pragma once
 
 #include "duckdb/common/unordered_set.hpp"
-#include "duckdb/execution/operator/join/physical_hash_join.hpp"
-#include "duckdb/execution/operator/polr/physical_adaptive_union.hpp"
-#include "duckdb/execution/operator/polr/physical_multiplexer.hpp"
+#include "duckdb/parallel/polar_config.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
@@ -25,6 +23,7 @@ class Executor;
 class Event;
 class PhysicalHashJoin;
 class PhysicalAdaptiveUnion;
+class POLARConfig;
 
 class PipelineBuildState {
 public:
@@ -64,11 +63,16 @@ class Pipeline : public std::enable_shared_from_this<Pipeline> {
 	friend class PipelineEvent;
 	friend class PipelineFinishEvent;
 	friend class PipelineBuildState;
+	friend class POLARConfig;
+	friend class POLARPipelineExecutor;
 
 public:
 	explicit Pipeline(Executor &execution_context);
+	virtual ~Pipeline() = default;
 
 	Executor &executor;
+
+	unique_ptr<POLARConfig> polar_config;
 
 public:
 	ClientContext &GetClientContext();
@@ -96,11 +100,10 @@ public:
 		return sink;
 	}
 
-	//! POLR related
-	void BuildPOLRPaths();
-	void EnumerateJoinPaths();
 	//! Returns whether any of the operators in the pipeline care about preserving insertion order
 	bool IsOrderDependent() const;
+
+	vector<PhysicalOperator *> &GetOperators();
 
 private:
 	//! Whether or not the pipeline has been readied
@@ -113,15 +116,6 @@ private:
 	vector<PhysicalOperator *> operators;
 
 	//! POLR related
-	vector<PhysicalHashJoin *> joins;
-	vector<vector<idx_t>> join_paths; // e.g., [2, 0, 1] -> joins[2], then joins[0], then joins[1]
-	vector<vector<std::map<idx_t, idx_t>>> left_expression_bindings;
-	idx_t multiplexer_idx;
-	std::unique_ptr<PhysicalMultiplexer> multiplexer;
-	std::unique_ptr<PhysicalAdaptiveUnion> adaptive_union;
-	bool is_polr_pipeline = false;
-	bool measure_polr_pipeline = false;
-	bool log_tuples_routed = false;
 	std::chrono::system_clock::time_point begin;
 
 	//! The sink (i.e. destination) for data; this is e.g. a hash table to-be-built

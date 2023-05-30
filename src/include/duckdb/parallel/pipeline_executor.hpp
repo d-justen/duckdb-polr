@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include "duckdb/common/types/data_chunk.hpp"
-#include "duckdb/parallel/pipeline.hpp"
-#include "duckdb/execution/physical_operator.hpp"
-#include "duckdb/parallel/thread_context.hpp"
-#include "duckdb/execution/execution_context.hpp"
 #include "duckdb/common/stack.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
+#include "duckdb/execution/execution_context.hpp"
+#include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/parallel/pipeline.hpp"
+#include "duckdb/parallel/thread_context.hpp"
 
 #include <functional>
 
@@ -22,16 +22,16 @@ class Executor;
 
 //! The Pipeline class represents an execution pipeline
 class PipelineExecutor {
-	static constexpr const idx_t CACHE_THRESHOLD = 64;
 
 public:
 	PipelineExecutor(ClientContext &context, Pipeline &pipeline);
+	virtual ~PipelineExecutor() = default;
 
 	//! Fully execute a pipeline with a source and a sink until the source is completely exhausted
 	void Execute();
 	//! Execute a pipeline with a source and a sink until finished, or until max_chunks have been processed
 	//! Returns true if execution is finished, false if Execute should be called again
-	bool Execute(idx_t max_chunks);
+	virtual bool Execute(idx_t max_chunks);
 
 	//! Push a single input DataChunk into the pipeline.
 	//! Returns either OperatorResultType::NEED_MORE_INPUT or OperatorResultType::FINISHED
@@ -39,7 +39,7 @@ public:
 	OperatorResultType ExecutePush(DataChunk &input);
 	//! Called after depleting the source: finalizes the execution of this pipeline executor
 	//! This should only be called once per PipelineExecutor
-	void PushFinalize();
+	virtual void PushFinalize();
 
 	//! Initializes a chunk with the types that will flow out of ExecutePull
 	void InitializeChunk(DataChunk &chunk);
@@ -50,10 +50,7 @@ public:
 	//! This flushes profiler states
 	void PullFinalize();
 
-	//! POLR related
-	void RunPath(DataChunk &chunk, DataChunk &result, idx_t start_idx = 0);
-
-private:
+protected:
 	//! The pipeline to process
 	Pipeline &pipeline;
 	//! The thread context of this executor
@@ -65,16 +62,6 @@ private:
 	vector<unique_ptr<DataChunk>> intermediate_chunks;
 	//! Intermediate states for the operators
 	vector<unique_ptr<OperatorState>> intermediate_states;
-
-	//! POLR related
-	vector<vector<unique_ptr<DataChunk>>> join_intermediate_chunks;
-	vector<vector<unique_ptr<OperatorState>>> join_intermediate_states;
-	OperatorState *multiplexer_state;
-	unique_ptr<OperatorState> adaptive_union_state;
-	vector<vector<unique_ptr<DataChunk>>> cached_join_chunks;
-	stack<idx_t> in_process_joins;
-	unique_ptr<DataChunk> mpx_output_chunk;
-	idx_t num_intermediates_produced = 0;
 
 	//! The local source state
 	unique_ptr<LocalSourceState> local_source_state;
@@ -97,7 +84,9 @@ private:
 	//! Cached chunks for any operators that require caching
 	vector<unique_ptr<DataChunk>> cached_chunks;
 
-private:
+	static constexpr const idx_t CACHE_THRESHOLD = 64;
+
+protected:
 	void StartOperator(PhysicalOperator *op);
 	void EndOperator(PhysicalOperator *op, DataChunk *chunk);
 
@@ -111,10 +100,10 @@ private:
 	OperatorResultType ExecutePushInternal(DataChunk &input, idx_t initial_idx = 0);
 	//! Pushes a chunk through the pipeline and returns a single result chunk
 	//! Returns whether or not a new input chunk is needed, or whether or not we are finished
-	OperatorResultType Execute(DataChunk &input, DataChunk &result, idx_t initial_index = 0);
+	virtual OperatorResultType Execute(DataChunk &input, DataChunk &result, idx_t initial_index = 0);
 
 	static bool CanCacheType(const LogicalType &type);
-	void CacheChunk(DataChunk &input, idx_t operator_idx, bool is_polr_join = false);
+	void CacheChunk(DataChunk &input, idx_t operator_idx);
 };
 
 } // namespace duckdb

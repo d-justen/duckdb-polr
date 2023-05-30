@@ -1,6 +1,7 @@
 #include "duckdb/main/settings.hpp"
 
 #include "duckdb/catalog/catalog_search_path.hpp"
+#include "duckdb/common/enums/join_enumerator.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
@@ -699,6 +700,33 @@ Value RoutingStrategySetting::GetSetting(ClientContext &context) {
 		return "opportunistic";
 	case MultiplexerRouting::DEFAULT_PATH:
 		return "default_path";
+	default:
+		throw InternalException("Unknown access mode setting");
+	}
+}
+
+//===--------------------------------------------------------------------===//
+// Join Enumerator Setting
+//===--------------------------------------------------------------------===//
+void JoinEnumeratorSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	auto parameter = StringUtil::Lower(input.ToString());
+	if (parameter == "exhaustive") {
+		config.join_enumerator = JoinEnumerator::EXHAUSTIVE;
+	} else if (parameter == "each_last_once") {
+		config.join_enumerator = JoinEnumerator::EACH_LAST_ONCE;
+	} else {
+		throw InvalidInputException(
+		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
+	}
+}
+Value JoinEnumeratorSetting::GetSetting(ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	switch (config.join_enumerator) {
+	case JoinEnumerator::EXHAUSTIVE:
+		return "exhaustive";
+	case JoinEnumerator::EACH_LAST_ONCE:
+		return "each_last_once";
 	default:
 		throw InternalException("Unknown access mode setting");
 	}

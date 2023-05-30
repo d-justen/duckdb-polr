@@ -12,6 +12,7 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/enums/output_type.hpp"
 #include "duckdb/common/enums/profiler_format.hpp"
+#include "duckdb/common/enums/join_enumerator.hpp"
 #include "duckdb/common/types/value.hpp"
 
 namespace duckdb {
@@ -84,6 +85,7 @@ struct ClientConfig {
 	bool measure_polr_pipeline = false;
 	bool greedy_ordering_ldt = false;
 	bool caching = true;
+	JoinEnumerator join_enumerator = JoinEnumerator::EXHAUSTIVE;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

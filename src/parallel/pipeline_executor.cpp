@@ -9,65 +9,6 @@ namespace duckdb {
 
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread) {
-	if (context.client.config.enable_polr) {
-		if (!pipeline.joins.empty()) {
-			join_intermediate_chunks.resize(pipeline.join_paths.size());
-			cached_join_chunks.resize(pipeline.join_paths.size());
-
-			for (idx_t i = 0; i < pipeline.join_paths.size(); i++) {
-				vector<LogicalType> types;
-				types.reserve(pipeline.joins.back()->GetTypes().size());
-				auto &multiplexer_types = pipeline.multiplexer->GetTypes();
-				types.insert(types.cend(), multiplexer_types.cbegin(), multiplexer_types.cend());
-
-				auto &current_join_path = pipeline.join_paths[i];
-				join_intermediate_chunks[i].reserve(current_join_path.size());
-				cached_join_chunks[i].reserve(current_join_path.size());
-
-				for (idx_t j = 0; j < current_join_path.size(); j++) {
-					auto &build_types =
-					    pipeline.joins[current_join_path[j]]
-					        ->build_types; // TODO: check if this is the new types that come with the join
-					types.insert(types.cend(), build_types.cbegin(), build_types.cend());
-
-					join_intermediate_chunks[i].push_back(make_unique<DataChunk>());
-					join_intermediate_chunks[i].back()->Initialize(Allocator::Get(context.client), types);
-
-					cached_join_chunks[i].push_back(make_unique<DataChunk>());
-					cached_join_chunks[i].back()->Initialize(Allocator::Get(context.client), types);
-				}
-			}
-
-			join_intermediate_states.reserve(pipeline.join_paths.size());
-			for (idx_t i = 0; i < pipeline.join_paths.size(); i++) {
-				auto &join_path = pipeline.join_paths[i];
-				vector<unique_ptr<OperatorState>> states;
-				states.reserve(pipeline.joins.size());
-
-				for (idx_t j = 0; j < pipeline.joins.size(); j++) {
-					idx_t join_idx = join_path[j];
-					auto *join = pipeline.joins[join_idx];
-					auto &bindings = pipeline.left_expression_bindings[i][j];
-					auto state = join->GetOperatorStateWithBindings(context, bindings);
-
-					states.push_back(move(state));
-
-					if (join->sink_state->state == SinkFinalizeType::NO_OUTPUT_POSSIBLE) {
-						FinishProcessing();
-						pipeline.log_tuples_routed = false;
-						pipeline.measure_polr_pipeline = false;
-					}
-				}
-				join_intermediate_states.push_back(move(states));
-			}
-
-			mpx_output_chunk = make_unique<DataChunk>();
-			mpx_output_chunk->Initialize(Allocator::Get(context.client), pipeline.multiplexer->GetTypes());
-
-			adaptive_union_state = pipeline.adaptive_union->GetOperatorState(context);
-		}
-	}
-
 	D_ASSERT(pipeline.source_state);
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 	if (pipeline.sink) {
@@ -75,26 +16,25 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		requires_batch_index = pipeline.sink->RequiresBatchIndex() && pipeline.source->SupportsBatchIndex();
 	}
 	bool can_cache_in_pipeline = pipeline.sink && !pipeline.IsOrderDependent() && !requires_batch_index;
-	intermediate_chunks.reserve(pipeline.operators.size());
-	intermediate_states.reserve(pipeline.operators.size());
-	cached_chunks.resize(pipeline.operators.size());
-	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
-		auto prev_operator = i == 0 ? pipeline.source : pipeline.operators[i - 1];
-		auto current_operator = pipeline.operators[i];
+
+	auto &operators = pipeline.GetOperators();
+
+	intermediate_chunks.reserve(operators.size());
+	intermediate_states.reserve(operators.size());
+	cached_chunks.resize(operators.size());
+	for (idx_t i = 0; i < operators.size(); i++) {
+		auto prev_operator = i == 0 ? pipeline.source : operators[i - 1];
+		auto current_operator = operators[i];
 		auto chunk = make_unique<DataChunk>();
 
 		if (prev_operator->type == PhysicalOperatorType::MULTIPLEXER) {
-			chunk->Initialize(Allocator::Get(context.client), pipeline.adaptive_union->GetTypes());
+			chunk->Initialize(Allocator::Get(context.client), pipeline.polar_config->adaptive_union->GetTypes());
 		} else {
 			chunk->Initialize(Allocator::Get(context.client), prev_operator->GetTypes());
 		}
 
 		intermediate_chunks.push_back(move(chunk));
 		intermediate_states.push_back(current_operator->GetOperatorState(context));
-
-		if (i == pipeline.multiplexer_idx) {
-			multiplexer_state = &*intermediate_states.back();
-		}
 
 		if (can_cache_in_pipeline && current_operator->RequiresCache()) {
 			auto &cache_types = current_operator->GetTypes();
@@ -123,7 +63,8 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 bool PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
 	bool exhausted_source = false;
-	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
+	auto &operators = pipeline.GetOperators();
+	auto &source_chunk = operators.empty() ? final_chunk : *intermediate_chunks[0];
 	for (idx_t i = 0; i < max_chunks; i++) {
 		if (IsFinished()) {
 			break;
@@ -144,21 +85,6 @@ bool PipelineExecutor::Execute(idx_t max_chunks) {
 		return false;
 	}
 	PushFinalize();
-
-	if (pipeline.multiplexer && pipeline.log_tuples_routed && num_intermediates_produced > 0) {
-		pipeline.multiplexer->PrintStatistics(*multiplexer_state);
-		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-		std::ofstream file;
-		file.open("./experiments/" + filename + ".csv");
-		pipeline.multiplexer->WriteLogToFile(*multiplexer_state, file);
-		file.close();
-		std::cout << filename << "\n";
-
-		std::ofstream file2;
-		file2.open("./experiments/" + filename + "-intms.txt");
-		file2 << num_intermediates_produced << "\n";
-		file2.close();
-	}
 
 	return true;
 }
@@ -187,7 +113,8 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 	} // LCOV_EXCL_STOP
 	while (true) {
 		OperatorResultType result;
-		if (!pipeline.operators.empty()) {
+		auto &operators = pipeline.GetOperators();
+		if (!operators.empty()) {
 			final_chunk.Reset();
 			result = Execute(input, final_chunk, initial_idx);
 			if (result == OperatorResultType::FINISHED) {
@@ -196,7 +123,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 		} else {
 			result = OperatorResultType::NEED_MORE_INPUT;
 		}
-		auto &sink_chunk = pipeline.operators.empty() ? input : final_chunk;
+		auto &sink_chunk = operators.empty() ? input : final_chunk;
 		if (sink_chunk.size() > 0) {
 			StartOperator(pipeline.sink);
 			D_ASSERT(pipeline.sink);
@@ -224,7 +151,6 @@ void PipelineExecutor::PushFinalize() {
 	// e.g. if we have SOURCE -> LIMIT -> CROSS_PRODUCT -> SINK, if the LIMIT reports no more rows will be passed on
 	// we still need to flush caches from the CROSS_PRODUCT
 	D_ASSERT(in_process_operators.empty());
-	D_ASSERT(in_process_joins.empty());
 	idx_t start_idx = IsFinished() ? idx_t(finished_processing_idx) : 0;
 	for (idx_t i = start_idx; i < cached_chunks.size(); i++) {
 		if (cached_chunks[i] && cached_chunks[i]->size() > 0) {
@@ -233,17 +159,14 @@ void PipelineExecutor::PushFinalize() {
 		}
 	}
 
-	if (pipeline.multiplexer) {
-		pipeline.multiplexer->FinalizePathRun(*multiplexer_state, pipeline.executor.context.config.log_tuples_routed);
-	}
-
 	D_ASSERT(local_sink_state);
 	// run the combine for the sink
 	pipeline.sink->Combine(context, *pipeline.sink->sink_state, *local_sink_state);
 
 	// flush all query profiler info
+	auto &operators = pipeline.GetOperators();
 	for (idx_t i = 0; i < intermediate_states.size(); i++) {
-		intermediate_states[i]->Finalize(pipeline.operators[i], context);
+		intermediate_states[i]->Finalize(operators[i], context);
 	}
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();
@@ -268,16 +191,15 @@ bool PipelineExecutor::CanCacheType(const LogicalType &type) {
 	}
 }
 
-void PipelineExecutor::CacheChunk(DataChunk &current_chunk, idx_t operator_idx, bool is_polr_join) {
+void PipelineExecutor::CacheChunk(DataChunk &current_chunk, idx_t operator_idx) {
 #if STANDARD_VECTOR_SIZE >= 128
+	if (!context.client.config.caching) {
+		return;
+	}
+
 	DataChunk *chunk_cache = nullptr;
 
-	if (is_polr_join) {
-		idx_t current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
-		if (cached_join_chunks[current_path][operator_idx]) {
-			chunk_cache = &*cached_join_chunks[current_path][operator_idx];
-		}
-	} else if (cached_chunks[operator_idx]) {
+	if (cached_chunks[operator_idx]) {
 		chunk_cache = &*cached_chunks[operator_idx];
 	}
 
@@ -306,7 +228,8 @@ void PipelineExecutor::ExecutePull(DataChunk &result) {
 	auto &executor = pipeline.executor;
 	try {
 		D_ASSERT(!pipeline.sink);
-		auto &source_chunk = pipeline.operators.empty() ? result : *intermediate_chunks[0];
+		auto &operators = pipeline.GetOperators();
+		auto &source_chunk = operators.empty() ? result : *intermediate_chunks[0];
 		while (result.size() == 0) {
 			if (in_process_operators.empty()) {
 				source_chunk.Reset();
@@ -315,7 +238,7 @@ void PipelineExecutor::ExecutePull(DataChunk &result) {
 					break;
 				}
 			}
-			if (!pipeline.operators.empty()) {
+			if (operators.empty()) {
 				auto state = Execute(source_chunk, result);
 				if (state == OperatorResultType::FINISHED) {
 					break;
@@ -365,80 +288,19 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 	if (input.size() == 0) { // LCOV_EXCL_START
 		return OperatorResultType::NEED_MORE_INPUT;
 	} // LCOV_EXCL_STOP
-	D_ASSERT(!pipeline.operators.empty());
+	auto &operators = pipeline.GetOperators();
+	// D_ASSERT(!operators.empty());
 
 	idx_t current_idx;
-	idx_t current_path = pipeline.multiplexer ? pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state) : -1;
-	bool did_work_from_prior_run = false;
-	bool prior_run_tuples_produced_output = false;
 
-	if (!in_process_joins.empty()) {
-		did_work_from_prior_run = true;
-		idx_t polr_output_chunk_idx = pipeline.multiplexer_idx + 1;
-		auto &output_chunk =
-		    polr_output_chunk_idx >= intermediate_chunks.size() ? result : *intermediate_chunks[polr_output_chunk_idx];
-		output_chunk.Reset();
-		RunPath(*mpx_output_chunk, output_chunk, -1);
-
-		if (result.size() > 0) {
-			return OperatorResultType::HAVE_MORE_OUTPUT;
-		}
-
-		prior_run_tuples_produced_output = output_chunk.size() > 0;
+	GoToSource(current_idx, initial_idx);
+	if (current_idx == initial_idx) {
+		current_idx++;
 	}
 
-	if (!prior_run_tuples_produced_output && pipeline.multiplexer) {
-		for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
-			auto &cached_chunk = cached_join_chunks[current_path][i];
-
-			if (cached_chunk->size() > 0) {
-				did_work_from_prior_run = true;
-				idx_t polr_output_chunk_idx = pipeline.multiplexer_idx + 1;
-				auto &output_chunk = polr_output_chunk_idx >= intermediate_chunks.size()
-				                         ? result
-				                         : *intermediate_chunks[polr_output_chunk_idx];
-				output_chunk.Reset();
-				RunPath(*cached_chunk, output_chunk, i + 1);
-				prior_run_tuples_produced_output = output_chunk.size() > 0;
-				cached_chunk->Reset();
-
-				if (prior_run_tuples_produced_output) {
-					break;
-				}
-			}
-		}
-	}
-
-	if (did_work_from_prior_run && !prior_run_tuples_produced_output && in_process_operators.empty()) {
-		return OperatorResultType::NEED_MORE_INPUT; // TODO: Do we have to GoToSource instead?
-	}
-
-	if (prior_run_tuples_produced_output) {
-		current_idx = pipeline.multiplexer_idx + 2;
-	}
-
-	if (result.size() > 0 && pipeline.multiplexer) {
-		if (in_process_operators.empty() && in_process_joins.empty()) {
-			for (auto &chunk : cached_join_chunks[current_path]) {
-				if (chunk->size() > 0) {
-					return OperatorResultType::HAVE_MORE_OUTPUT;
-				}
-			}
-			return OperatorResultType::NEED_MORE_INPUT;
-		}
-		return OperatorResultType::HAVE_MORE_OUTPUT;
-	}
-
-	if (!prior_run_tuples_produced_output) {
-		GoToSource(current_idx, initial_idx);
-		if (current_idx == initial_idx) {
-			current_idx++;
-		}
-
-		if (current_idx > pipeline.operators.size()) {
-			result.Reference(input);
-			return OperatorResultType::NEED_MORE_INPUT;
-		}
+	if (current_idx > operators.size()) {
+		result.Reference(input);
+		return OperatorResultType::NEED_MORE_INPUT;
 	}
 
 	while (true) {
@@ -460,64 +322,25 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			    current_intermediate == initial_idx + 1 ? &input : &*intermediate_chunks[current_intermediate - 1];
 			auto operator_idx = current_idx - 1;
 
-			auto current_operator = pipeline.operators[operator_idx];
+			auto current_operator = operators[operator_idx];
 
-			if (current_operator->type == PhysicalOperatorType::MULTIPLEXER) {
-				D_ASSERT(in_process_joins.empty());
-				for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
-					D_ASSERT(cached_join_chunks[current_path][i]->size() == 0);
-				}
-
-				mpx_output_chunk->Reset();
-				StartOperator(current_operator);
-				auto result =
-				    current_operator->Execute(context, *prev_chunk, *mpx_output_chunk, *current_operator->op_state,
-				                              *intermediate_states[current_intermediate - 1]);
-				EndOperator(current_operator, &*mpx_output_chunk);
-				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
-					// more data remains in this operator
-					// push in-process marker
-					in_process_operators.push(current_idx);
-				}
-
-				current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
-				RunPath(*mpx_output_chunk, current_chunk);
-				current_chunk.Verify();
-
-				if (current_chunk.size() == 0) {
-					D_ASSERT(in_process_joins.empty());
-
-					for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
-						if (cached_join_chunks[current_path][i]->size() > 0) {
-							RunPath(*cached_join_chunks[current_path][i], current_chunk, i + 1);
-							cached_join_chunks[current_path][i]->Reset();
-
-							if (current_chunk.size() > 0) {
-								break;
-							}
-						}
-					}
-				}
-			} else {
-				// if current_idx > source_idx, we pass the previous' operators output through the Execute of the
-				// current operator
-				StartOperator(current_operator);
-				auto result =
-				    current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
-				                              *intermediate_states[current_intermediate - 1]);
-				EndOperator(current_operator, &current_chunk);
-				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
-					// more data remains in this operator
-					// push in-process marker
-					in_process_operators.push(current_idx);
-				} else if (result == OperatorResultType::FINISHED) {
-					D_ASSERT(current_chunk.size() == 0);
-					FinishProcessing(current_idx);
-					return OperatorResultType::FINISHED;
-				}
-				current_chunk.Verify();
-				CacheChunk(current_chunk, operator_idx);
+			// if current_idx > source_idx, we pass the previous' operators output through the Execute of the
+			// current operator
+			StartOperator(current_operator);
+			auto result = current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state,
+			                                        *intermediate_states[current_intermediate - 1]);
+			EndOperator(current_operator, &current_chunk);
+			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
+				// more data remains in this operator
+				// push in-process marker
+				in_process_operators.push(current_idx);
+			} else if (result == OperatorResultType::FINISHED) {
+				D_ASSERT(current_chunk.size() == 0);
+				FinishProcessing(current_idx);
+				return OperatorResultType::FINISHED;
 			}
+			current_chunk.Verify();
+			CacheChunk(current_chunk, operator_idx);
 		}
 
 		if (current_chunk.size() == 0) {
@@ -526,9 +349,6 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				// if we got no output from the scan, we are done
 				break;
 			} else {
-				if (!in_process_joins.empty()) {
-					return OperatorResultType::HAVE_MORE_OUTPUT;
-				}
 				// if we got no output from an intermediate op
 				// we go back and try to pull data from the source again
 				GoToSource(current_idx, initial_idx);
@@ -537,7 +357,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 		} else {
 			// we got output! continue to the next operator
 			current_idx++;
-			if (current_idx > pipeline.operators.size()) {
+			if (current_idx > operators.size()) {
 				// if we got output and are at the last operator, we are finished executing for this output chunk
 				// return the data and push it into the chunk
 				break;
@@ -545,33 +365,11 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 		}
 	}
 
-	bool path_ran_through = true;
-
-	if (!in_process_joins.empty()) {
-		path_ran_through = false;
-	}
-
-	if (pipeline.multiplexer) {
-		for (auto &join_cache : cached_join_chunks[current_path]) {
-			if (join_cache->size() > 0) {
-				path_ran_through = false;
-			}
-		}
-	}
-
-	return in_process_operators.empty() && path_ran_through ? OperatorResultType::NEED_MORE_INPUT
-	                                                        : OperatorResultType::HAVE_MORE_OUTPUT;
+	return in_process_operators.empty() ? OperatorResultType::NEED_MORE_INPUT : OperatorResultType::HAVE_MORE_OUTPUT;
 }
 
 void PipelineExecutor::FetchFromSource(DataChunk &result) {
 	D_ASSERT(in_process_operators.empty());
-	D_ASSERT(in_process_joins.empty());
-
-	for (auto &cache_chunks : cached_join_chunks) {
-		for (auto &cache : cache_chunks) {
-			D_ASSERT(!cache || cache->size() == 0);
-		}
-	}
 
 	StartOperator(pipeline.source);
 	pipeline.source->GetData(context, result, *pipeline.source_state, *local_source_state);
@@ -587,10 +385,11 @@ void PipelineExecutor::FetchFromSource(DataChunk &result) {
 }
 
 void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
-	PhysicalOperator *last_op = pipeline.operators.empty() ? pipeline.source : pipeline.operators.back();
+	auto &operators = pipeline.GetOperators();
+	PhysicalOperator *last_op = operators.empty() ? pipeline.source : operators.back();
 
 	if (last_op->type == PhysicalOperatorType::MULTIPLEXER) {
-		last_op = &*pipeline.adaptive_union;
+		last_op = &*pipeline.polar_config->adaptive_union;
 	}
 
 	chunk.Initialize(Allocator::DefaultAllocator(), last_op->GetTypes());
@@ -608,95 +407,6 @@ void PipelineExecutor::EndOperator(PhysicalOperator *op, DataChunk *chunk) {
 
 	if (chunk) {
 		chunk->Verify();
-	}
-}
-
-void PipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t start_idx) {
-	idx_t current_path = pipeline.multiplexer->GetCurrentPathIndex(*multiplexer_state);
-	bool running_cache = start_idx != 0 && in_process_joins.empty();
-	bool must_rerun_cache = false;
-
-	context.thread.current_join_path = &pipeline.join_paths[current_path];
-
-	if (start_idx == pipeline.joins.size()) {
-		D_ASSERT(in_process_joins.empty());
-
-		StartOperator(&*pipeline.adaptive_union);
-		pipeline.adaptive_union->Execute(context, chunk, result, *pipeline.adaptive_union->op_state,
-		                                 *adaptive_union_state);
-		EndOperator(&*pipeline.adaptive_union, &result);
-		return;
-	}
-
-	idx_t local_join_idx = start_idx;
-
-	if (!in_process_joins.empty()) {
-		local_join_idx = in_process_joins.top();
-		start_idx = 0;
-		in_process_joins.pop();
-	}
-
-	while (true) {
-		auto *prev_chunk =
-		    local_join_idx == start_idx ? &chunk : &*join_intermediate_chunks[current_path][local_join_idx - 1];
-		auto &current_chunk = *join_intermediate_chunks[current_path][local_join_idx];
-		current_chunk.Reset();
-
-		idx_t global_join_idx = pipeline.join_paths[current_path][local_join_idx];
-		auto current_operator = pipeline.joins[global_join_idx];
-		auto &current_state = join_intermediate_states[current_path][local_join_idx];
-
-		StartOperator(current_operator);
-		auto join_result =
-		    current_operator->Execute(context, *prev_chunk, current_chunk, *current_operator->op_state, *current_state);
-		EndOperator(current_operator, &current_chunk);
-
-		if (running_cache && local_join_idx == start_idx) {
-			if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {
-				must_rerun_cache = true;
-			} else {
-				must_rerun_cache = false;
-			}
-		}
-
-		pipeline.multiplexer->AddNumIntermediates(*multiplexer_state, current_chunk.size());
-		num_intermediates_produced += current_chunk.size();
-
-		current_chunk.Verify();
-		CacheChunk(current_chunk, local_join_idx, true);
-
-		if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {
-			// more data remains in this operator
-			// push in-process marker
-			in_process_joins.push(local_join_idx);
-		}
-
-		if (current_chunk.size() == 0) {
-			// no output from this operator!
-			if (!in_process_joins.empty()) {
-				local_join_idx = in_process_joins.top();
-				in_process_joins.pop();
-				continue;
-			} else {
-				// TODO: go on with cached chunks?
-				break;
-			}
-		} else {
-			// we got output! continue to the next operator
-			local_join_idx++;
-			if (local_join_idx >= pipeline.joins.size()) {
-				StartOperator(&*pipeline.adaptive_union);
-				pipeline.adaptive_union->Execute(context, current_chunk, result, *pipeline.adaptive_union->op_state,
-				                                 *adaptive_union_state);
-				EndOperator(&*pipeline.adaptive_union, &result);
-
-				if (must_rerun_cache) {
-					cached_join_chunks[current_path][start_idx - 1].swap(
-					    join_intermediate_chunks[current_path][start_idx - 1]);
-				}
-				return;
-			}
-		}
 	}
 }
 

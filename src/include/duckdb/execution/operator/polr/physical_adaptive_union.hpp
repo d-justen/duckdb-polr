@@ -32,7 +32,7 @@ public:
 
 	string ParamsToString() const override;
 
-private:
+public:
 	const idx_t num_columns_from_left;
 	const vector<idx_t> num_columns_per_join;
 };

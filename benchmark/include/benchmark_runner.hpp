@@ -61,6 +61,7 @@ public:
 	bool measure_pipeline = false;
 	uint32_t nruns = 5;
 	bool caching = true;
+	string enumerator = "";
 };
 
 } // namespace duckdb

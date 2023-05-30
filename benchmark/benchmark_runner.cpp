@@ -302,6 +302,18 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				print_help();
 				exit(1);
 			}
+		} else if (StringUtil::StartsWith(arg, "--enumerator=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			if (splits[1] == "exhaustive" || splits[1] == "each_last_once") {
+				instance.enumerator = splits[1];
+			} else {
+				print_help();
+				exit(1);
+			}
 		} else if (arg == "--log_tuples_routed") {
 			instance.log_tuples_routed = true;
 		} else if (arg == "--disable_caching") {

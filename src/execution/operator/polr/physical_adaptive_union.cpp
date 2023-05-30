@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <iostream>
 
 namespace duckdb {
 
@@ -31,7 +32,6 @@ OperatorResultType PhysicalAdaptiveUnion::Execute(ExecutionContext &context, Dat
 	D_ASSERT(chunk.size() == 0);
 
 	// TODO: If path 0 -> reference
-
 	vector<idx_t> &current_join_path = *context.thread.current_join_path;
 
 	chunk.SetCapacity(input);

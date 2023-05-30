@@ -101,8 +101,8 @@ PRAGMA enable_polr_bushy
 statement ok
 SET threads TO 1
 
-statement ok
-SET multiplexer_routing TO alternate
+# statement ok
+# SET multiplexer_routing TO alternate
 
 # q1.1
 statement ok
@@ -130,9 +130,6 @@ SELECT SUM(LO_EXTENDEDPRICE*LO_DISCOUNT) AS REVENUE
 		AND D_WEEKNUMINYEAR = 6
 		AND LO_DISCOUNT BETWEEN 5 AND 7
 		AND LO_QUANTITY BETWEEN 26 AND 35
-
-statement ok
-PRAGMA enable_greedy_ordering
 
 # q2.1
 statement ok
