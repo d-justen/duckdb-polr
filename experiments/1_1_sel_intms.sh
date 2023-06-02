@@ -3,7 +3,7 @@
 mkdir -p experiment-results
 
 declare -a enumeration_strategies=(
-  "exhaustive" "each_last_once"
+  "dfs_random" "dfs_min_card" "bfs_random" "bfs_min_card" "each_last_once" "each_first_once"
 )
 
 declare -a optimizer_modes=(
@@ -29,6 +29,7 @@ do
     do
       ../build/release/benchmark/benchmark_runner "benchmark/${benchmark}/.*" --polr_mode=bushy --multiplexer_routing=alternate --enumerator="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
       mkdir -p ./experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
+      rm *-enumeration.csv
       mv *.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
     done
   done

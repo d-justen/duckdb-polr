@@ -7,7 +7,7 @@ import glob
 results = {}
 optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt"]
 benchmarks = ["imdb", "ssb"]
-enumerators = ["each_last_once"]
+enumerators = ["each_last_once", "each_first_once"]
 
 for optimizer_mode in optimizer_modes:
     for benchmark in benchmarks:

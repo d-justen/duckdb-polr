@@ -12,6 +12,13 @@
 
 namespace duckdb {
 
-enum class JoinEnumerator : uint8_t { EXHAUSTIVE, EACH_LAST_ONCE };
+enum class JoinEnumerator : uint8_t {
+	DFS_RANDOM,
+	DFS_MIN_CARD,
+	BFS_RANDOM,
+	BFS_MIN_CARD,
+	EACH_LAST_ONCE,
+	EACH_FIRST_ONCE
+};
 
 } // namespace duckdb

@@ -711,10 +711,18 @@ Value RoutingStrategySetting::GetSetting(ClientContext &context) {
 void JoinEnumeratorSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto &config = ClientConfig::GetConfig(context);
 	auto parameter = StringUtil::Lower(input.ToString());
-	if (parameter == "exhaustive") {
-		config.join_enumerator = JoinEnumerator::EXHAUSTIVE;
+	if (parameter == "dfs_random") {
+		config.join_enumerator = JoinEnumerator::DFS_RANDOM;
+	} else if (parameter == "dfs_min_card") {
+		config.join_enumerator = JoinEnumerator::DFS_MIN_CARD;
+	} else if (parameter == "bfs_random") {
+		config.join_enumerator = JoinEnumerator::BFS_RANDOM;
+	} else if (parameter == "bfs_min_card") {
+		config.join_enumerator = JoinEnumerator::BFS_MIN_CARD;
 	} else if (parameter == "each_last_once") {
 		config.join_enumerator = JoinEnumerator::EACH_LAST_ONCE;
+	} else if (parameter == "each_first_once") {
+		config.join_enumerator = JoinEnumerator::EACH_FIRST_ONCE;
 	} else {
 		throw InvalidInputException(
 		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
@@ -723,10 +731,18 @@ void JoinEnumeratorSetting::SetLocal(ClientContext &context, const Value &input)
 Value JoinEnumeratorSetting::GetSetting(ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	switch (config.join_enumerator) {
-	case JoinEnumerator::EXHAUSTIVE:
-		return "exhaustive";
+	case JoinEnumerator::DFS_RANDOM:
+		return "dfs_random";
+	case JoinEnumerator::DFS_MIN_CARD:
+		return "dfs_min_card";
+	case JoinEnumerator::BFS_RANDOM:
+		return "bfs_random";
+	case JoinEnumerator::BFS_MIN_CARD:
+		return "bfs_min_card";
 	case JoinEnumerator::EACH_LAST_ONCE:
 		return "each_last_once";
+	case JoinEnumerator::EACH_FIRST_ONCE:
+		return "each_first_once";
 	default:
 		throw InternalException("Unknown access mode setting");
 	}

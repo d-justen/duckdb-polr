@@ -136,7 +136,7 @@ public:
 	bool init_phase_done = false;
 
 	vector<idx_t> remaining_tuples;
-	vector<idx_t> remaining_tuples_diff;
+	vector<int64_t> remaining_tuples_diff;
 	vector<double> path_weights;
 };
 

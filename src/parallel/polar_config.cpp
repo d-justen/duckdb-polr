@@ -4,6 +4,7 @@
 #include "duckdb/execution/executor.hpp"
 #include "duckdb/main/client_context.hpp"
 
+#include <chrono>
 #include <map>
 #include <utility>
 
@@ -16,6 +17,8 @@ POLARConfig::POLARConfig(duckdb::Pipeline *pipeline_p, unique_ptr<JoinEnumeratio
 }
 
 bool POLARConfig::GenerateJoinOrders() {
+	const auto begin = std::chrono::system_clock::now();
+
 	auto &pipeline_operators = pipeline->operators;
 	auto &executor = pipeline->executor;
 
@@ -24,13 +27,11 @@ bool POLARConfig::GenerateJoinOrders() {
 	}
 
 	// Step I: Go through operators, save pointers to Joins (not only HJs?) in vector
-	// TODO: Make accessible to whole class
 	vector<idx_t> hash_join_idxs;
 	for (idx_t i = 0; i < pipeline_operators.size(); i++) {
 		if (pipeline_operators[i]->type == PhysicalOperatorType::HASH_JOIN) {
 			// We only want joins that directly follow each other
 			if (hash_join_idxs.empty() || hash_join_idxs.back() == i - 1) {
-				// TODO: Does not work for mark joins, but what about left outer, right outer etc
 				if (((PhysicalHashJoin *)pipeline_operators[i])->join_type == JoinType::INNER) {
 					hash_join_idxs.push_back(i);
 				}
@@ -42,6 +43,14 @@ bool POLARConfig::GenerateJoinOrders() {
 
 	if (hash_join_idxs.size() <= 1) {
 		return false;
+	}
+
+	vector<idx_t> num_columns_per_join;
+	num_columns_per_join.reserve(hash_join_idxs.size());
+
+	for (auto hash_join_idx : hash_join_idxs) {
+		joins.push_back(static_cast<PhysicalHashJoin *>(pipeline_operators[hash_join_idx]));
+		num_columns_per_join.push_back(joins.back()->types.size());
 	}
 
 	// Step II: If HJ-count > 1: Iterate through vector and build map of idx_t -> vector<idx_t>
@@ -85,18 +94,10 @@ bool POLARConfig::GenerateJoinOrders() {
 		}
 	}
 
-	enumerator->GenerateJoinOrders(hash_join_idxs, join_prerequisites, join_paths);
+	enumerator->GenerateJoinOrders(hash_join_idxs, join_prerequisites, joins, join_paths);
 
 	if (join_paths.size() < 2) {
 		return false;
-	}
-
-	vector<idx_t> num_columns_per_join;
-	num_columns_per_join.reserve(hash_join_idxs.size());
-
-	for (auto hash_join_idx : hash_join_idxs) {
-		joins.push_back(static_cast<PhysicalHashJoin *>(pipeline_operators[hash_join_idx]));
-		num_columns_per_join.push_back(joins.back()->types.size());
 	}
 
 	// Remove joins from operator vector
@@ -196,6 +197,21 @@ bool POLARConfig::GenerateJoinOrders() {
 
 		left_expression_bindings.push_back(expression_bindings);
 	}
+
+	if (pipeline->executor.context.config.log_tuples_routed) {
+		const auto end = std::chrono::system_clock::now();
+
+		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+		std::ofstream file;
+
+		file.open("./experiments/" + filename + "-enumeration.csv");
+
+		double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
+		file << "num_joins,enumeration_time\n";
+		file << hash_join_idxs.size() << "," << duration_ms << "\n";
+		file.close();
+	}
+
 	return true;
 }
 

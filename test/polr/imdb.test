@@ -79,14 +79,14 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 # statement ok
 # COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
@@ -97,8 +97,8 @@ COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ES
 # statement ok
 # COPY complete_cast FROM 'third_party/imdb/data/complete_cast.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
@@ -112,8 +112,8 @@ COPY movie_companies FROM 'third_party/imdb/data/movie_companies.csv' DELIMITER 
 # statement ok
 # COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
@@ -121,8 +121,8 @@ COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',
 # statement ok
 # COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY role_type FROM 'third_party/imdb/data/role_type.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY role_type FROM 'third_party/imdb/data/role_type.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY title FROM 'third_party/imdb/data/title.csv' DELIMITER ',' ESCAPE '\'
@@ -134,30 +134,30 @@ statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
-PRAGMA enable_polr_bushy
-
-statement ok
 SET multiplexer_routing TO adaptive_reinit
 
 statement ok
-PRAGMA disable_cardinality_estimator
+SET join_enumerator TO each_last_once
 
 statement ok
-SELECT MIN(mc.note) AS production_note,
-       MIN(t.title) AS movie_title,
-       MIN(t.production_year) AS movie_year
-FROM company_type AS ct,
-     info_type AS it,
+SELECT MIN(chn.name) AS uncredited_voiced_character,
+       MIN(t.title) AS russian_movie
+FROM char_name AS chn,
+     cast_info AS ci,
+     company_name AS cn,
+     company_type AS ct,
      movie_companies AS mc,
-     movie_info_idx AS mi_idx,
+     role_type AS rt,
      title AS t
-WHERE ct.kind = 'production companies'
-  AND it.info = 'top 250 rank'
-  AND mc.note NOT LIKE '%(as Metro-Goldwyn-Mayer Pictures)%'
-  AND (mc.note LIKE '%(co-production)%'
-       OR mc.note LIKE '%(presents)%')
-  AND ct.id = mc.company_type_id
+WHERE ci.note LIKE '%(voice)%'
+  AND ci.note LIKE '%(uncredited)%'
+  AND cn.country_code = '[ru]'
+  AND rt.role = 'actor'
+  AND t.production_year > 2005
   AND t.id = mc.movie_id
-  AND t.id = mi_idx.movie_id
-  AND mc.movie_id = mi_idx.movie_id
-  AND it.id = mi_idx.info_type_id
+  AND t.id = ci.movie_id
+  AND ci.movie_id = mc.movie_id
+  AND chn.id = ci.person_role_id
+  AND rt.id = ci.role_id
+  AND cn.id = mc.company_id
+  AND ct.id = mc.company_type_id;
