@@ -186,11 +186,14 @@ void Pipeline::Ready() {
 	std::reverse(operators.begin(), operators.end());
 	Reset();
 
-	if (executor.context.config.enable_polr) {
+	if (executor.context.config.enable_polr || executor.context.config.measure_polr_pipeline) {
 		polar_config = make_unique<POLARConfig>(this, JoinEnumerationAlgo::CreateEnumerationAlgo(executor.context));
-		if (!polar_config->GenerateJoinOrders()) {
+		bool join_orders_generated = polar_config->GenerateJoinOrders();
+		if (!join_orders_generated || !executor.context.config.enable_polr) {
 			polar_config = nullptr;
 		}
+
+		measure_pipeline_duration = join_orders_generated && executor.context.config.measure_polr_pipeline;
 	}
 }
 
@@ -203,7 +206,7 @@ void Pipeline::Finalize(Event &event) {
 		auto sink_state = sink->Finalize(*this, event, executor.context, *sink->sink_state);
 		sink->sink_state->state = sink_state;
 
-		if (polar_config && polar_config->measure_polr_pipeline) {
+		if (measure_pipeline_duration) {
 			auto end = std::chrono::system_clock::now();
 
 			std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());

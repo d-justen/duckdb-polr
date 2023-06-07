@@ -85,7 +85,7 @@ struct ClientConfig {
 	bool measure_polr_pipeline = false;
 	bool greedy_ordering_ldt = false;
 	bool caching = true;
-	JoinEnumerator join_enumerator = JoinEnumerator::DFS_RANDOM;
+	JoinEnumerator join_enumerator = JoinEnumerator::DFS_MIN_CARD;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

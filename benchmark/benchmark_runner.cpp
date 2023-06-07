@@ -308,8 +308,9 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				print_help();
 				exit(1);
 			}
-			if (splits[1] == "dfs_random" || splits[1] == "dfs_min_card" || splits[1] == "bfs_random" ||
-			    splits[1] == "bfs_min_card" || splits[1] == "each_last_once" || splits[1] == "each_first_once") {
+			if (splits[1] == "dfs_random" || splits[1] == "dfs_min_card" || splits[1] == "dfs_uncertain" ||
+			    splits[1] == "bfs_random" || splits[1] == "bfs_min_card" || splits[1] == "bfs_uncertain" ||
+			    splits[1] == "each_last_once" || splits[1] == "each_first_once") {
 				instance.enumerator = splits[1];
 			} else {
 				print_help();

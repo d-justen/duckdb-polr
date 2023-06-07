@@ -11,6 +11,7 @@
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/enums/join_enumerator.hpp"
 
+#include <unordered_map>
 #include <functional>
 #include <stdlib.h>
 
@@ -31,6 +32,15 @@ public:
 class MinCardinalitySelector : public CandidateSelector {
 public:
 	idx_t SelectNextCandidate(const std::vector<idx_t> &join_idxs, const vector<PhysicalHashJoin *> &joins) override;
+};
+
+class UncertainCardinalitySelector : public CandidateSelector {
+public:
+	idx_t SelectNextCandidate(const std::vector<idx_t> &join_idxs, const vector<PhysicalHashJoin *> &joins) override;
+
+	idx_t ProjectUncertaintyRecursive(const PhysicalOperator &op, idx_t uncertainty_level);
+
+	std::unordered_map<idx_t, idx_t> uncertainties;
 };
 
 class JoinEnumerationAlgo {

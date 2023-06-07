@@ -16,7 +16,7 @@ declare -a regret_budgets=(
 )
 
 declare -a optimizer_modes=(
-  "dphyp-equisets" "dphyp-equisets-ldt"
+  "dphyp-equisets" "greedy-equisets-ldt"
 )
 
 declare -a benchmarks=(
@@ -35,22 +35,24 @@ for optimizer_mode in "${optimizer_modes[@]}"
 do
   for benchmark in "${benchmarks[@]}"
   do
-      for strategy in "${adaptive_routing_strategies[@]}"
-      do
-        ../build/release/benchmark/benchmark_runner "benchmark/${benchmark}/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
-        mkdir -p ./experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
-        mv *.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
-      done
+    for strategy in "${static_routing_strategies[@]}"
+    do
+      ../build/release/benchmark/benchmark_runner "benchmark/${benchmark}/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --disable_caching --optimizer_mode="${optimizer_mode}"
+      mkdir -p ./experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
+      rm *-enumeration.csv
+      mv *.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
+    done
 
-     for strategy in "${adaptive_routing_strategies[@]}"
-     do
-        for regret_budget in "${regret_budgets[@]}"
-        do
-          ../build/release/benchmark/benchmark_runner "benchmark/${benchmark}/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --disable_caching --nruns=1 --optimizer_mode="${optimizer_mode}"
-          mkdir -p ./experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"/"${regret_budget}"
-          mv *.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"/"${regret_budget}"
-        done
+    for strategy in "${adaptive_routing_strategies[@]}"
+    do
+      for regret_budget in "${regret_budgets[@]}"
+      do
+        ../build/release/benchmark/benchmark_runner "benchmark/${benchmark}/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --disable_caching --optimizer_mode="${optimizer_mode}"
+        mkdir -p ./experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"/"${regret_budget}"
+        rm *-enumeration.csv
+        mv *.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"/"${regret_budget}"
       done
+    done
   done
 done
 

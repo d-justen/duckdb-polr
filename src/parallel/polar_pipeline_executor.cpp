@@ -381,6 +381,10 @@ void POLARPipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t s
 	if (start_idx == joins.size()) {
 		D_ASSERT(in_process_joins.empty());
 
+		if (multiplexer->routing == MultiplexerRouting::ALTERNATE && current_path != 0) {
+			return;
+		}
+
 		StartOperator(&*adaptive_union);
 		adaptive_union->Execute(context, chunk, result, *adaptive_union->op_state, *adaptive_union_state);
 		EndOperator(&*adaptive_union, &result);
@@ -444,6 +448,17 @@ void POLARPipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t s
 			// we got output! continue to the next operator
 			local_join_idx++;
 			if (local_join_idx >= joins.size()) {
+				if (multiplexer->routing == MultiplexerRouting::ALTERNATE && current_path != 0) {
+					if (!in_process_joins.empty()) {
+						local_join_idx = in_process_joins.top();
+						in_process_joins.pop();
+						continue;
+					} else {
+						// TODO: go on with cached chunks?
+						break;
+					}
+				}
+
 				StartOperator(&*adaptive_union);
 				adaptive_union->Execute(context, current_chunk, result, *adaptive_union->op_state,
 				                        *adaptive_union_state);

@@ -56,7 +56,7 @@ public:
 	idx_t current_path_idx = 0;
 
 	vector<vector<idx_t>> intermediates_alternate_mode;
-	std::stringstream log;
+	vector<idx_t> intermediates_per_round;
 
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
@@ -74,7 +74,6 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	if (!state.first_mpx_run) {
 		// TODO: Always finalize from outside
 		FinalizePathRun(state, context.client.config.log_tuples_routed);
-		state.num_intermediates_current_path = 0;
 	} else {
 		state.first_mpx_run = false;
 		if (routing == MultiplexerRouting::ALTERNATE) {
@@ -98,9 +97,13 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 	state.input_tuple_count_per_path[state.current_path_idx] += state.current_path_tuple_count;
 	state.num_tuples_processed += state.current_path_tuple_count;
 
+	if (log_tuples_routed) {
+		state.intermediates_per_round.push_back(state.num_intermediates_current_path);
+	}
+
 	if (!state.intermediates_alternate_mode.empty()) {
 		state.intermediates_alternate_mode[state.current_path_idx].push_back(state.num_intermediates_current_path);
-
+		state.num_intermediates_current_path = 0;
 		return;
 	}
 
@@ -120,27 +123,7 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		state.path_resistances[state.current_path_idx] = path_resistance;
 	}
 
-	if (log_tuples_routed) {
-		if (state.num_tuples_processed - state.current_path_tuple_count == 0) {
-			// First run!
-			state.log << "chosen_path,intermediates,";
-			for (idx_t i = 0; i < state.path_resistances.size(); i++) {
-				state.log << "resistance_" << i << ",";
-				state.log << "sent_" << i << ",";
-			}
-
-			state.log << "\n";
-		}
-
-		state.log << state.current_path_idx << "," << state.num_intermediates_current_path << ",";
-
-		for (idx_t i = 0; i < state.path_resistances.size(); i++) {
-			state.log << state.path_resistances[i] << ",";
-			state.log << state.input_tuple_count_per_path[i] << ",";
-		}
-
-		state.log << "\n";
-	}
+	state.num_intermediates_current_path = 0;
 }
 
 idx_t PhysicalMultiplexer::GetCurrentPathIndex(OperatorState &state_p) const {
@@ -163,21 +146,29 @@ void PhysicalMultiplexer::PrintStatistics(OperatorState &state_p) const {
 
 void PhysicalMultiplexer::WriteLogToFile(OperatorState &state_p, std::ofstream &file) const {
 	auto &state = (MultiplexerState &)state_p;
+	std::stringstream log;
+
 	if (!state.intermediates_alternate_mode.empty()) {
 		for (idx_t i = 0; i < state.intermediates_alternate_mode.size(); i++) {
-			state.log << "path_" << i << ",";
+			log << "path_" << i << ",";
 		}
-		state.log << "\n";
+		log << "\n";
 
 		for (idx_t i = 0; i < state.intermediates_alternate_mode.front().size(); i++) {
 			for (idx_t j = 0; j < state.intermediates_alternate_mode.size(); j++) {
-				state.log << state.intermediates_alternate_mode[j][i] << ",";
+				log << state.intermediates_alternate_mode[j][i] << ",";
 			}
-			state.log << "\n";
+			log << "\n";
+		}
+	} else {
+		log << "intermediates\n";
+
+		for (idx_t i = 0; i < state.intermediates_per_round.size(); i++) {
+			log << state.intermediates_per_round[i] << "\n";
 		}
 	}
 
-	file << state.log.str();
+	file << log.str();
 }
 
 } // namespace duckdb

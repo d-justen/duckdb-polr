@@ -715,10 +715,14 @@ void JoinEnumeratorSetting::SetLocal(ClientContext &context, const Value &input)
 		config.join_enumerator = JoinEnumerator::DFS_RANDOM;
 	} else if (parameter == "dfs_min_card") {
 		config.join_enumerator = JoinEnumerator::DFS_MIN_CARD;
+	} else if (parameter == "dfs_uncertain") {
+		config.join_enumerator = JoinEnumerator::DFS_UNCERTAIN;
 	} else if (parameter == "bfs_random") {
 		config.join_enumerator = JoinEnumerator::BFS_RANDOM;
 	} else if (parameter == "bfs_min_card") {
 		config.join_enumerator = JoinEnumerator::BFS_MIN_CARD;
+	} else if (parameter == "bfs_uncertain") {
+		config.join_enumerator = JoinEnumerator::BFS_UNCERTAIN;
 	} else if (parameter == "each_last_once") {
 		config.join_enumerator = JoinEnumerator::EACH_LAST_ONCE;
 	} else if (parameter == "each_first_once") {
@@ -735,10 +739,14 @@ Value JoinEnumeratorSetting::GetSetting(ClientContext &context) {
 		return "dfs_random";
 	case JoinEnumerator::DFS_MIN_CARD:
 		return "dfs_min_card";
+	case JoinEnumerator::DFS_UNCERTAIN:
+		return "dfs_uncertain";
 	case JoinEnumerator::BFS_RANDOM:
 		return "bfs_random";
 	case JoinEnumerator::BFS_MIN_CARD:
 		return "bfs_min_card";
+	case JoinEnumerator::BFS_UNCERTAIN:
+		return "bfs_uncertain";
 	case JoinEnumerator::EACH_LAST_ONCE:
 		return "each_last_once";
 	case JoinEnumerator::EACH_FIRST_ONCE:

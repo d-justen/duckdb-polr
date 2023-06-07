@@ -207,7 +207,7 @@ bool POLARConfig::GenerateJoinOrders() {
 		file.open("./experiments/" + filename + "-enumeration.csv");
 
 		double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
-		file << "num_joins,enumeration_time\n";
+		file << "num_joins,enumeration_time_ms\n";
 		file << hash_join_idxs.size() << "," << duration_ms << "\n";
 		file.close();
 	}

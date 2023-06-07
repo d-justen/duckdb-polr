@@ -26,6 +26,52 @@ idx_t MinCardinalitySelector::SelectNextCandidate(const std::vector<idx_t> &join
 	return selected_candidate;
 }
 
+idx_t UncertainCardinalitySelector::ProjectUncertaintyRecursive(const PhysicalOperator &op, idx_t uncertainty_level) {
+	if (op.type == PhysicalOperatorType::TABLE_SCAN) {
+		auto &table_filters = ((PhysicalTableScan &)op).table_filters;
+		if (table_filters && !table_filters->filters.empty()) {
+			uncertainty_level++;
+		}
+	} else if (op.children.size() > 1) {
+		// i.e. join
+		uncertainty_level++;
+	} else if (op.type == PhysicalOperatorType::FILTER) {
+		uncertainty_level++;
+	}
+
+	idx_t max_uncertainty = uncertainty_level;
+	for (auto &child : op.children) {
+		idx_t u = ProjectUncertaintyRecursive(*child, uncertainty_level);
+		if (u > max_uncertainty) {
+			max_uncertainty = u;
+		}
+	}
+
+	return max_uncertainty;
+}
+
+idx_t UncertainCardinalitySelector::SelectNextCandidate(const std::vector<idx_t> &join_idxs,
+                                                        const vector<PhysicalHashJoin *> &joins) {
+	idx_t min_card = std::numeric_limits<idx_t>::max();
+	idx_t selected_candidate = 0;
+
+	for (auto join_idx : join_idxs) {
+		auto *join = joins[join_idx];
+
+		if (uncertainties.find(join_idx) == uncertainties.end()) {
+			idx_t uncertainty_level = ProjectUncertaintyRecursive(*join->children[1], 1);
+			uncertainties[join_idx] = uncertainty_level * join->estimated_cardinality;
+		}
+
+		if (uncertainties[join_idx] < min_card) {
+			min_card = uncertainties[join_idx];
+			selected_candidate = join_idx;
+		}
+	}
+
+	return selected_candidate;
+}
+
 unique_ptr<JoinEnumerationAlgo> JoinEnumerationAlgo::CreateEnumerationAlgo(ClientContext &context) {
 	const auto algo = context.config.join_enumerator;
 
@@ -34,10 +80,14 @@ unique_ptr<JoinEnumerationAlgo> JoinEnumerationAlgo::CreateEnumerationAlgo(Clien
 		return make_unique<DFSEnumeration>(make_unique<RandomCandidateSelector>());
 	case JoinEnumerator::DFS_MIN_CARD:
 		return make_unique<DFSEnumeration>(make_unique<MinCardinalitySelector>());
+	case JoinEnumerator::DFS_UNCERTAIN:
+		return make_unique<DFSEnumeration>(make_unique<UncertainCardinalitySelector>());
 	case JoinEnumerator::BFS_RANDOM:
 		return make_unique<BFSEnumeration>(make_unique<RandomCandidateSelector>());
 	case JoinEnumerator::BFS_MIN_CARD:
 		return make_unique<BFSEnumeration>(make_unique<MinCardinalitySelector>());
+	case JoinEnumerator::BFS_UNCERTAIN:
+		return make_unique<BFSEnumeration>(make_unique<UncertainCardinalitySelector>());
 	case JoinEnumerator::EACH_LAST_ONCE:
 		return make_unique<EachLastOnceEnumeration>();
 	case JoinEnumerator::EACH_FIRST_ONCE:
@@ -81,18 +131,19 @@ void DFSEnumeration::GeneratePathsRecursive(const vector<PhysicalHashJoin *> &jo
 		return;
 	}
 
-	for (idx_t i = 0; i < joins_left.size(); i++) {
-		// TODO: Build map or so to lookup join partners
-		vector<idx_t> candidates;
-		candidates.reserve(joins_left.size());
+	vector<idx_t> candidates;
+	candidates.reserve(joins_left.size());
 
-		for (auto join_idx : joins_left) {
-			if (CanJoin(join_seq, join_idx, join_prerequisites)) {
-				candidates.push_back(join_idx);
-			}
+	for (auto join_idx : joins_left) {
+		if (CanJoin(join_seq, join_idx, join_prerequisites)) {
+			candidates.push_back(join_idx);
 		}
+	}
 
+	idx_t num_relations = candidates.size();
+	for (idx_t i = 0; i < num_relations; i++) {
 		const idx_t join_idx = selector->SelectNextCandidate(candidates, joins);
+		candidates.erase(std::find(candidates.begin(), candidates.end(), join_idx));
 
 		vector<idx_t> join_seq_new;
 		join_seq_new.reserve(join_seq.size() + 1);
@@ -102,15 +153,8 @@ void DFSEnumeration::GeneratePathsRecursive(const vector<PhysicalHashJoin *> &jo
 		if (joins_left.size() == 1) {
 			result.push_back(join_seq_new);
 		} else {
-			vector<idx_t> joins_left_new;
-			joins_left_new.reserve(joins_left.size() - 1);
-			for (auto j : joins_left) {
-				if (j == join_idx) {
-					continue;
-				}
-				joins_left_new.push_back(j);
-			}
-
+			vector<idx_t> joins_left_new(joins_left.begin(), joins_left.end());
+			joins_left_new.erase(std::find(joins_left_new.begin(), joins_left_new.end(), join_idx));
 			GeneratePathsRecursive(joins, join_prerequisites, result, move(join_seq_new), move(joins_left_new));
 		}
 	}
@@ -126,8 +170,40 @@ void DFSEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
 		joins_left.push_back(i);
 	}
 
-	join_orders.reserve(MAX_JOIN_ORDERS);
+	join_orders.reserve(MAX_JOIN_ORDERS + 1);
 	GeneratePathsRecursive(joins, dependencies, join_orders, vector<idx_t>(), joins_left);
+
+	// TODO: Deduplicate this code in method
+	bool contains_original_join_order = false;
+	idx_t original_join_order_idx = 0;
+	for (idx_t i = 0; i < join_orders.size(); i++) {
+		auto &join_order = join_orders[i];
+		bool is_original_join_order = true;
+		for (idx_t j = 0; j < join_order.size(); j++) {
+			if (join_order[j] != j) {
+				is_original_join_order = false;
+				break;
+			}
+		}
+		if (is_original_join_order) {
+			contains_original_join_order = true;
+			original_join_order_idx = i;
+			break;
+		}
+	}
+
+	if (!contains_original_join_order) {
+		vector<idx_t> original_join_order(hash_join_idxs.size());
+		std::iota(original_join_order.begin(), original_join_order.end(), 0);
+		join_orders.insert(join_orders.begin(), original_join_order);
+		if (join_orders.size() > MAX_JOIN_ORDERS) {
+			join_orders.erase(join_orders.end() - 1);
+		}
+	} else if (original_join_order_idx != 0) {
+		auto original_join_order = join_orders[original_join_order_idx];
+		join_orders.erase(join_orders.begin() + original_join_order_idx);
+		join_orders.insert(join_orders.begin(), original_join_order);
+	}
 }
 
 void EachLastOnceEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
@@ -197,6 +273,8 @@ void EachFirstOnceEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join
 void BFSEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
                                         unordered_map<idx_t, vector<idx_t>> &dependencies,
                                         const vector<PhysicalHashJoin *> &joins, vector<vector<idx_t>> &join_orders) {
+	join_orders.reserve(MAX_JOIN_ORDERS + 1);
+
 	vector<idx_t> joined;
 	vector<idx_t> next_layer;
 	next_layer.reserve(hash_join_idxs.size());
@@ -267,6 +345,38 @@ void BFSEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
 				return;
 			}
 		}
+	}
+
+	// TODO: Deduplicate this code in method
+	bool contains_original_join_order = false;
+	idx_t original_join_order_idx = 0;
+	for (idx_t i = 0; i < join_orders.size(); i++) {
+		auto &join_order = join_orders[i];
+		bool is_original_join_order = true;
+		for (idx_t j = 0; j < join_order.size(); j++) {
+			if (join_order[j] != j) {
+				is_original_join_order = false;
+				break;
+			}
+		}
+		if (is_original_join_order) {
+			contains_original_join_order = true;
+			original_join_order_idx = i;
+			break;
+		}
+	}
+
+	if (!contains_original_join_order) {
+		vector<idx_t> original_join_order(hash_join_idxs.size());
+		std::iota(original_join_order.begin(), original_join_order.end(), 0);
+		join_orders.insert(join_orders.begin(), original_join_order);
+		if (join_orders.size() > MAX_JOIN_ORDERS) {
+			join_orders.erase(join_orders.end() - 1);
+		}
+	} else if (original_join_order_idx != 0) {
+		auto original_join_order = join_orders[original_join_order_idx];
+		join_orders.erase(join_orders.begin() + original_join_order_idx);
+		join_orders.insert(join_orders.begin(), original_join_order);
 	}
 }
 

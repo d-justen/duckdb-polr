@@ -73,8 +73,8 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 
 ### FILL EM
 
-# statement ok
-# COPY aka_name FROM 'third_party/imdb/data/aka_name.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY aka_name FROM 'third_party/imdb/data/aka_name.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
@@ -82,14 +82,14 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 statement ok
 COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY comp_cast_type FROM 'third_party/imdb/data/comp_cast_type.csv' DELIMITER ',' ESCAPE '\'
@@ -118,8 +118,8 @@ COPY movie_companies FROM 'third_party/imdb/data/movie_companies.csv' DELIMITER 
 # statement ok
 # COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY role_type FROM 'third_party/imdb/data/role_type.csv' DELIMITER ',' ESCAPE '\'
@@ -134,30 +134,28 @@ statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
-SET multiplexer_routing TO adaptive_reinit
+SET multiplexer_routing TO alternate
 
 statement ok
-SET join_enumerator TO each_last_once
+PRAGMA enable_log_tuples_routed
 
 statement ok
-SELECT MIN(chn.name) AS uncredited_voiced_character,
-       MIN(t.title) AS russian_movie
-FROM char_name AS chn,
+SELECT MIN(a1.name) AS writer_pseudo_name,
+       MIN(t.title) AS movie_title
+FROM aka_name AS a1,
      cast_info AS ci,
      company_name AS cn,
-     company_type AS ct,
      movie_companies AS mc,
+     name AS n1,
      role_type AS rt,
      title AS t
-WHERE ci.note LIKE '%(voice)%'
-  AND ci.note LIKE '%(uncredited)%'
-  AND cn.country_code = '[ru]'
-  AND rt.role = 'actor'
-  AND t.production_year > 2005
+WHERE cn.country_code ='[us]'
+  AND rt.role ='writer'
+  AND a1.person_id = n1.id
+  AND n1.id = ci.person_id
+  AND ci.movie_id = t.id
   AND t.id = mc.movie_id
-  AND t.id = ci.movie_id
-  AND ci.movie_id = mc.movie_id
-  AND chn.id = ci.person_role_id
-  AND rt.id = ci.role_id
-  AND cn.id = mc.company_id
-  AND ct.id = mc.company_type_id;
+  AND mc.company_id = cn.id
+  AND ci.role_id = rt.id
+  AND a1.person_id = ci.person_id
+  AND ci.movie_id = mc.movie_id;

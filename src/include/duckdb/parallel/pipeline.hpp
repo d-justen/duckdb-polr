@@ -132,6 +132,8 @@ private:
 	//! The base batch index of this pipeline
 	idx_t base_batch_index = 0;
 
+	bool measure_pipeline_duration = false;
+
 private:
 	void ScheduleSequentialTask(shared_ptr<Event> &event);
 	bool LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads);
