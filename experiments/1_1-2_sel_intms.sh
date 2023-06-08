@@ -7,7 +7,7 @@ declare -a enumeration_strategies=(
 )
 
 declare -a optimizer_modes=(
-  "dphyp-equisets" "greedy-equisets-ldt"
+  "dphyp-equisets" "greedy-equisets-ldt" "nostats"
 )
 
 declare -a benchmarks=(

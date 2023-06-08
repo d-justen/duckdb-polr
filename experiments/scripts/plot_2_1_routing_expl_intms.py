@@ -5,7 +5,7 @@ import os
 import glob
 import matplotlib.pyplot as plt
 
-optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt"]
+optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt", "nostats"]
 benchmarks = ["imdb", "ssb"]
 adaptive_routing_strategies = ["adaptive_reinit", "dynamic"]
 exploration_budgets = ["0.00001", "0.0001", "0.001", "0.01", "0.1", "0.2", "0.4", "0.8", "1.6", "2.4", "3.2"]

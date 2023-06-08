@@ -4,7 +4,7 @@ import pandas as pd
 import os
 import glob
 
-optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt"]
+optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt", "nostats"]
 benchmarks = ["imdb", "ssb"]
 enumerators = ["each_last_once", "each_first_once", "dfs_random", "dfs_min_card", "dfs_uncertain", "bfs_random",
                "bfs_min_card", "bfs_uncertain"]

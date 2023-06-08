@@ -101,6 +101,9 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 				D_ASSERT(!res->HasError());
 				res = con.Query("PRAGMA enable_greedy_ordering_ldt");
 				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "nostats") {
+				res = con.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
 			}
 		}
 	}

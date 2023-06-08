@@ -16,7 +16,7 @@ declare -a regret_budgets=(
 )
 
 declare -a optimizer_modes=(
-  "dphyp-equisets" "greedy-equisets-ldt"
+  "dphyp-equisets" "greedy-equisets-ldt" "nostats"
 )
 
 declare -a benchmarks=(

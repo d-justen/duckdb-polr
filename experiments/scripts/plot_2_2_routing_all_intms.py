@@ -8,7 +8,7 @@ import matplotlib.ticker as mtick
 import numpy as np
 from statistics import mean
 
-optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt"]
+optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt", "nostats"]
 benchmarks = ["imdb", "ssb"]
 routing_strategies = ["alternate", "default_path", "init_once", "opportunistic", "adaptive_reinit", "dynamic"]
 

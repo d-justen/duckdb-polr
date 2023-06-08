@@ -11,7 +11,7 @@ rm -rf ./experiment-results/"${DIR_NAME}"
 mkdir ./experiment-results/"${DIR_NAME}"
 
 declare -a optimizer_modes=(
-  "dphyp-equisets" "greedy-equisets-ldt"
+  "dphyp-equisets" "greedy-equisets-ldt" "nostats"
 )
 
 declare -a job_queries=(

@@ -511,6 +511,10 @@ idx_t CardinalityEstimator::InspectConjunctionOR(idx_t cardinality, idx_t column
 }
 
 idx_t CardinalityEstimator::InspectTableFilters(idx_t cardinality, LogicalOperator *op, TableFilterSet *table_filters) {
+	if (!table_filters->filters.empty() && !context.config.enable_cardinality_estimator) {
+		return MaxValue<idx_t>(cardinality * DEFAULT_SELECTIVITY, 1);
+	}
+
 	idx_t cardinality_after_filters = cardinality;
 	auto get = GetLogicalGet(op);
 	unique_ptr<BaseStatistics> column_statistics;
@@ -542,16 +546,6 @@ idx_t CardinalityEstimator::InspectTableFilters(idx_t cardinality, LogicalOperat
 }
 
 void CardinalityEstimator::EstimateBaseTableCardinality(JoinNode *node, LogicalOperator *op) {
-	if (!context.config.enable_cardinality_estimator) {
-		if (context.config.min_cardinality != 1.0) {
-			node->SetEstimatedCardinality(node->GetBaseTableCardinality() * dis(generator));
-			return;
-		}
-
-		node->SetEstimatedCardinality(node->GetBaseTableCardinality() * DEFAULT_SELECTIVITY);
-		return;
-	}
-
 	auto has_logical_filter = IsLogicalFilter(op);
 	auto table_filters = GetTableFilters(op);
 

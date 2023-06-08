@@ -5,7 +5,7 @@ import os
 import glob
 
 routing_strategies = ["default", "init_once", "opportunistic", "adaptive_reinit", "dynamic"]
-optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt"]
+optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt", "nostats"]
 benchmarks = ["imdb", "ssb"]
 raw_results = {}
 

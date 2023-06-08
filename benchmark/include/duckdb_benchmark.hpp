@@ -100,7 +100,10 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 			} else if (instance.optimizer_mode == "greedy-constant-ldt") {
 				res = conn.Query("PRAGMA disable_cardinality_estimator");
 				D_ASSERT(!res->HasError());
-				res = conn.Query("PRAGMA enabbele_greedy_ordering_ldt");
+				res = conn.Query("PRAGMA enable_greedy_ordering_ldt");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "nostats") {
+				res = conn.Query("PRAGMA disable_cardinality_estimator");
 				D_ASSERT(!res->HasError());
 			}
 		}
