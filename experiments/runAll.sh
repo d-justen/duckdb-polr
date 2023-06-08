@@ -2,11 +2,13 @@
 
 VENV_PATH="$PWD/venv"
 
-if [[ ! dpkg -s clang-12 &> /dev/null ]]; then
+dpkg -s clang-12 &> /dev/null
+if [ $? -ne 0 ]; then
   sudo apt install clang-12
 fi
 
-if [[ ! dpkg -s libssl-dev &> /dev/null ]]; then
+dpkg -s libssl-dev &> /dev/null
+if [ $? -ne 0 ]; then
   sudo apt install libssl-dev
 fi
 
