@@ -74,7 +74,7 @@ public:
 	explicit InitOnceRoutingStrategyState(vector<double> *path_resistances) : RoutingStrategyState(path_resistances) {
 	}
 
-	const idx_t INIT_TUPLE_COUNT = 16;
+	const idx_t INIT_TUPLE_COUNT = 128;
 	idx_t best_path_after_init = 0;
 	idx_t num_paths_initialized = 0;
 	bool init_phase_done = false;

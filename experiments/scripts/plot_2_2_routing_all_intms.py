@@ -23,9 +23,9 @@ for mode in optimizer_modes:
         for strategy in routing_strategies:
             path = os.getcwd() + "/experiment-results/2_1-2_routing_intms/" + mode + "/" + benchmark + "/" + strategy
             if strategy == "adaptive_reinit":
-                path += "/0.001"
+                path += "/0.01"
             elif strategy == "dynamic":
-                path += "/0.001"
+                path += "/0.01"
 
             intms = []
             if strategy == "alternate":
@@ -84,15 +84,7 @@ for mode in optimizer_modes:
                         print(txt_file + ": " + str(intermediates))
                         print(csv_file + ": " + str(intermediates_2))
 
-                    if strategy == "default_path":
-                        df2 = pd.read_csv(alternate_files[i])
-                        df2.pop(df2.columns[-1])
-                        intermediates_3 = df2["path_0"].sum()
 
-                        if intermediates_3 != intermediates:
-                            print("### Warning ###")
-                            print(txt_file + ": " + str(intermediates))
-                            print(alternate_files[i] + ": " + str(intermediates_3))
 
                     intms.append(int(intermediates))
             results[mode][benchmark][strategy] = sum(intms)

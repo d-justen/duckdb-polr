@@ -12,12 +12,25 @@ if [ $? -ne 0 ]; then
   sudo apt install libssl-dev
 fi
 
+dpkg -s cgroup-tools &> /dev/null
+if [ $? -ne 0 ]; then
+  sudo apt install cgroup-tools
+fi
+
+lscgroup | grep limitcpu8 >/dev/null
+if [ $? -ne 0 ]; then
+  sudo cgcreate -g cpu:/limitcpu8
+  sudo cgset -r cpu.cfs_quota_us=800000 limitcpu8
+    sudo cgcreate -g cpu:/limitcpu1
+    sudo cgset -r cpu.cfs_quota_us=100000 limitcpu1
+fi
+
 if [[ ! -d "$VENV_PATH" ]]; then
   echo "Creating Python Virtual Environment"
   python3 -m venv $VENV_PATH
   source "$VENV_PATH/bin/activate"
   pip install pip --upgrade > /dev/null
-  pip -q install -r requirements.txt
+  pip -q install -r ../requirements.txt
   echo "$HOSTNAME"
 fi
 
@@ -40,7 +53,7 @@ echo "Running 2_1-2_routing_intms.sh..."
 ./2_1-2_routing_intms.sh
 
 echo "Running 2_3_routing_dur.sh..."
-./2_3_routing_dur.sh
+sudo cgexec -g cpu:limitcpu1 ./2_3_routing_dur.sh
 
 # echo "Running 3_1_perf_dur.sh..."
 # ./3_1_perf_dur.sh

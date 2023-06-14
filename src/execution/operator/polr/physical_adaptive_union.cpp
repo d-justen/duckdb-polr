@@ -16,8 +16,10 @@ PhysicalAdaptiveUnion::PhysicalAdaptiveUnion(vector<LogicalType> types, idx_t nu
 }
 
 class AdaptiveUnionState : public OperatorState {
-
 public:
+	AdaptiveUnionState(vector<idx_t> *input_join_order_p = nullptr) : input_join_order(input_join_order_p) {
+	}
+	vector<idx_t> *input_join_order;
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
 	}
 };
@@ -26,13 +28,21 @@ unique_ptr<OperatorState> PhysicalAdaptiveUnion::GetOperatorState(ExecutionConte
 	return make_unique<AdaptiveUnionState>();
 }
 
+unique_ptr<OperatorState>
+PhysicalAdaptiveUnion::GetOperatorStateWithStaticJoinOrder(ExecutionContext &context,
+                                                           vector<idx_t> *input_join_order) const {
+	return make_unique<AdaptiveUnionState>(input_join_order);
+}
+
 OperatorResultType PhysicalAdaptiveUnion::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                                   GlobalOperatorState &gstate_p, OperatorState &state_p) const {
-	D_ASSERT(context.thread.current_join_path);
+	auto &state = (AdaptiveUnionState &)state_p;
+	D_ASSERT(context.thread.current_join_path || state.input_join_order);
 	D_ASSERT(chunk.size() == 0);
 
 	// TODO: If path 0 -> reference
-	vector<idx_t> &current_join_path = *context.thread.current_join_path;
+	vector<idx_t> &current_join_path =
+	    state.input_join_order ? *state.input_join_order : *context.thread.current_join_path;
 
 	chunk.SetCapacity(input);
 	chunk.SetCardinality(input);

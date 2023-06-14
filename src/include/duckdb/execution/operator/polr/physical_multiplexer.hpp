@@ -43,6 +43,7 @@ public:
 	string ParamsToString() const override;
 	void PrintStatistics(OperatorState &state) const;
 	void WriteLogToFile(OperatorState &state, std::ofstream &file) const;
+	bool WasExecuted(OperatorState &state_p) const;
 };
 
 } // namespace duckdb

@@ -95,32 +95,26 @@ COPY supplier FROM 'test/ssb/data/supplier.tbl'
 statement ok
 COPY date FROM 'test/ssb/data/date.tbl'
 
-statement ok
-PRAGMA enable_polr_bushy
+# statement ok
+# PRAGMA enable_polr_bushy
+
+# statement ok
+# PRAGMA disable_caching
 
 statement ok
 SET threads TO 1
 
-statement ok
-SET multiplexer_routing TO alternate
-
-statement ok
-PRAGMA enable_log_tuples_routed
-
 # statement ok
-# SET join_enumerator TO bfs_uncertain
+# SET multiplexer_routing TO backpressure
 
-#q4.3
+#2.1
 statement ok
-SELECT D_YEAR, S_CITY, P_BRAND, SUM(LO_REVENUE - LO_SUPPLYCOST) AS profit
-	FROM DATE, CUSTOMER, SUPPLIER, PART, LINEORDER
-	WHERE LO_CUSTKEY = C_CUSTKEY
-		AND LO_SUPPKEY = S_SUPPKEY
-		AND LO_PARTKEY = P_PARTKEY
-		AND LO_ORDERDATE = D_DATEKEY
-		AND C_REGION = 'AMERICA'
-		AND S_NATION = 'UNITED STATES'
-		AND (D_YEAR = 1997 OR D_YEAR = 1998)
-		AND P_CATEGORY = 'MFGR#14'
-	GROUP BY D_YEAR, S_CITY, P_BRAND
-	ORDER BY D_YEAR, S_CITY, P_BRAND
+SELECT SUM(LO_REVENUE), D_YEAR, P_BRAND
+FROM LINEORDER, DATE, PART, SUPPLIER
+WHERE LO_ORDERDATE = D_DATEKEY
+  AND LO_PARTKEY = P_PARTKEY
+  AND LO_SUPPKEY = S_SUPPKEY
+  AND P_CATEGORY = 'MFGR#12'
+  AND S_REGION = 'AMERICA'
+GROUP BY D_YEAR, P_BRAND
+ORDER BY D_YEAR, P_BRAND;

@@ -42,6 +42,8 @@ public:
 		case MultiplexerRouting::DEFAULT_PATH:
 			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
 			break;
+		default:
+			D_ASSERT(false); // TODO throw
 		}
 	}
 
@@ -169,6 +171,16 @@ void PhysicalMultiplexer::WriteLogToFile(OperatorState &state_p, std::ofstream &
 	}
 
 	file << log.str();
+}
+
+bool PhysicalMultiplexer::WasExecuted(OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+	for (auto input_tuple_count : state.input_tuple_count_per_path) {
+		if (input_tuple_count > 0) {
+			return true;
+		}
+	}
+	return false;
 }
 
 } // namespace duckdb

@@ -35,6 +35,10 @@ public:
 	std::unique_ptr<PhysicalAdaptiveUnion> adaptive_union;
 	bool measure_polr_pipeline;
 	bool log_tuples_routed;
+	unique_ptr<GlobalSourceState> source_state;
+	vector<idx_t> hash_join_idxs;
+
+	unique_ptr<vector<unique_ptr<Pipeline>>> backpressure_pipelines;
 };
 
 } // namespace duckdb

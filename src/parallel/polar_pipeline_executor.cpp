@@ -79,7 +79,10 @@ bool POLARPipelineExecutor::Execute(idx_t max_chunks) {
 
 	auto &polar = pipeline.polar_config;
 
-	if (polar->log_tuples_routed && num_intermediates_produced > 0) {
+	if (polar->log_tuples_routed) {
+		if (!polar->multiplexer->WasExecuted(*multiplexer_state)) {
+			return true;
+		}
 		polar->multiplexer->PrintStatistics(*multiplexer_state);
 		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;

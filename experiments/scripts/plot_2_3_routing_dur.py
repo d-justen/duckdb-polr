@@ -27,6 +27,8 @@ for benchmark in benchmarks:
 
             raw_results[f"{benchmark}-{mode[:2]}"][strategy] = timings
 
+print(raw_results)
+
 result_str = "\\begin{table}\n\t\\centering\n\t\\begin{tabular}{l"
 
 for i in range(len(raw_results)):
@@ -36,7 +38,8 @@ result_str += "}\n\t\t"
 result_str += "\\textbf{Routing strategy}"
 
 for result_key in raw_results:
-    result_str += " & " + result_key
+    if "default" in raw_results[result_key]:
+        result_str += " & " + result_key
 
 result_str += "\\\\\n\t\t"
 result_str += "\\hline\n\t\t"
@@ -45,7 +48,7 @@ for routing_strategy in routing_strategies:
     result_str += routing_strategy.replace("_", " ")
 
     for result_key in raw_results:
-        if len(raw_results[result_key]["default"]) > 0:
+        if "default" in raw_results[result_key] and len(raw_results[result_key]["default"]) > 0:
             total_pipeline_duration = sum(raw_results[result_key][routing_strategy])
             result_str += " & " + "{:10.2f}".format(total_pipeline_duration / 1000) + " s"
     result_str += "\\\\\n\t\t"

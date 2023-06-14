@@ -72,7 +72,9 @@ public:
 
 	Executor &executor;
 
-	unique_ptr<POLARConfig> polar_config;
+	shared_ptr<POLARConfig> polar_config;
+	bool is_backpressure_pipeline = false;
+	unique_ptr<vector<idx_t>> backpressure_join_order;
 
 public:
 	ClientContext &GetClientContext();
@@ -133,6 +135,7 @@ private:
 	idx_t base_batch_index = 0;
 
 	bool measure_pipeline_duration = false;
+	vector<std::map<idx_t, idx_t>> polar_bindings;
 
 private:
 	void ScheduleSequentialTask(shared_ptr<Event> &event);

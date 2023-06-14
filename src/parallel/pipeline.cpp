@@ -36,13 +36,14 @@ public:
 public:
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
 		if (!pipeline_executor) {
-			if (pipeline.polar_config) {
+			if (pipeline.polar_config && !pipeline.is_backpressure_pipeline) {
 				pipeline_executor = make_unique<POLARPipelineExecutor>(pipeline.GetClientContext(), pipeline);
 			} else {
 				pipeline_executor = make_unique<PipelineExecutor>(pipeline.GetClientContext(), pipeline);
 			}
 		}
-		if (mode == TaskExecutionMode::PROCESS_PARTIAL) {
+		if (mode == TaskExecutionMode::PROCESS_PARTIAL && !pipeline.is_backpressure_pipeline &&
+		    !pipeline.polar_config) {
 			bool finished = pipeline_executor->Execute(PARTIAL_CHUNK_COUNT);
 			if (!finished) {
 				return TaskExecutionResult::TASK_NOT_FINISHED;
@@ -65,7 +66,7 @@ ClientContext &Pipeline::GetClientContext() {
 }
 
 vector<PhysicalOperator *> &Pipeline::GetOperators() {
-	return polar_config ? polar_config->operators : operators;
+	return polar_config && !is_backpressure_pipeline ? polar_config->operators : operators;
 }
 
 bool Pipeline::GetProgress(double &current_percentage, idx_t &source_cardinality) {
@@ -76,7 +77,8 @@ bool Pipeline::GetProgress(double &current_percentage, idx_t &source_cardinality
 		return true;
 	}
 	auto &client = executor.context;
-	current_percentage = source->GetProgress(client, *source_state);
+	current_percentage =
+	    source->GetProgress(client, is_backpressure_pipeline ? *polar_config->source_state : *source_state);
 	return current_percentage >= 0;
 }
 
@@ -140,8 +142,18 @@ void Pipeline::Schedule(shared_ptr<Event> &event) {
 }
 
 bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
-	// split the scan up into parts and schedule the parts
 	auto &scheduler = TaskScheduler::GetScheduler(executor.context);
+	auto routing = DBConfig::GetConfig(executor.context).options.multiplexer_routing;
+	if (routing == MultiplexerRouting::BACKPRESSURE && polar_config) {
+		// scheduler.SetThreads(polar_config->backpressure_pipelines->size());
+		vector<unique_ptr<Task>> tasks;
+		for (idx_t i = 0; i < polar_config->backpressure_pipelines->size(); i++) {
+			tasks.push_back(make_unique<PipelineTask>(*polar_config->backpressure_pipelines->at(i), event));
+		}
+		event->SetTasks(move(tasks));
+		return true;
+	}
+	// split the scan up into parts and schedule the parts
 	idx_t active_threads = scheduler.NumberOfThreads();
 	if (max_threads > active_threads) {
 		max_threads = active_threads;
@@ -187,10 +199,14 @@ void Pipeline::Ready() {
 	Reset();
 
 	if (executor.context.config.enable_polr || executor.context.config.measure_polr_pipeline) {
-		polar_config = make_unique<POLARConfig>(this, JoinEnumerationAlgo::CreateEnumerationAlgo(executor.context));
+		polar_config = make_shared<POLARConfig>(this, JoinEnumerationAlgo::CreateEnumerationAlgo(executor.context));
 		bool join_orders_generated = polar_config->GenerateJoinOrders();
 		if (!join_orders_generated || !executor.context.config.enable_polr) {
 			polar_config = nullptr;
+		} else if (polar_config->backpressure_pipelines) {
+			for (auto &pipeline : *polar_config->backpressure_pipelines) {
+				pipeline->polar_config = polar_config;
+			}
 		}
 
 		measure_pipeline_duration = join_orders_generated && executor.context.config.measure_polr_pipeline;

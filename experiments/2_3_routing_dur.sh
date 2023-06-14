@@ -2,7 +2,7 @@
 
 mkdir -p experiment-results
 
-REGRET_BUDGET="0.001"
+REGRET_BUDGET="0.01"
 DIR_NAME="2_3_routing_dur"
 
 # Cleanup
@@ -34,7 +34,7 @@ declare -a ssb_queries=(
 )
 
 declare -a routing_strategies=(
-  "init_once" "opportunistic" "adaptive_reinit" "dynamic"
+  "init_once" "opportunistic" "adaptive_reinit" "dynamic" "backpressure"
 )
 
 for optimizer_mode in "${optimizer_modes[@]}"
