@@ -27,7 +27,8 @@ declare -a benchmarks=(
 DIR_NAME="2_1-2_routing_intms"
 
 # Cleanup
-rm -f *.{csv,txt}
+rm -rf ../tmp
+mkdir -p ../tmp
 rm -rf ./experiment-results/"${DIR_NAME}"
 mkdir ./experiment-results/"${DIR_NAME}"
 
@@ -39,8 +40,8 @@ do
     do
       ../build/release/benchmark/benchmark_runner "benchmark/${benchmark}/.*" --polr_mode=bushy --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --disable_caching --optimizer_mode="${optimizer_mode}"
       mkdir -p ./experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
-      rm *-enumeration.csv
-      mv *.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
+      rm ../tmp/*-enumeration.csv
+      mv ../tmp/*.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"
     done
 
     for strategy in "${adaptive_routing_strategies[@]}"
@@ -49,8 +50,8 @@ do
       do
         ../build/release/benchmark/benchmark_runner "benchmark/${benchmark}/.*" --polr_mode=bushy --regret_budget="${regret_budget}" --multiplexer_routing="${strategy}" --threads=1 --log_tuples_routed --nruns=1 --disable_caching --optimizer_mode="${optimizer_mode}"
         mkdir -p ./experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"/"${regret_budget}"
-        rm *-enumeration.csv
-        mv *.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"/"${regret_budget}"
+        rm ../tmp/*-enumeration.csv
+        mv ../tmp/*.{csv,txt} experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/${benchmark}/"${strategy}"/"${regret_budget}"
       done
     done
   done

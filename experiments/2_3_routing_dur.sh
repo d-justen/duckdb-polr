@@ -6,7 +6,8 @@ REGRET_BUDGET="0.01"
 DIR_NAME="2_3_routing_dur"
 
 # Cleanup
-rm -f *.{csv,txt}
+rm -rf ../tmp
+mkdir ../tmp
 rm -rf ./experiment-results/"${DIR_NAME}"
 mkdir ./experiment-results/"${DIR_NAME}"
 
@@ -50,26 +51,26 @@ do
   for query in "${job_queries[@]}"
   do
     ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
-    if compgen -G *.csv > /dev/null; then
+    if compgen -G ../tmp/*.csv > /dev/null; then
 
-      rm -f *.{csv,txt}
+      rm -f ../tmp/*.{csv,txt}
       ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
-      for f in *.csv
+      for f in ../tmp/*.csv
       do
         SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
         (cat "${f}"; echo) >> experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/imdb/default/"${query}"-"${SUFFIX}"
       done
 
-      rm -f *.csv
+      rm -f ../tmp/*.csv
       for strategy in "${routing_strategies[@]}"
       do
         ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
-        for f in *.csv
+        for f in ../tmp/*.csv
         do
           SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
           (cat "${f}"; echo) >> experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/imdb/"${strategy}"/"${query}"-"${SUFFIX}"
         done
-        rm -f *.csv
+        rm -f ../tmp/*.csv
       done
     fi
   done
@@ -85,25 +86,25 @@ do
   for query in "${ssb_queries[@]}"
   do
     ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
-    if compgen -G *.csv > /dev/null; then
-      rm -f *.{csv,txt}
+    if compgen -G ../tmp/*.csv > /dev/null; then
+      rm -f ../tmp/*.{csv,txt}
       ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
-      for f in *.csv
+      for f in ../tmp/*.csv
       do
         SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
         (cat "${f}"; echo) >> experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/ssb/default/"${query}"-"${SUFFIX}"
       done
 
-      rm -f *.csv
+      rm -f ../tmp/*.csv
       for strategy in "${routing_strategies[@]}"
       do
         ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
-        for f in *.csv
+        for f in ../tmp/*.csv
         do
           SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
           (cat "${f}"; echo) >> experiment-results/"${DIR_NAME}"/"${optimizer_mode}"/ssb/"${strategy}"/"${query}"-"${SUFFIX}"
         done
-        rm -f *.csv
+        rm -f ../tmp/*.csv
       done
     fi
   done

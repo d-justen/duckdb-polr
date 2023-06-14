@@ -18,6 +18,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <unistd.h>
 
 namespace duckdb {
 
@@ -230,7 +231,9 @@ void Pipeline::Finalize(Event &event) {
 
 			auto source_str = source->ParamsToString();
 			auto source_hash = std::hash<string> {}(source_str);
-			file.open("./experiments/" + filename + "-" + to_string(source_hash) + ".csv");
+			char tmp[256];
+			getcwd(tmp, 256);
+			file.open(std::string(tmp) + "/tmp/" + filename + "-" + to_string(source_hash) + ".csv");
 
 			double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
 			file << duration_ms;

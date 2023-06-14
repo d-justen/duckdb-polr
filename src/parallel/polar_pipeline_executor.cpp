@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <unistd.h>
 #include <fstream>
 
 namespace duckdb {
@@ -86,13 +87,15 @@ bool POLARPipelineExecutor::Execute(idx_t max_chunks) {
 		polar->multiplexer->PrintStatistics(*multiplexer_state);
 		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;
-		file.open("./experiments/" + filename + ".csv");
+		char tmp[256];
+		getcwd(tmp, 256);
+		file.open(std::string(tmp) + "/tmp/" + filename + ".csv");
 		polar->multiplexer->WriteLogToFile(*multiplexer_state, file);
 		file.close();
 		std::cout << filename << "\n";
 
 		std::ofstream file2;
-		file2.open("./experiments/" + filename + "-intms.txt");
+		file2.open(std::string(tmp) + "/tmp/" + filename + "-intms.txt");
 		file2 << num_intermediates_produced << "\n";
 		file2.close();
 	}
