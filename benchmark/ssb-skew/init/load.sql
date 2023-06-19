@@ -71,11 +71,11 @@ CREATE TABLE date (
                       D_WEEKDAYFL BOOLEAN
 );
 
-INSERT INTO lineorder_tmp SELECT * FROM read_parquet('../ssb-sf10/lineorder.parquet');
-INSERT INTO customer SELECT * FROM read_parquet('../ssb-sf10/customer.parquet');
-INSERT INTO part SELECT * FROM read_parquet('../ssb-sf10/part.parquet');
-INSERT INTO supplier SELECT * FROM read_parquet('../ssb-sf10/supplier.parquet');
-INSERT INTO date SELECT * FROM read_parquet('../ssb-sf10/date.parquet');
+INSERT INTO lineorder SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/lineorder.parquet');
+INSERT INTO customer SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/customer.parquet');
+INSERT INTO part SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/part.parquet');
+INSERT INTO supplier SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/supplier.parquet');
+INSERT INTO date SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/date.parquet');
 
 UPDATE lineorder_tmp SET lo_custkey = 2 FROM date WHERE lo_orderdate = d_datekey AND d_year >= 1992 AND d_year <= 1994 AND d_monthnuminyear >= 1 AND d_monthnuminyear <= 4;
 UPDATE lineorder_tmp SET lo_custkey = 6 FROM date WHERE lo_orderdate = d_datekey AND d_year >= 1995 AND d_year <= 1997 AND d_monthnuminyear >= 1 AND d_monthnuminyear <= 4;
