@@ -3,22 +3,22 @@
 mkdir -p experiment-results
 
 declare -a enumeration_strategies=(
-  "each_last_once" "each_first_once" "dfs_random" "dfs_min_card" "dfs_uncertain" "bfs_random" "bfs_min_card" "bfs_uncertain"
+  "bfs_min_card"
 )
 
 declare -a optimizer_modes=(
-  "dphyp-equisets" "greedy-equisets-ldt" "nostats"
+  "dphyp-equisets"
 )
 
 declare -a benchmarks=(
-  "imdb" "ssb"
+  "imdb" "ssb-skew"
 )
 
 DIR_NAME_1="1_1_sel_intms"
 DIR_NAME_2="1_2_sel_dur"
 
 # Cleanup
-rm -f ../tmp
+rm -rf ../tmp
 mkdir -p ../tmp
 rm -rf ./experiment-results/"${DIR_NAME_1}"
 mkdir ./experiment-results/"${DIR_NAME_1}"

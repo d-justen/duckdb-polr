@@ -8,8 +8,8 @@ import matplotlib.ticker as mtick
 import numpy as np
 from statistics import mean
 
-optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt", "nostats"]
-benchmarks = ["imdb", "ssb"]
+optimizer_modes = ["dphyp-equisets"]
+benchmarks = ["ssb-skew", "imdb"]
 routing_strategies = ["alternate", "default_path", "init_once", "opportunistic", "adaptive_reinit", "dynamic"]
 
 results = {}
@@ -87,14 +87,24 @@ for mode in optimizer_modes:
 
 
                     intms.append(int(intermediates))
-            results[mode][benchmark][strategy] = sum(intms)
+            results[mode][benchmark][strategy] = intms
 print(results)
+
+for config in results:
+    for benchmark in results[config]:
+        print(config + " --- " + benchmark)
+        print(routing_strategies)
+        for i in range(len(results[config][benchmark]["alternate"])):
+            line = str(i) + " |\t"
+            for strategy in results[config][benchmark]:
+                line += "{:4.3f}".format(results[config][benchmark][strategy][i] / results[config][benchmark]["default_path"][i]) + "\t"
+            print(line)
 
 result_str = "\\begin{table}\n\t\\centering\n\t\\begin{tabular}{l"
 
 for mode in results:
     for benchmark in results[mode]:
-        if results[mode][benchmark]["alternate"] > 0:
+        if len(results[mode][benchmark]["alternate"]) > 0:
             result_str += "r"
 
 result_str += "}\n\t\t"
@@ -102,7 +112,7 @@ result_str += "\\textbf{Routing strategy}"
 
 for mode in results:
     for benchmark in results[mode]:
-        if results[mode][benchmark]["alternate"] > 0:
+        if len(results[mode][benchmark]["alternate"]) > 0:
             result_str += " & " + benchmark + "-" + mode[:2]
 
 result_str += "\\\\\n\t\t"
@@ -116,8 +126,8 @@ for routing_strategy in routing_strategies:
 
     for mode in results:
         for benchmark in results[mode]:
-            if results[mode][benchmark]["alternate"] > 0:
-                intermediate_count = results[mode][benchmark][routing_strategy]
+            if len(results[mode][benchmark]["alternate"]) > 0:
+                intermediate_count = sum(results[mode][benchmark][routing_strategy])
                 result_str += " & " + "{:10.2f}".format(intermediate_count / 1000000) + " M"
     result_str += "\\\\\n\t\t"
 

@@ -54,7 +54,7 @@ public:
 	bool CanJoin(vector<idx_t> &r, idx_t s, unordered_map<idx_t, vector<idx_t>> &dependencies);
 	static unique_ptr<JoinEnumerationAlgo> CreateEnumerationAlgo(ClientContext &context);
 
-	const idx_t MAX_JOIN_ORDERS = 24;
+	const idx_t MAX_JOIN_ORDERS = 16;
 };
 
 class DFSEnumeration : public JoinEnumerationAlgo {

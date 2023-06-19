@@ -1,0 +1,14 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [ssb]
+
+name Q${QUERY_NUMBER_PADDED}
+group ssb
+
+require httpfs
+
+cache ssb-skew.duckdb
+
+load benchmark/ssb-skew/init/load.sql
+
+run benchmark/ssb-skew/queries/${QUERY_NUMBER_PADDED}.sql

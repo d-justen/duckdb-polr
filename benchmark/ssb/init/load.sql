@@ -20,7 +20,7 @@ CREATE TABLE lineorder (
 
 CREATE TABLE customer (
                           C_CUSTKEY       UINTEGER,
-                          C_NAME	        VARCHAR,
+                          C_NAME	      VARCHAR,
                           C_ADDRESS       VARCHAR,
                           C_CITY          VARCHAR,
                           C_NATION        VARCHAR,
@@ -76,3 +76,6 @@ INSERT INTO customer SELECT * FROM read_parquet('https://github.com/d-justen/duc
 INSERT INTO part SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/part.parquet');
 INSERT INTO supplier SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/supplier.parquet');
 INSERT INTO date SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/date.parquet');
+
+UPDATE lineorder SET lo_custkey = 2 FROM date WHERE lo_orderdate = d_datekey AND d_year >= 1992 AND d_year <= 1994 AND d_monthnuminyear >= 1 AND d_monthnuminyear <= 4;
+UPDATE lineorder SET lo_custkey = 6 FROM date WHERE lo_orderdate = d_datekey AND d_year >= 1995 AND d_year <= 1997 AND d_monthnuminyear >= 1 AND d_monthnuminyear <= 4;

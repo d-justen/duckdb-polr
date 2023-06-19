@@ -12,15 +12,15 @@ declare -a adaptive_routing_strategies=(
 )
 
 declare -a regret_budgets=(
-  "0.00001" "0.0001" "0.001" "0.01" "0.1" "0.2" "0.4" "0.8" "1.6" "2.4" "3.2"
+  "0.01"
 )
 
 declare -a optimizer_modes=(
-  "dphyp-equisets" "greedy-equisets-ldt" "nostats"
+  "dphyp-equisets"
 )
 
 declare -a benchmarks=(
-  "imdb" "ssb"
+ "ssb-skew"
 )
 
 # TODO: Add selection algo
@@ -57,5 +57,5 @@ do
   done
 done
 
-python3 scripts/plot_2_1_routing_expl_intms.py
+# python3 scripts/plot_2_1_routing_expl_intms.py
 python3 scripts/plot_2_2_routing_all_intms.py

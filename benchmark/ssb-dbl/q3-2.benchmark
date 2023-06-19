@@ -1,7 +1,0 @@
-# name: benchmark/ssb-dbl/q3-2.benchmark
-# description: Run query 3.2 from the ssb benchmark
-# group: [ssb-dbl]
-
-template benchmark/ssb-dbl/ssb.benchmark.in
-QUERY_NUMBER=q3-2
-QUERY_NUMBER_PADDED=q3-2

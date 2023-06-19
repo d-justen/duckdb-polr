@@ -12,7 +12,7 @@ rm -rf ./experiment-results/"${DIR_NAME}"
 mkdir ./experiment-results/"${DIR_NAME}"
 
 declare -a optimizer_modes=(
-  "dphyp-equisets" "greedy-equisets-ldt" "nostats"
+  "dphyp-equisets"
 )
 
 declare -a job_queries=(
@@ -30,12 +30,11 @@ declare -a job_queries=(
 )
 
 declare -a ssb_queries=(
-  "q1-1" "q1-2" "q1-3" "q2-1" "q2-2" "q2-3" "q3-1" "q3-2" "q3-3" "q4-1"
-  "q4-2" "q4-3"
+  "q1-1" "q1-2" "q1-3" "q1-4" "q2-1" "q2-2" "q2-3" "q2-4"
 )
 
 declare -a routing_strategies=(
-  "init_once" "opportunistic" "adaptive_reinit" "dynamic" "backpressure"
+  "init_once" "opportunistic" "adaptive_reinit" "dynamic"
 )
 
 for optimizer_mode in "${optimizer_modes[@]}"
@@ -54,7 +53,7 @@ do
     if compgen -G ../tmp/*.csv > /dev/null; then
 
       rm -f ../tmp/*.{csv,txt}
-      ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
+      ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --threads=1 --nruns=5 --measure_pipeline --optimizer_mode="${optimizer_mode}"
       for f in ../tmp/*.csv
       do
         SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
@@ -64,7 +63,7 @@ do
       rm -f ../tmp/*.csv
       for strategy in "${routing_strategies[@]}"
       do
-        ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
+        ../build/release/benchmark/benchmark_runner "benchmark/imdb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=5 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
         for f in ../tmp/*.csv
         do
           SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
@@ -85,10 +84,10 @@ do
 
   for query in "${ssb_queries[@]}"
   do
-    ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
+    ../build/release/benchmark/benchmark_runner "benchmark/ssb-skew/${query}.benchmark" --polr_mode=bushy --threads=1 --log_tuples_routed --nruns=1 --optimizer_mode="${optimizer_mode}"
     if compgen -G ../tmp/*.csv > /dev/null; then
       rm -f ../tmp/*.{csv,txt}
-      ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
+      ../build/release/benchmark/benchmark_runner "benchmark/ssb-skew/${query}.benchmark" --threads=1 --nruns=20 --measure_pipeline --optimizer_mode="${optimizer_mode}"
       for f in ../tmp/*.csv
       do
         SUFFIX="$(echo "${f}" | cut -d'-' -f2)"
@@ -98,7 +97,7 @@ do
       rm -f ../tmp/*.csv
       for strategy in "${routing_strategies[@]}"
       do
-        ../build/release/benchmark/benchmark_runner "benchmark/ssb/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
+        ../build/release/benchmark/benchmark_runner "benchmark/ssb-skew/${query}.benchmark" --polr_mode=bushy --threads=1 --nruns=20 --regret_budget="${REGRET_BUDGET}" --measure_pipeline --optimizer_mode="${optimizer_mode}" --multiplexer_routing="${strategy}"
         for f in ../tmp/*.csv
         do
           SUFFIX="$(echo "${f}" | cut -d'-' -f2)"

@@ -5,7 +5,7 @@ import os
 import glob
 
 routing_strategies = ["default", "init_once", "opportunistic", "adaptive_reinit", "dynamic"]
-optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt", "nostats"]
+optimizer_modes = ["dphyp-equisets"]
 benchmarks = ["imdb", "ssb"]
 raw_results = {}
 
@@ -28,6 +28,21 @@ for benchmark in benchmarks:
             raw_results[f"{benchmark}-{mode[:2]}"][strategy] = timings
 
 print(raw_results)
+
+for result_key in raw_results:
+    print(result_key)
+    print(routing_strategies)
+    for i in range(len(raw_results[result_key]["default"])):
+        line = str(i) + ": "
+        for strategy in raw_results[result_key]:
+            line += "{:4.3f}".format(raw_results[result_key][strategy][i]) + "\t"
+        print(line)
+    print("#######")
+    for i in range(len(raw_results[result_key]["default"])):
+        line = str(i) + ": "
+        for strategy in raw_results[result_key]:
+            line += "{:4.3f}".format(raw_results[result_key]["default"][i] / raw_results[result_key][strategy][i]) + "\t"
+        print(line)
 
 result_str = "\\begin{table}\n\t\\centering\n\t\\begin{tabular}{l"
 

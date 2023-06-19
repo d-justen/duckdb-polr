@@ -4,10 +4,9 @@ import pandas as pd
 import os
 import glob
 
-optimizer_modes = ["dphyp-equisets", "greedy-equisets-ldt", "nostats"]
-benchmarks = ["imdb", "ssb"]
-enumerators = ["each_last_once", "each_first_once", "dfs_random", "dfs_min_card", "dfs_uncertain", "bfs_random",
-               "bfs_min_card", "bfs_uncertain"]
+optimizer_modes = ["dphyp-equisets"]
+benchmarks = ["imdb", "ssb-skew"]
+enumerators = ["bfs_min_card"]
 
 results = {}
 
@@ -24,7 +23,7 @@ for benchmark in benchmarks:
         worst_in_class = []
 
         for csv_file in csv_files:
-            df = pd.read_csv(csv_file);
+            df = pd.read_csv(csv_file)
             df.pop(df.columns[-1])
 
             default.append(df["path_0"].sum())
@@ -54,6 +53,26 @@ for benchmark in benchmarks:
             sum_intermediates = sum(results[benchmark + "-" + optimizer_mode[:2]][mode])
             print(mode + ": " + str(sum_intermediates / 1000000) + "M intermediates")
 
+
+for result_key in results:
+    print(result_key)
+    print(list(results[result_key].keys()))
+    for i in range(len(results[result_key]["default"])):
+        line = str(i) + ": "
+        for strategy in results[result_key]:
+            line += "{:10.0f}".format(results[result_key][strategy][i]) + "\t"
+        print(line)
+    print("#######")
+    for i in range(len(results[result_key]["default"])):
+        line = str(i) + ": "
+        for strategy in results[result_key]:
+            if results[result_key][strategy][i] == 0 and results[result_key]["best_in_class"][i] == 0:
+                line += "         1\t"
+            elif results[result_key][strategy][i] == 0:
+                line += "       inf\t"
+            else:
+                line += "{:10.3f}".format(results[result_key]["best_in_class"][i] / results[result_key][strategy][i]) + "\t"
+        print(line)
 
 result_str = "\\begin{table}\n\t\\centering\n\t\\begin{tabular}{l"
 
