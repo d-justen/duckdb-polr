@@ -71,7 +71,7 @@ CREATE TABLE date (
                       D_WEEKDAYFL BOOLEAN
 );
 
-INSERT INTO lineorder SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/lineorder.parquet');
+INSERT INTO lineorder_tmp SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/lineorder.parquet');
 INSERT INTO customer SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/customer.parquet');
 INSERT INTO part SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/part.parquet');
 INSERT INTO supplier SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/supplier.parquet');
