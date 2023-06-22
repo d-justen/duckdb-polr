@@ -1,0 +1,7 @@
+# name: benchmark/ldbc/bi-02.benchmark
+# description: Run query 02 from LDBC SNB BI
+# group: [ldbc]
+
+template benchmark/ldbc/ldbc.benchmark.in
+QUERY_NUMBER=13
+QUERY_NUMBER_PADDED=13

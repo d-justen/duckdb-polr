@@ -1,0 +1,12 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [ldbc]
+
+name bi-${QUERY_NUMBER_PADDED}
+group ldbc
+
+cache ldbc.duckdb
+
+load benchmark/ldbc/snb-load.sql
+
+run benchmark/ldbc/queries/bi-${QUERY_NUMBER}.sql

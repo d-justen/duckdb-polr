@@ -95,14 +95,20 @@ COPY supplier FROM 'test/ssb/data/supplier.tbl'
 statement ok
 COPY date FROM 'test/ssb/data/date.tbl'
 
-# statement ok
-# PRAGMA enable_polr_bushy
-
-# statement ok
-# PRAGMA disable_caching
+statement ok
+PRAGMA enable_polr_bushy
 
 statement ok
-SET threads TO 1
+PRAGMA disable_caching
+
+statement ok
+SET multiplexer_routing TO backpressure
+
+statement ok
+PRAGMA enable_log_tuples_routed
+
+statement ok
+SET threads TO 24
 
 # statement ok
 # SET multiplexer_routing TO backpressure
