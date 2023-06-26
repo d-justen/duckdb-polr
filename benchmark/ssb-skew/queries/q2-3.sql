@@ -1,10 +1,12 @@
-SELECT MIN(c_city), MIN(d_date), MIN(s_city)
-FROM lineorder, customer, date, supplier
-WHERE lo_orderdate = d_datekey
-  AND lo_custkey = c_custkey
+SELECT min(c_name), min(p_name), min(c_nation), min(p_color), min(s_region), min(s_nation)
+FROM lineorder, locust, lopart, supplier, customer, part, date
+WHERE lo_custkey = lc_locustkey
+  AND lo_partkey = lp_lopartkey
+  AND lc_custkey = c_custkey
+  AND lp_partkey = p_partkey
   AND lo_suppkey = s_suppkey
-  AND c_nation IN ('JORDAN', 'SAUDI ARABIA')
-  AND c_mktsegment = 'AUTOMOBILE'
-  AND d_monthnuminyear BETWEEN 5 AND 12
-  AND d_year BETWEEN 1994 AND 1997
-  AND s_address NOT LIKE '%nXCDRcfr%';
+  AND lo_orderdate = d_datekey
+  AND s_region = 'AMERICA'
+  AND p_color LIKE '%oldenro%'
+  AND c_region = 'AFRICA'
+  AND d_monthnuminyear IN (1, 2, 4, 5, 10, 11);

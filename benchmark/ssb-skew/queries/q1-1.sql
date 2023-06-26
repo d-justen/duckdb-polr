@@ -1,6 +1,6 @@
-SELECT MIN(c_city), MIN(d_date)
-FROM lineorder, customer, date
-WHERE lo_orderdate = d_datekey
-  AND lo_custkey = c_custkey
-  AND c_nation = 'JORDAN'
-  AND d_year BETWEEN 1994 AND 1998;
+SELECT min(lc_custkey), min(lp_partkey)
+FROM lineorder, locust, lopart
+WHERE lo_custkey = lc_locustkey
+    AND lo_partkey = lp_lopartkey
+    AND lc_custkey = 1
+    AND lp_partkey = 1;

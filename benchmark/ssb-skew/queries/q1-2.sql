@@ -1,6 +1,9 @@
-SELECT MIN(c_city), MIN(d_date)
-FROM lineorder, customer, date
-WHERE lo_orderdate = d_datekey
-  AND lo_custkey = c_custkey
-  AND c_nation IN ('JORDAN', 'SAUDI ARABIA')
-  AND d_sellingseason IN ('Spring', 'Summer', 'Fall');
+SELECT min(lc_custkey), min(lp_partkey), min(d_date), min(d_dayofweek)
+FROM lineorder, locust, lopart, date
+WHERE lo_custkey = lc_locustkey
+  AND lo_partkey = lp_lopartkey
+  AND lo_orderdate = d_datekey
+  AND d_month = 'July'
+  AND lc_custkey BETWEEN 1 AND 50
+  AND lp_partkey BETWEEN 1 AND 50;
+
