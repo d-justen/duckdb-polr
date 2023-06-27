@@ -56,6 +56,7 @@ idx_t InitOnceRoutingStrategy::DetermineNextPath() const {
 	auto &state = (InitOnceRoutingStrategyState &)*routing_state;
 
 	if (state.init_phase_done) {
+		state.num_cache_flushing_skips = std::numeric_limits<idx_t>::max();
 		return state.best_path_after_init;
 	}
 
@@ -169,6 +170,8 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 	return DetermineNextPath();
 }
 
+// TODO: Set cache skips to at least 10
+// TODO: Set tuples routed then to input_size * 10
 idx_t AdaptiveReinitRoutingStrategy::DetermineNextTupleCount() const {
 	auto &state = (AdaptiveReinitRoutingStrategyState &)*routing_state;
 

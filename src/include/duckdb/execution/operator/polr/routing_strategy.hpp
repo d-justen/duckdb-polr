@@ -26,6 +26,7 @@ public:
 
 	idx_t chunk_offset = 0;
 	SelectionVector sel;
+	idx_t num_cache_flushing_skips = 0;
 };
 
 class RoutingStrategy {

@@ -60,6 +60,8 @@ public:
 	vector<vector<idx_t>> intermediates_alternate_mode;
 	vector<idx_t> intermediates_per_round;
 
+	idx_t num_cache_flushing_skips = 0;
+
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
 	}
@@ -67,6 +69,11 @@ public:
 
 unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ExecutionContext &context) const {
 	return make_unique<MultiplexerState>(path_count, routing, regret_budget);
+}
+
+idx_t &PhysicalMultiplexer::GetNumCacheFlushingSkips(OperatorState &state_p) const {
+	auto &state = (MultiplexerState &)state_p;
+	return state.num_cache_flushing_skips;
 }
 
 OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
@@ -86,6 +93,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	auto result = state.routing_strategy->Route(input, chunk);
 	state.current_path_tuple_count = chunk.size();
 	state.current_path_idx = state.routing_strategy->routing_state->next_path_idx;
+	state.num_cache_flushing_skips = state.routing_strategy->routing_state->num_cache_flushing_skips;
 	return result;
 }
 

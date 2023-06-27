@@ -114,11 +114,29 @@ void POLARPipelineExecutor::PushFinalize() {
 	// we still need to flush caches from the CROSS_PRODUCT
 	D_ASSERT(in_process_operators.empty());
 	D_ASSERT(in_process_joins.empty());
+
+	idx_t current_path = pipeline.polar_config->multiplexer->GetCurrentPathIndex(*multiplexer_state);
+	for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
+		if (cached_join_chunks[current_path][i]->size() > 0) {
+			ExecutePushInternal(*mpx_output_chunk, pipeline.polar_config->multiplexer_idx);
+		}
+		cached_join_chunks[current_path][i].reset();
+	}
+
 	idx_t start_idx = IsFinished() ? idx_t(finished_processing_idx) : 0;
 	for (idx_t i = start_idx; i < cached_chunks.size(); i++) {
 		if (cached_chunks[i] && cached_chunks[i]->size() > 0) {
 			ExecutePushInternal(*cached_chunks[i], i + 1);
 			cached_chunks[i].reset();
+		}
+	}
+
+	D_ASSERT(in_process_operators.empty());
+	D_ASSERT(in_process_joins.empty());
+
+	for (idx_t i = 0; i < cached_join_chunks.size(); i++) {
+		for (idx_t j = 0; j < cached_join_chunks[i].size(); j++) {
+			D_ASSERT(!cached_join_chunks[i][j] || cached_join_chunks[i][j]->size() == 0);
 		}
 	}
 
@@ -177,6 +195,8 @@ OperatorResultType POLARPipelineExecutor::Execute(DataChunk &input, DataChunk &r
 	D_ASSERT(!operators.empty());
 
 	auto &polar_config = pipeline.polar_config;
+	idx_t &cache_skips_left = polar_config->multiplexer->GetNumCacheFlushingSkips(*multiplexer_state);
+	bool flush_join_caches = cache_skips_left == 0 || finalized;
 
 	idx_t current_idx;
 	idx_t current_path = polar_config ? polar_config->multiplexer->GetCurrentPathIndex(*multiplexer_state) : -1;
@@ -198,11 +218,11 @@ OperatorResultType POLARPipelineExecutor::Execute(DataChunk &input, DataChunk &r
 		prior_run_tuples_produced_output = output_chunk.size() > 0;
 	}
 
-	if (!prior_run_tuples_produced_output) {
+	if (!prior_run_tuples_produced_output && flush_join_caches) {
 		for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
 			auto &cached_chunk = cached_join_chunks[current_path][i];
 
-			if (cached_chunk->size() > 0) {
+			if (cached_chunk && cached_chunk->size() > 0) {
 				did_work_from_prior_run = true;
 				idx_t polr_output_chunk_idx = polar_config->multiplexer_idx + 1;
 				auto &output_chunk = polr_output_chunk_idx >= intermediate_chunks.size()
@@ -230,9 +250,11 @@ OperatorResultType POLARPipelineExecutor::Execute(DataChunk &input, DataChunk &r
 
 	if (result.size() > 0) {
 		if (in_process_operators.empty() && in_process_joins.empty()) {
-			for (auto &chunk : cached_join_chunks[current_path]) {
-				if (chunk->size() > 0) {
-					return OperatorResultType::HAVE_MORE_OUTPUT;
+			if (flush_join_caches) {
+				for (auto &chunk : cached_join_chunks[current_path]) {
+					if (chunk && chunk->size() > 0) {
+						return OperatorResultType::HAVE_MORE_OUTPUT;
+					}
 				}
 			}
 			return OperatorResultType::NEED_MORE_INPUT;
@@ -275,36 +297,49 @@ OperatorResultType POLARPipelineExecutor::Execute(DataChunk &input, DataChunk &r
 
 			if (current_operator->type == PhysicalOperatorType::MULTIPLEXER) {
 				D_ASSERT(in_process_joins.empty());
-				for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
-					D_ASSERT(cached_join_chunks[current_path][i]->size() == 0);
-				}
-
-				mpx_output_chunk->Reset();
-				StartOperator(current_operator);
-				auto result =
-				    current_operator->Execute(context, *prev_chunk, *mpx_output_chunk, *current_operator->op_state,
-				                              *intermediate_states[current_intermediate - 1]);
-				EndOperator(current_operator, &*mpx_output_chunk);
-				if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
-					// more data remains in this operator
-					// push in-process marker
-					in_process_operators.push(current_idx);
-				}
-
-				current_path = polar_config->multiplexer->GetCurrentPathIndex(*multiplexer_state);
-				RunPath(*mpx_output_chunk, current_chunk);
-				current_chunk.Verify();
-
-				if (current_chunk.size() == 0) {
-					D_ASSERT(in_process_joins.empty());
-
+				if (cache_skips_left > 0) {
+					cache_skips_left--;
+					mpx_output_chunk->Reset();
+					mpx_output_chunk->Reference(*prev_chunk);
+					current_path = polar_config->multiplexer->GetCurrentPathIndex(*multiplexer_state);
+					RunPath(*mpx_output_chunk, current_chunk);
+					current_chunk.Verify();
+				} else {
 					for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
-						if (cached_join_chunks[current_path][i]->size() > 0) {
-							RunPath(*cached_join_chunks[current_path][i], current_chunk, i + 1);
-							cached_join_chunks[current_path][i]->Reset();
+						D_ASSERT(!cached_join_chunks[current_path][i] ||
+						         cached_join_chunks[current_path][i]->size() == 0);
+					}
 
-							if (current_chunk.size() > 0) {
-								break;
+					mpx_output_chunk->Reset();
+					StartOperator(current_operator);
+					auto result =
+					    current_operator->Execute(context, *prev_chunk, *mpx_output_chunk, *current_operator->op_state,
+					                              *intermediate_states[current_intermediate - 1]);
+					EndOperator(current_operator, &*mpx_output_chunk);
+					if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
+						// more data remains in this operator
+						// push in-process marker
+						// TODO: What if this happens and we skip cache?
+						D_ASSERT(cache_skips_left == 0);
+						in_process_operators.push(current_idx);
+					}
+
+					current_path = polar_config->multiplexer->GetCurrentPathIndex(*multiplexer_state);
+					RunPath(*mpx_output_chunk, current_chunk);
+					current_chunk.Verify();
+
+					if (current_chunk.size() == 0 && cache_skips_left == 0) {
+						D_ASSERT(in_process_joins.empty());
+
+						for (idx_t i = 0; i < cached_join_chunks[current_path].size(); i++) {
+							if (cached_join_chunks[current_path][i] &&
+							    cached_join_chunks[current_path][i]->size() > 0) {
+								RunPath(*cached_join_chunks[current_path][i], current_chunk, i + 1);
+								cached_join_chunks[current_path][i]->Reset();
+
+								if (current_chunk.size() > 0) {
+									break;
+								}
 							}
 						}
 					}
@@ -362,9 +397,11 @@ OperatorResultType POLARPipelineExecutor::Execute(DataChunk &input, DataChunk &r
 		path_ran_through = false;
 	}
 
-	for (auto &join_cache : cached_join_chunks[current_path]) {
-		if (join_cache->size() > 0) {
-			path_ran_through = false;
+	if (cache_skips_left == 0 || finalized) {
+		for (auto &join_cache : cached_join_chunks[current_path]) {
+			if (join_cache && join_cache->size() > 0) {
+				path_ran_through = false;
+			}
 		}
 	}
 

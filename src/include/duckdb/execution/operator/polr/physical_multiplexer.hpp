@@ -44,6 +44,7 @@ public:
 	void PrintStatistics(OperatorState &state) const;
 	void WriteLogToFile(OperatorState &state, std::ofstream &file) const;
 	bool WasExecuted(OperatorState &state_p) const;
+	idx_t &GetNumCacheFlushingSkips(OperatorState &state_p) const;
 };
 
 } // namespace duckdb
