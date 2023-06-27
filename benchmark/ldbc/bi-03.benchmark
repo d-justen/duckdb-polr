@@ -1,4 +1,4 @@
-# name: benchmark/ldbc/bi-02.benchmark
+# name: benchmark/ldbc/bi-03.benchmark
 # description: Run query 02 from LDBC SNB BI
 # group: [ldbc]
 

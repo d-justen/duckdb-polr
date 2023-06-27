@@ -99,19 +99,10 @@ statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
-PRAGMA disable_caching
+SET multiplexer_routing TO init_once
 
 statement ok
-SET multiplexer_routing TO backpressure
-
-statement ok
-PRAGMA enable_log_tuples_routed
-
-statement ok
-SET threads TO 24
-
-# statement ok
-# SET multiplexer_routing TO backpressure
+SET threads TO 1
 
 #2.1
 statement ok

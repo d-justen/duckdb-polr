@@ -76,8 +76,8 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 # statement ok
 # COPY aka_name FROM 'third_party/imdb/data/aka_name.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
@@ -85,8 +85,8 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 # statement ok
 # COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
@@ -100,8 +100,8 @@ COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ES
 statement ok
 COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY kind_type FROM 'third_party/imdb/data/kind_type.csv' DELIMITER ',' ESCAPE '\'
@@ -115,8 +115,8 @@ COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE
 # statement ok
 # COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
 
-# statement ok
-# COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
+statement ok
+COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
@@ -134,30 +134,41 @@ statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
+SET multiplexer_routing TO init_once
+
+statement ok
 PRAGMA enable_greedy_ordering_ldt
 
 statement ok
-SET multiplexer_routing TO default_path
-
-statement ok
-PRAGMA disable_caching
-
-statement ok
-SELECT MIN(t.title) AS american_vhs_movie
-FROM company_type AS ct,
-     info_type AS it,
+SELECT MIN(mi.info) AS release_date,
+       MIN(t.title) AS internet_movie
+FROM aka_title AS at,
+     company_name AS cn,
+     company_type AS ct,
+     info_type AS it1,
+     keyword AS k,
      movie_companies AS mc,
      movie_info AS mi,
+     movie_keyword AS mk,
      title AS t
-WHERE ct.kind = 'production companies'
-  AND mc.note LIKE '%(VHS)%'
-  AND mc.note LIKE '%(USA)%'
-  AND mc.note LIKE '%(1994)%'
-  AND mi.info IN ('USA',
-                  'America')
-  AND t.production_year > 2010
+WHERE cn.country_code = '[us]'
+  AND it1.info = 'release dates'
+  AND mc.note LIKE '%(200%)%'
+  AND mc.note LIKE '%(worldwide)%'
+  AND mi.note LIKE '%internet%'
+  AND mi.info LIKE 'USA:% 200%'
+  AND t.production_year > 2000
+  AND t.id = at.movie_id
   AND t.id = mi.movie_id
+  AND t.id = mk.movie_id
   AND t.id = mc.movie_id
-  AND mc.movie_id = mi.movie_id
-  AND ct.id = mc.company_type_id
-  AND it.id = mi.info_type_id;
+  AND mk.movie_id = mi.movie_id
+  AND mk.movie_id = mc.movie_id
+  AND mk.movie_id = at.movie_id
+  AND mi.movie_id = mc.movie_id
+  AND mi.movie_id = at.movie_id
+  AND mc.movie_id = at.movie_id
+  AND k.id = mk.keyword_id
+  AND it1.id = mi.info_type_id
+  AND cn.id = mc.company_id
+  AND ct.id = mc.company_type_id;
