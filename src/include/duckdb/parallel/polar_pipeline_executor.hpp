@@ -32,6 +32,9 @@ public:
 	void RunPath(DataChunk &chunk, DataChunk &result, idx_t start_idx = 0);
 
 private:
+	OperatorResultType FlushInProcessJoins(DataChunk &result, bool &did_flush);
+	OperatorResultType FlushJoinCaches(DataChunk &result, bool &did_flush);
+
 	vector<vector<unique_ptr<DataChunk>>> join_intermediate_chunks;
 	vector<vector<unique_ptr<OperatorState>>> join_intermediate_states;
 	OperatorState *multiplexer_state;

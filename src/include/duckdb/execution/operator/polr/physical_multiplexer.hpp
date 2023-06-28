@@ -45,6 +45,7 @@ public:
 	void WriteLogToFile(OperatorState &state, std::ofstream &file) const;
 	bool WasExecuted(OperatorState &state_p) const;
 	idx_t &GetNumCacheFlushingSkips(OperatorState &state_p) const;
+	void IncreaseInputTupleCount(OperatorState &state_p, idx_t tuple_count) const;
 };
 
 } // namespace duckdb

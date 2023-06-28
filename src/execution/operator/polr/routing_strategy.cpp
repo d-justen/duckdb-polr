@@ -120,7 +120,8 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			double reinit_cost_estimate = 0;
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
 				if (!state.visited_paths[i]) {
-					reinit_cost_estimate += path_resistances[i] * state.init_tuple_count;
+					reinit_cost_estimate +=
+					    path_resistances[i] * state.init_tuple_count * 10; // TODO Set constant overhead
 				}
 			}
 
@@ -153,7 +154,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			return DetermineNextPath();
 		}
 
-		state.window_offset += state.chunk_size - state.chunk_offset;
+		state.window_offset += (state.chunk_size - state.chunk_offset) + 9 * state.chunk_size;
 		return min_resistance_path_idx;
 	}
 
@@ -176,9 +177,11 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextTupleCount() const {
 	auto &state = (AdaptiveReinitRoutingStrategyState &)*routing_state;
 
 	if (state.init_phase_done) {
+		state.num_cache_flushing_skips = 10;
 		return state.chunk_size - state.chunk_offset;
 	}
 
+	state.num_cache_flushing_skips = 0;
 	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 

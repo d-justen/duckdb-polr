@@ -101,6 +101,11 @@ string PhysicalMultiplexer::ParamsToString() const {
 	return "";
 }
 
+void PhysicalMultiplexer::IncreaseInputTupleCount(OperatorState &state_p, idx_t tuple_count) const {
+	auto &state = (MultiplexerState &)state_p;
+	state.current_path_tuple_count += tuple_count;
+}
+
 void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuples_routed) const {
 	auto &state = (MultiplexerState &)state_p;
 

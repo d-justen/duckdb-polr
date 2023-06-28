@@ -95,7 +95,7 @@ protected:
 class AdaptiveReinitRoutingStrategyState : public RoutingStrategyState {
 public:
 	AdaptiveReinitRoutingStrategyState(vector<double> *path_resistances, double exploration_budget_p)
-	    : RoutingStrategyState(path_resistances), init_tuple_count(128 / path_resistances->size()),
+	    : RoutingStrategyState(path_resistances), init_tuple_count(768 / path_resistances->size()),
 	      exploration_budget(exploration_budget_p) {
 		visited_paths.resize(path_resistances->size(), false);
 	}
