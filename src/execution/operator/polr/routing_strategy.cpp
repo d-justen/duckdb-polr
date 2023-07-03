@@ -120,8 +120,8 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			double reinit_cost_estimate = 0;
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
 				if (!state.visited_paths[i]) {
-					reinit_cost_estimate +=
-					    path_resistances[i] * state.init_tuple_count * 10; // TODO Set constant overhead
+					// TODO: Introduce overhead for reinitialization?
+					reinit_cost_estimate += path_resistances[i] * state.init_tuple_count;
 				}
 			}
 
