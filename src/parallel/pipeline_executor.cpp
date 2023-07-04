@@ -25,55 +25,18 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	intermediate_states.reserve(operators.size());
 	cached_chunks.resize(operators.size());
 
-	idx_t hj_counter = 0;
-	vector<LogicalType> previous_op_types;
-	bool hj_was_last = false;
-	// TODO: reserve
 	for (idx_t i = 0; i < operators.size(); i++) {
 		auto prev_operator = i == 0 ? pipeline.source : operators[i - 1];
 		auto current_operator = operators[i];
 		auto chunk = make_unique<DataChunk>();
 
-		if (pipeline.is_backpressure_pipeline && i >= pipeline.polar_config->hash_join_idxs.front() &&
-		    i <= pipeline.polar_config->hash_join_idxs.back()) {
-			D_ASSERT(current_operator->type == PhysicalOperatorType::HASH_JOIN);
-			auto *hash_join = (PhysicalHashJoin *)current_operator;
-			intermediate_states.push_back(
-			    hash_join->GetOperatorStateWithBindings(context, pipeline.polar_bindings[hj_counter]));
-			if (hj_counter == 0) {
-				if (i == 0) {
-					previous_op_types.insert(previous_op_types.end(), pipeline.source->types.begin(),
-					                         pipeline.source->types.end());
-				} else {
-					previous_op_types.insert(previous_op_types.end(), operators[i - 1]->types.begin(),
-					                         operators[i - 1]->types.end());
-				}
-			}
-			chunk->Initialize(Allocator::Get(context.client), previous_op_types);
-			previous_op_types.insert(previous_op_types.end(), hash_join->build_types.begin(),
-			                         hash_join->build_types.end());
-
-			hj_counter++;
-			hj_was_last = true;
+		if (prev_operator->type == PhysicalOperatorType::MULTIPLEXER) {
+			chunk->Initialize(Allocator::Get(context.client), pipeline.polar_config->adaptive_union->GetTypes());
 		} else {
-			if (prev_operator->type == PhysicalOperatorType::MULTIPLEXER) {
-				chunk->Initialize(Allocator::Get(context.client), pipeline.polar_config->adaptive_union->GetTypes());
-			} else if (hj_was_last) {
-				chunk->Initialize(Allocator::Get(context.client), previous_op_types);
-				hj_was_last = false;
-			} else {
-				chunk->Initialize(Allocator::Get(context.client), prev_operator->GetTypes());
-			}
-			if (pipeline.is_backpressure_pipeline && current_operator->type == PhysicalOperatorType::ADAPTIVE_UNION) {
-				D_ASSERT(pipeline.backpressure_join_order);
-				auto *adaptive_union = (PhysicalAdaptiveUnion *)current_operator;
-				intermediate_states.push_back(
-				    adaptive_union->GetOperatorStateWithStaticJoinOrder(context, &*pipeline.backpressure_join_order));
-			} else {
-				intermediate_states.push_back(current_operator->GetOperatorState(context));
-			}
-			hj_was_last = false;
+			chunk->Initialize(Allocator::Get(context.client), prev_operator->GetTypes());
 		}
+		intermediate_states.push_back(current_operator->GetOperatorState(context));
+
 		intermediate_chunks.push_back(move(chunk));
 
 		if (can_cache_in_pipeline && current_operator->RequiresCache()) {
@@ -88,7 +51,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			if (!can_cache) {
 				continue;
 			}
-			// TODO: allow caching for backpressure
 			cached_chunks[i] = make_unique<DataChunk>();
 			cached_chunks[i]->Initialize(Allocator::Get(context.client), current_operator->GetTypes());
 		}
@@ -99,16 +61,11 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 		}
 	}
 	// Initialize final chunk
-	if (hj_counter == 0) {
-		InitializeChunk(final_chunk);
+	PhysicalOperator *last_op = operators.empty() ? pipeline.source : operators.back();
+	if (last_op->type == PhysicalOperatorType::MULTIPLEXER) {
+		final_chunk.Initialize(Allocator::Get(context.client), pipeline.polar_config->adaptive_union->GetTypes());
 	} else {
-		if (hj_was_last) {
-			final_chunk.Initialize(Allocator::Get(context.client), previous_op_types);
-		} else {
-			auto &operators = pipeline.GetOperators();
-			PhysicalOperator *last_op = operators.empty() ? pipeline.source : operators.back();
-			final_chunk.Initialize(Allocator::Get(context.client), last_op->GetTypes());
-		}
+		final_chunk.Initialize(Allocator::Get(context.client), last_op->GetTypes());
 	}
 }
 

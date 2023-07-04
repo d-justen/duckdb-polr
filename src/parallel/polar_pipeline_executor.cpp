@@ -12,8 +12,9 @@ namespace duckdb {
 POLARPipelineExecutor::POLARPipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : PipelineExecutor(context_p, pipeline_p) {
 	auto &polar = pipeline.polar_config;
+	auto join_paths = pipeline.is_backpressure_pipeline ? vector<vector<idx_t>>(1, *pipeline.backpressure_join_order)
+	                                                    : polar->join_paths;
 	auto &joins = polar->joins;
-	auto &join_paths = polar->join_paths;
 	multiplexer_state = &*intermediate_states[polar->multiplexer_idx];
 
 	if (!joins.empty()) {
@@ -52,7 +53,8 @@ POLARPipelineExecutor::POLARPipelineExecutor(ClientContext &context_p, Pipeline 
 			for (idx_t j = 0; j < joins.size(); j++) {
 				idx_t join_idx = join_path[j];
 				auto *join = joins[join_idx];
-				auto &bindings = polar->left_expression_bindings[i][j];
+				auto &bindings = pipeline.is_backpressure_pipeline ? pipeline.polar_bindings[j]
+				                                                   : polar->left_expression_bindings[i][j];
 				auto state = join->GetOperatorStateWithBindings(context, bindings);
 
 				states.push_back(move(state));
@@ -430,7 +432,9 @@ void POLARPipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t s
 	bool running_cache = start_idx != 0 && in_process_joins.empty();
 	bool must_rerun_cache = false;
 
-	context.thread.current_join_path = &join_paths[current_path];
+	context.thread.current_join_path =
+	    pipeline.is_backpressure_pipeline ? &*pipeline.backpressure_join_order : &join_paths[current_path];
+	auto &current_join_path = *context.thread.current_join_path;
 
 	if (start_idx == joins.size()) {
 		D_ASSERT(in_process_joins.empty());
@@ -459,7 +463,7 @@ void POLARPipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t s
 		auto &current_chunk = *join_intermediate_chunks[current_path][local_join_idx];
 		current_chunk.Reset();
 
-		idx_t global_join_idx = join_paths[current_path][local_join_idx];
+		idx_t global_join_idx = current_join_path[local_join_idx];
 		auto current_operator = joins[global_join_idx];
 		auto &current_state = join_intermediate_states[current_path][local_join_idx];
 

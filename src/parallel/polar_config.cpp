@@ -112,6 +112,13 @@ bool POLARConfig::GenerateJoinOrders() {
 	    joins.back()->types, prev_types.size(), move(num_columns_per_join), joins.back()->estimated_cardinality);
 	adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
+	double regret_budget = DBConfig::GetConfig(executor.context).options.regret_budget;
+	multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
+	                                               join_paths.size(), regret_budget, routing);
+	multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
+	multiplexer_idx = hash_join_idxs.front();
+	operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
+
 	if (routing == MultiplexerRouting::BACKPRESSURE) {
 		source_state = pipeline->source->GetGlobalSourceState(pipeline->executor.context);
 		backpressure_pipelines = make_unique<vector<unique_ptr<Pipeline>>>();
@@ -127,29 +134,10 @@ bool POLARConfig::GenerateJoinOrders() {
 			backpressure_pipeline.is_backpressure_pipeline = true;
 			backpressure_pipeline.initialized = true;
 			backpressure_pipeline.ready = true;
-
-			const auto &join_order = join_paths[i];
 			backpressure_pipeline.operators = pipeline_operators;
-
-			for (idx_t j = 0; j < join_order.size(); j++) {
-				idx_t join_path_idx = join_order[j];
-				idx_t hash_join_idx = hash_join_idxs[join_path_idx];
-				backpressure_pipeline.operators[hash_join_idxs.front() + j] = pipeline_operators[hash_join_idx];
-			}
-
-			backpressure_pipeline.operators.insert(backpressure_pipeline.operators.begin() + hash_join_idxs.front() +
-			                                           hash_join_idxs.size(),
-			                                       &*adaptive_union);
+			const auto &join_order = join_paths[i];
 			backpressure_pipeline.backpressure_join_order = make_unique<vector<idx_t>>(join_order);
-			// backpressure_pipeline.Reset();
 		}
-	} else {
-		double regret_budget = DBConfig::GetConfig(executor.context).options.regret_budget;
-		multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
-		                                               join_paths.size(), regret_budget, routing);
-		multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);
-		multiplexer_idx = hash_join_idxs.front();
-		operators.insert(operators.begin() + multiplexer_idx, &*multiplexer);
 	}
 
 	// Depending on the join order, the join conditions may have to use different columns idxs for probing.

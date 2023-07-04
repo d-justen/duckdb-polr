@@ -37,7 +37,7 @@ public:
 public:
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
 		if (!pipeline_executor) {
-			if (pipeline.polar_config && !pipeline.is_backpressure_pipeline) {
+			if (pipeline.polar_config) {
 				pipeline_executor = make_unique<POLARPipelineExecutor>(pipeline.GetClientContext(), pipeline);
 			} else {
 				pipeline_executor = make_unique<PipelineExecutor>(pipeline.GetClientContext(), pipeline);
@@ -67,7 +67,7 @@ ClientContext &Pipeline::GetClientContext() {
 }
 
 vector<PhysicalOperator *> &Pipeline::GetOperators() {
-	return polar_config && !is_backpressure_pipeline ? polar_config->operators : operators;
+	return polar_config ? polar_config->operators : operators;
 }
 
 bool Pipeline::GetProgress(double &current_percentage, idx_t &source_cardinality) {

@@ -42,6 +42,9 @@ public:
 		case MultiplexerRouting::DEFAULT_PATH:
 			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
 			break;
+		case MultiplexerRouting::BACKPRESSURE:
+			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
+			break;
 		default:
 			D_ASSERT(false); // TODO throw
 		}
