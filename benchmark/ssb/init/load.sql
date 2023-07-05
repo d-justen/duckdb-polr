@@ -71,8 +71,8 @@ CREATE TABLE date (
     D_WEEKDAYFL BOOLEAN
 );
 
-COPY lineorder FROM 'PATHVAR/data/ssb/lineorder.tbl.gz' (DELIMITER '|');
-COPY customer FROM 'PATHVAR/data/ssb/customer.tbl.gz' (DELIMITER '|');
-COPY part FROM 'PATHVAR/data/ssb/part.tbl.gz' (DELIMITER '|');
-COPY supplier FROM 'PATHVAR/data/ssb/supplier.tbl.gz' (DELIMITER '|');
-COPY date FROM 'PATHVAR/data/ssb/date.tbl.gz' (DELIMITER '|');
+COPY lineorder FROM 'PATHVAR/lineorder.tbl.gz' (DELIMITER '|');
+COPY customer FROM 'PATHVAR/customer.tbl.gz' (DELIMITER '|');
+COPY part FROM 'PATHVAR/part.tbl.gz' (DELIMITER '|');
+COPY supplier FROM 'PATHVAR/supplier.tbl.gz' (DELIMITER '|');
+COPY date FROM 'PATHVAR/date.tbl.gz' (DELIMITER '|');
