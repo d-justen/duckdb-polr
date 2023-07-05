@@ -71,11 +71,11 @@ D_HOLIDAYFL BOOLEAN,
 D_WEEKDAYFL BOOLEAN
 );
 
-COPY lineorder_tmp FROM 'data/ssb/lineorder.tbl.gz' (DELIMITER '|');
-COPY customer FROM 'data/ssb/customer.tbl.gz' (DELIMITER '|');
-COPY part FROM 'data/ssb/part.tbl.gz' (DELIMITER '|');
-COPY supplier FROM 'data/ssb/supplier.tbl.gz' (DELIMITER '|');
-COPY date FROM 'data/ssb/date.tbl.gz' (DELIMITER '|');
+COPY lineorder_tmp FROM 'PATHVAR/data/ssb/lineorder.tbl.gz' (DELIMITER '|');
+COPY customer FROM 'PATHVAR/data/ssb/customer.tbl.gz' (DELIMITER '|');
+COPY part FROM 'PATHVAR/data/ssb/part.tbl.gz' (DELIMITER '|');
+COPY supplier FROM 'PATHVAR/data/ssb/supplier.tbl.gz' (DELIMITER '|');
+COPY date FROM 'PATHVAR/data/ssb/date.tbl.gz' (DELIMITER '|');
 
 UPDATE lineorder_tmp SET lo_custkey = 1 FROM date WHERE d_datekey = lo_orderdate AND d_monthnuminyear BETWEEN 1 AND 3;
 UPDATE lineorder_tmp SET lo_partkey = 1 FROM date WHERE d_datekey = lo_orderdate AND d_monthnuminyear BETWEEN 7 AND 9;
