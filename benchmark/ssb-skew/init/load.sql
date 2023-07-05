@@ -71,11 +71,11 @@ D_HOLIDAYFL BOOLEAN,
 D_WEEKDAYFL BOOLEAN
 );
 
-INSERT INTO lineorder_tmp SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/lineorder.parquet');
-INSERT INTO customer SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/customer.parquet');
-INSERT INTO part SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/part.parquet');
-INSERT INTO supplier SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/supplier.parquet');
-INSERT INTO date SELECT * FROM read_parquet('https://github.com/d-justen/duckdb-polr-data/releases/download/v1.0/date.parquet');
+COPY lineorder_tmp FROM 'data/ssb/lineorder.tbl.gz' (DELIMITER '|');
+COPY customer FROM 'data/ssb/customer.tbl.gz' (DELIMITER '|');
+COPY part FROM 'data/ssb/part.tbl.gz' (DELIMITER '|');
+COPY supplier FROM 'data/ssb/supplier.tbl.gz' (DELIMITER '|');
+COPY date FROM 'data/ssb/date.tbl.gz' (DELIMITER '|');
 
 UPDATE lineorder_tmp SET lo_custkey = 1 FROM date WHERE d_datekey = lo_orderdate AND d_monthnuminyear BETWEEN 1 AND 3;
 UPDATE lineorder_tmp SET lo_partkey = 1 FROM date WHERE d_datekey = lo_orderdate AND d_monthnuminyear BETWEEN 7 AND 9;
