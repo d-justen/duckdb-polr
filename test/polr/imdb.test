@@ -76,8 +76,8 @@ CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_
 # statement ok
 # COPY aka_name FROM 'third_party/imdb/data/aka_name.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
@@ -85,8 +85,8 @@ COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '
 # statement ok
 # COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
 COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
@@ -100,8 +100,8 @@ COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ES
 statement ok
 COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '\'
 
-statement ok
-COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
+# statement ok
+# COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY kind_type FROM 'third_party/imdb/data/kind_type.csv' DELIMITER ',' ESCAPE '\'
@@ -109,14 +109,14 @@ COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
 statement ok
 COPY movie_companies FROM 'third_party/imdb/data/movie_companies.csv' DELIMITER ',' ESCAPE '\'
 
+# statement ok
+# COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE '\'
+
 statement ok
-COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE '\'
+COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
-# COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
-
-statement ok
-COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
+# COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
 
 # statement ok
 # COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
@@ -128,47 +128,33 @@ statement ok
 COPY title FROM 'third_party/imdb/data/title.csv' DELIMITER ',' ESCAPE '\'
 
 statement ok
-SET threads TO 1
+SET threads TO 2
+
+statement ok
+PRAGMA enable_log_tuples_routed
 
 statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
-SET multiplexer_routing TO init_once
+SET multiplexer_routing TO backpressure
 
 statement ok
-PRAGMA enable_greedy_ordering_ldt
-
-statement ok
-SELECT MIN(mi.info) AS release_date,
-       MIN(t.title) AS internet_movie
-FROM aka_title AS at,
-     company_name AS cn,
-     company_type AS ct,
-     info_type AS it1,
-     keyword AS k,
+SELECT MIN(mc.note) AS production_note,
+       MIN(t.title) AS movie_title,
+       MIN(t.production_year) AS movie_year
+FROM company_type AS ct,
+     info_type AS it,
      movie_companies AS mc,
-     movie_info AS mi,
-     movie_keyword AS mk,
+     movie_info_idx AS mi_idx,
      title AS t
-WHERE cn.country_code = '[us]'
-  AND it1.info = 'release dates'
-  AND mc.note LIKE '%(200%)%'
-  AND mc.note LIKE '%(worldwide)%'
-  AND mi.note LIKE '%internet%'
-  AND mi.info LIKE 'USA:% 200%'
-  AND t.production_year > 2000
-  AND t.id = at.movie_id
-  AND t.id = mi.movie_id
-  AND t.id = mk.movie_id
+WHERE ct.kind = 'production companies'
+  AND it.info = 'top 250 rank'
+  AND mc.note NOT LIKE '%(as Metro-Goldwyn-Mayer Pictures)%'
+  AND (mc.note LIKE '%(co-production)%'
+       OR mc.note LIKE '%(presents)%')
+  AND ct.id = mc.company_type_id
   AND t.id = mc.movie_id
-  AND mk.movie_id = mi.movie_id
-  AND mk.movie_id = mc.movie_id
-  AND mk.movie_id = at.movie_id
-  AND mi.movie_id = mc.movie_id
-  AND mi.movie_id = at.movie_id
-  AND mc.movie_id = at.movie_id
-  AND k.id = mk.keyword_id
-  AND it1.id = mi.info_type_id
-  AND cn.id = mc.company_id
-  AND ct.id = mc.company_type_id;
+  AND t.id = mi_idx.movie_id
+  AND mc.movie_id = mi_idx.movie_id
+  AND it.id = mi_idx.info_type_id;

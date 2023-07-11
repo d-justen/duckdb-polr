@@ -175,7 +175,11 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextTupleCount() const {
 	auto &state = (AdaptiveReinitRoutingStrategyState &)*routing_state;
 
 	if (state.init_phase_done) {
-		state.num_cache_flushing_skips = 10;
+		if (state.window_offset < state.window_size) {
+			state.num_cache_flushing_skips = state.window_size / state.chunk_size;
+		} else {
+			state.num_cache_flushing_skips = 0;
+		}
 		return state.chunk_size - state.chunk_offset;
 	}
 
