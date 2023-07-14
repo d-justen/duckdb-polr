@@ -760,4 +760,16 @@ Value JoinEnumeratorSetting::GetSetting(ClientContext &context) {
 	}
 }
 
+//===--------------------------------------------------------------------===//
+// Join Enumerator Setting
+//===--------------------------------------------------------------------===//
+void MaxJoinOrdersSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.max_join_orders = input.GetValue<idx_t>();
+}
+Value MaxJoinOrdersSetting::GetSetting(ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::INTEGER(config.max_join_orders);
+}
+
 } // namespace duckdb

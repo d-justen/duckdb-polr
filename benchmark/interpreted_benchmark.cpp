@@ -46,7 +46,10 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		auto res = con.Query("PRAGMA threads=" + to_string(instance.threads));
 		D_ASSERT(!res->HasError());
 
-		auto res_regret_budget = con.Query("SET regret_budget TO " + to_string(instance.regret_budget));
+		res = con.Query("SET regret_budget TO " + to_string(instance.regret_budget));
+		D_ASSERT(!res->HasError());
+
+		res = con.Query("SET max_join_orders TO " + to_string(instance.max_join_orders));
 		D_ASSERT(!res->HasError());
 
 		if (instance.enable_polr) {

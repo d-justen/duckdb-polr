@@ -348,4 +348,12 @@ struct JoinEnumeratorSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct MaxJoinOrdersSetting {
+	static constexpr const char *Name = "join_orders";
+	static constexpr const char *Description = "Set the max number of join orders for POLAR";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::INTEGER;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static Value GetSetting(ClientContext &context);
+};
+
 } // namespace duckdb

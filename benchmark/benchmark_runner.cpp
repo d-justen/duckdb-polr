@@ -317,6 +317,13 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				print_help();
 				exit(1);
 			}
+		} else if (StringUtil::StartsWith(arg, "--max_join_orders=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			instance.max_join_orders = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
 		} else if (arg == "--log_tuples_routed") {
 			instance.log_tuples_routed = true;
 		} else if (arg == "--disable_caching") {
