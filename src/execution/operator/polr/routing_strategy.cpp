@@ -107,11 +107,6 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			}
 		}
 
-		if (min_resistance <= state.RESISTANCE_TOLERANCE) {
-			// Never reinitialize if we are within the tolerance
-			return min_resistance_path_idx;
-		}
-
 		if (state.window_offset == 0 || !state.visited_paths[min_resistance_path_idx]) {
 			// After (re-) initialization, we are about to send the first chunk to the path of least resistance
 			// Find the next path and estimate the cost for the next initialization
@@ -135,11 +130,18 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 				}
 			}
 
-			double tuple_count_before_reinit = reinit_cost_estimate / (state.exploration_budget * min_resistance);
+			// We assume a 50% cost overhead for cache-less reinitialization
+			double tuple_count_before_reinit = reinit_cost_estimate * 1.5 / (state.exploration_budget * min_resistance);
 			state.window_size = tuple_count_before_reinit;
 		}
 
-		if (state.window_offset > state.window_size) {
+		if (min_resistance <= state.RESISTANCE_TOLERANCE) {
+			state.window_offset = 0;
+			// Never reinitialize if we are within the tolerance
+			return min_resistance_path_idx;
+		}
+
+		if (state.window_offset >= state.window_size) {
 			state.window_offset = 0;
 
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
@@ -154,7 +156,6 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			return DetermineNextPath();
 		}
 
-		state.window_offset += (state.chunk_size - state.chunk_offset) + 9 * state.chunk_size;
 		return min_resistance_path_idx;
 	}
 
@@ -176,7 +177,8 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextTupleCount() const {
 
 	if (state.init_phase_done) {
 		if (state.window_offset < state.window_size) {
-			state.num_cache_flushing_skips = state.window_size / state.chunk_size;
+			state.num_cache_flushing_skips = (idx_t)std::round(state.window_size / (double)state.chunk_size);
+			state.window_offset += state.window_size;
 		} else {
 			state.num_cache_flushing_skips = 0;
 		}
