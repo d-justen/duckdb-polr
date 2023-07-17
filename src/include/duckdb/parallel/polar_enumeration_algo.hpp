@@ -90,6 +90,9 @@ public:
 	void GenerateJoinOrders(const vector<idx_t> &hash_join_idxs, unordered_map<idx_t, vector<idx_t>> &dependencies,
 	                        const vector<PhysicalHashJoin *> &joins, vector<vector<idx_t>> &join_orders) override;
 
+	vector<idx_t> FindJoinCandidates(idx_t join_count, vector<idx_t> &predecessors,
+	                                 unordered_map<idx_t, vector<idx_t>> &dependencies);
+
 	const unique_ptr<CandidateSelector> selector;
 };
 

@@ -79,20 +79,28 @@ unique_ptr<JoinEnumerationAlgo> JoinEnumerationAlgo::CreateEnumerationAlgo(Clien
 	switch (enumerator) {
 	case JoinEnumerator::DFS_RANDOM:
 		algo = make_unique<DFSEnumeration>(make_unique<RandomCandidateSelector>());
+		break;
 	case JoinEnumerator::DFS_MIN_CARD:
 		algo = make_unique<DFSEnumeration>(make_unique<MinCardinalitySelector>());
+		break;
 	case JoinEnumerator::DFS_UNCERTAIN:
 		algo = make_unique<DFSEnumeration>(make_unique<UncertainCardinalitySelector>());
+		break;
 	case JoinEnumerator::BFS_RANDOM:
 		algo = make_unique<BFSEnumeration>(make_unique<RandomCandidateSelector>());
+		break;
 	case JoinEnumerator::BFS_MIN_CARD:
 		algo = make_unique<BFSEnumeration>(make_unique<MinCardinalitySelector>());
+		break;
 	case JoinEnumerator::BFS_UNCERTAIN:
 		algo = make_unique<BFSEnumeration>(make_unique<UncertainCardinalitySelector>());
+		break;
 	case JoinEnumerator::EACH_LAST_ONCE:
 		algo = make_unique<EachLastOnceEnumeration>();
+		break;
 	case JoinEnumerator::EACH_FIRST_ONCE:
 		algo = make_unique<EachFirstOnceEnumeration>();
+		break;
 	default:
 		D_ASSERT(algo);
 	}
@@ -274,79 +282,81 @@ void EachFirstOnceEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join
 	}
 }
 
+struct JoinCandidateEntry {
+	idx_t level;
+	idx_t candidate_idx;
+	idx_t step;
+	vector<idx_t> predecessors;
+	idx_t candidate;
+
+	friend bool operator<(JoinCandidateEntry const &left, JoinCandidateEntry const &right) {
+		if (left.level == right.level) {
+			if (left.candidate_idx == right.candidate_idx) {
+				return left.step > right.step;
+			}
+			return left.candidate_idx > right.candidate_idx;
+		}
+		return left.level > right.level;
+	}
+};
+
+vector<idx_t> BFSEnumeration::FindJoinCandidates(idx_t join_count, vector<idx_t> &predecessors,
+                                                 unordered_map<idx_t, vector<idx_t>> &dependencies) {
+	vector<bool> found_relation(join_count, false);
+
+	for (auto predecessor : predecessors) {
+		found_relation[predecessor] = true;
+	}
+
+	vector<idx_t> result;
+	for (idx_t i = 0; i < found_relation.size(); i++) {
+		if (!found_relation[i] && CanJoin(predecessors, i, dependencies)) {
+			result.push_back(i);
+		}
+	}
+	return result;
+}
+
 void BFSEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
                                         unordered_map<idx_t, vector<idx_t>> &dependencies,
                                         const vector<PhysicalHashJoin *> &joins, vector<vector<idx_t>> &join_orders) {
-	join_orders.reserve(max_join_orders + 1);
+	std::priority_queue<JoinCandidateEntry> queue;
 
-	vector<idx_t> joined;
-	vector<idx_t> next_layer;
-	next_layer.reserve(hash_join_idxs.size());
+	vector<idx_t> empty_predecessors;
+	empty_predecessors.reserve(hash_join_idxs.size());
+	vector<idx_t> first_level_candidates = FindJoinCandidates(hash_join_idxs.size(), empty_predecessors, dependencies);
+	first_level_candidates.reserve(hash_join_idxs.size());
 
-	for (idx_t i = 0; i < hash_join_idxs.size(); i++) {
-		if (CanJoin(joined, i, dependencies)) {
-			next_layer.push_back(i);
-		}
+	idx_t step = 0;
+	idx_t num_initial_candidates = std::min(4, (int)first_level_candidates.size());
+	for (idx_t i = 0; i < num_initial_candidates; i++) { // TODO: make constant
+		idx_t next_join_idx = selector->SelectNextCandidate(first_level_candidates, joins);
+		queue.push(JoinCandidateEntry {0, i, step, empty_predecessors, next_join_idx});
+		first_level_candidates.erase(
+		    std::find(first_level_candidates.begin(), first_level_candidates.end(), next_join_idx));
+		step++;
 	}
 
-	std::queue<pair<vector<idx_t>, vector<idx_t>>> q;
-	q.emplace(joined, next_layer);
+	join_orders.reserve(max_join_orders + 1);
+	while (join_orders.size() <= max_join_orders && !queue.empty()) {
+		auto entry = queue.top();
+		auto &predecessors = entry.predecessors;
+		queue.pop();
 
-	while (!q.empty()) {
-		auto &next = q.front();
-		joined = next.first;
-		auto &candidates = next.second;
+		predecessors.push_back(entry.candidate);
+		auto join_candidates = FindJoinCandidates(hash_join_idxs.size(), predecessors, dependencies);
 
-		// Pick next candidate
-		idx_t next_join_idx = selector->SelectNextCandidate(candidates, joins);
-		candidates.erase(std::find(candidates.begin(), candidates.end(), next_join_idx));
-		joined.push_back(next_join_idx);
-
-		if (candidates.empty()) {
-			q.pop();
-		}
-
-		if (joined.size() == hash_join_idxs.size()) {
-			join_orders.push_back(joined);
-			continue;
-		}
-
-		vector<idx_t> remaining_joins(hash_join_idxs.size());
-		std::iota(remaining_joins.begin(), remaining_joins.end(), 0);
-
-		for (auto j : joined) {
-			remaining_joins.erase(std::find(remaining_joins.begin(), remaining_joins.end(), j));
-		}
-
-		// Pick one
-		idx_t remaining_count = remaining_joins.size();
-		for (idx_t i = 0; i < remaining_count; i++) {
-			next_layer.clear();
-			for (auto join_idx : remaining_joins) {
-				if (CanJoin(joined, join_idx, dependencies)) {
-					next_layer.push_back(join_idx);
-				}
-			}
-
-			if (next_layer.empty()) {
-				break;
-			}
-
-			next_join_idx = selector->SelectNextCandidate(next_layer, joins);
-			next_layer.erase(std::find(next_layer.begin(), next_layer.end(), next_join_idx));
-			remaining_joins.erase(std::find(remaining_joins.begin(), remaining_joins.end(), next_join_idx));
-
-			if (!next_layer.empty()) {
-				q.emplace(joined, next_layer);
-			}
-
-			joined.push_back(next_join_idx);
-		}
-
-		if (joined.size() == hash_join_idxs.size()) {
-			join_orders.push_back(joined);
-			if (join_orders.size() >= max_join_orders) {
-				return;
+		if (predecessors.size() == hash_join_idxs.size() - 1 && join_candidates.size() == 1) {
+			predecessors.push_back(join_candidates.front());
+			join_orders.push_back(predecessors);
+		} else {
+			idx_t num_candidates = std::max(2, 4 - (int)predecessors.size()); // TODO: make constant
+			num_candidates = std::min((idx_t)num_candidates, (idx_t)join_candidates.size());
+			for (idx_t i = 0; i < num_candidates; i++) {
+				idx_t candidate = selector->SelectNextCandidate(join_candidates, joins);
+				join_candidates.erase(std::find(join_candidates.begin(), join_candidates.end(), candidate));
+				queue.push(JoinCandidateEntry {predecessors.size(), i, step, predecessors, candidate});
+				step++;
 			}
 		}
 	}
