@@ -127,7 +127,7 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 
 	// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
 	// weight calculation
-	double constant_overhead = 0.1;
+	double constant_overhead = 0.5;
 	double path_resistance =
 	    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
 

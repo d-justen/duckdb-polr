@@ -107,7 +107,7 @@ public:
 	idx_t window_offset = 0;
 	idx_t window_size = 0;
 	vector<bool> visited_paths;
-	double RESISTANCE_TOLERANCE = 0.125;
+	double RESISTANCE_TOLERANCE = 0.525;
 };
 
 // TODO: Can inherit from InitOnce: Next tuple count is the same

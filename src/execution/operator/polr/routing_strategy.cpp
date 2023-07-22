@@ -130,8 +130,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 				}
 			}
 
-			// We assume a 50% cost overhead for cache-less reinitialization
-			double tuple_count_before_reinit = reinit_cost_estimate * 1.5 / (state.exploration_budget * min_resistance);
+			double tuple_count_before_reinit = reinit_cost_estimate / (state.exploration_budget * min_resistance);
 			state.window_size = tuple_count_before_reinit;
 		}
 
