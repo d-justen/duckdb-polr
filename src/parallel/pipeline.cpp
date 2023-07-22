@@ -202,6 +202,16 @@ void Pipeline::Ready() {
 	if (executor.context.config.enable_polr || executor.context.config.measure_polr_pipeline) {
 		polar_config = make_shared<POLARConfig>(this, JoinEnumerationAlgo::CreateEnumerationAlgo(executor.context));
 		bool join_orders_generated = polar_config->GenerateJoinOrders();
+		if (!join_orders_generated && executor.context.config.join_enumerator != JoinEnumerator::BFS_MIN_CARD) {
+			// To enable comparing enumerators, we must count intermediates for pipelines in which only exhaustive
+			// search finds alternative join orders
+			polar_config =
+			    make_shared<POLARConfig>(this, make_unique<BFSEnumeration>(make_unique<MinCardinalitySelector>()));
+			join_orders_generated = polar_config->GenerateJoinOrders();
+			if (join_orders_generated) {
+				polar_config->multiplexer->routing = MultiplexerRouting::DEFAULT_PATH;
+			}
+		}
 		if (!join_orders_generated || !executor.context.config.enable_polr) {
 			polar_config = nullptr;
 		} else if (polar_config->backpressure_pipelines) {
