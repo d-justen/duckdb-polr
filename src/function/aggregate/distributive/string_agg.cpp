@@ -16,7 +16,7 @@ struct StringAggState {
 };
 
 struct StringAggBindData : public FunctionData {
-	explicit StringAggBindData(string sep_p) : sep(std::move(sep_p)) {
+	explicit StringAggBindData(string sep_p) : sep(move(sep_p)) {
 	}
 
 	string sep;
@@ -130,7 +130,7 @@ unique_ptr<FunctionData> StringAggBind(ClientContext &context, AggregateFunction
 	if (!arguments[1]->IsFoldable()) {
 		throw BinderException("Separator argument to StringAgg must be a constant");
 	}
-	auto separator_val = ExpressionExecutor::EvaluateScalar(context, *arguments[1]);
+	auto separator_val = ExpressionExecutor::EvaluateScalar(*arguments[1]);
 	if (separator_val.IsNull()) {
 		arguments[0] = make_unique<BoundConstantExpression>(Value(LogicalType::VARCHAR));
 	}
@@ -148,7 +148,7 @@ static void StringAggSerialize(FieldWriter &writer, const FunctionData *bind_dat
 unique_ptr<FunctionData> StringAggDeserialize(ClientContext &context, FieldReader &reader,
                                               AggregateFunction &bound_function) {
 	auto sep = reader.ReadRequired<string>();
-	return make_unique<StringAggBindData>(std::move(sep));
+	return make_unique<StringAggBindData>(move(sep));
 }
 
 void StringAggFun::RegisterFunction(BuiltinFunctions &set) {

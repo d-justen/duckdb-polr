@@ -203,7 +203,6 @@ typedef struct PGParamRef {
 	PGNodeTag type;
 	int number;   /* the number of the parameter */
 	int location; /* token location, or -1 if unknown */
-	char *name; /* optional name of the parameter */
 } PGParamRef;
 
 /*
@@ -307,11 +306,8 @@ typedef struct PGFuncCall {
 typedef struct PGAStar {
 	PGNodeTag type;
 	char *relation;       /* relation name (optional) */
-	char *regex;          /* optional: REGEX to select columns */
 	PGList *except_list;  /* optional: EXCLUDE list */
 	PGList *replace_list; /* optional: REPLACE list */
-	bool columns;         /* whether or not this is a columns list */
-	int location;
 } PGAStar;
 
 /*
@@ -1128,7 +1124,6 @@ typedef struct PGInsertStmt {
 	PGRangeVar *relation;                 /* relation to insert into */
 	PGList *cols;                         /* optional: names of the target columns */
 	PGNode *selectStmt;                   /* the source SELECT/VALUES, or NULL */
-	PGOnConflictActionAlias onConflictAlias; /* the (optional) shorthand provided for the onConflictClause */
 	PGOnConflictClause *onConflictClause; /* ON CONFLICT clause */
 	PGList *returningList;                /* list of expressions to return */
 	PGWithClause *withClause;             /* WITH clause */
@@ -1327,7 +1322,6 @@ typedef enum PGObjectType {
  */
 typedef struct PGCreateSchemaStmt {
 	PGNodeTag type;
-	char *catalogname;                    /* the name of the catalog in which to create the schema */
 	char *schemaname;                     /* the name of the schema to create */
 	PGList *schemaElts;                   /* schema components (list of parsenodes) */
 	PGOnCreateConflict onconflict;        /* what to do on create conflict */
@@ -1693,7 +1687,7 @@ typedef struct PGCreateFunctionStmt {
 	PGList *params;
 	PGNode *function;
   	PGNode *query;
-	PGOnCreateConflict onconflict;
+	char relpersistence;
 } PGCreateFunctionStmt;
 
 /* ----------------------
@@ -1897,7 +1891,6 @@ typedef struct PGCreateTableAsStmt {
 typedef struct PGCheckPointStmt {
 	PGNodeTag type;
 	bool force;
-	char *name;
 } PGCheckPointStmt;
 
 /* ----------------------
@@ -1966,7 +1959,6 @@ typedef struct PGCallStmt {
 
 typedef struct PGExportStmt {
 	PGNodeTag type;
-	char *database;       /* database name */
 	char *filename;       /* filename */
 	PGList *options;      /* PGList of PGDefElem nodes */
 } PGExportStmt;
@@ -2050,47 +2042,12 @@ typedef struct PGCreateTypeStmt
 {
 	PGNodeTag		type;
 	PGNewTypeKind	kind;
-	PGRangeVar	   *typeName;	/* qualified name (list of Value strings) */
+	PGList	   *typeName;		/* qualified name (list of Value strings) */
 	PGList	   *vals;			/* enum values (list of Value strings) */
 	PGTypeName *ofType;			/* original type of alias name */
-    PGNode *query;
 } PGCreateTypeStmt;
 
-/* ----------------------
- *		Attach Statement
- * ----------------------
- */
 
-typedef struct PGAttachStmt
-{
-	PGNodeTag		type;
-	char *path;			/* The file path of the to-be-attached database */
-	char *name;			/* The name of the attached database */
-	PGList *options;      /* PGList of PGDefElem nodes */
-    PGNode *query;
-} PGAttachStmt;
-
-/* ----------------------
- *		CREATE DATABASE Statement
- * ----------------------
- */
-typedef struct PGCreateDatabaseStmt
-{
-	PGNodeTag	type;
-	PGRangeVar *name;			/* The name of the created database */
-	char *extension;			/* The name of the extension which will create the database */
-	char *path;					/* The file path of the to-be-created database */
-} PGCreateDatabaseStmt;
-
-/* ----------------------
- *		Use Statement
- * ----------------------
- */
-
-typedef struct PGUseStmt {
-	PGNodeTag type;
-	PGRangeVar *name;    /* variable to be set */
-} PGUseStmt;
 
 
 

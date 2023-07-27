@@ -13,9 +13,6 @@ add_library_unity(
   column_data_allocator.cpp
   column_data_collection.cpp
   column_data_collection_segment.cpp
-  column_data_consumer.cpp
-  conflict_manager.cpp
-  conflict_info.cpp
   data_chunk.cpp
   date.cpp
   decimal.cpp
@@ -24,7 +21,6 @@ add_library_unity(
   uuid.cpp
   hyperloglog.cpp
   interval.cpp
-  partitioned_column_data.cpp
   row_data_collection.cpp
   row_data_collection_scanner.cpp
   row_layout.cpp

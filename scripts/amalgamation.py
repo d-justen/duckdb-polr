@@ -22,8 +22,6 @@ main_header_files = [os.path.join(include_dir, 'duckdb.hpp'),
     os.path.join(include_dir, 'duckdb.h'),
     os.path.join(include_dir, 'duckdb', 'common', 'types', 'date.hpp'),
     os.path.join(include_dir, 'duckdb', 'common', 'arrow', 'arrow.hpp'),
-    os.path.join(include_dir, 'duckdb', 'common', 'arrow', 'arrow_converter.hpp'),
-    os.path.join(include_dir, 'duckdb', 'common', 'arrow', 'arrow_wrapper.hpp'),
     os.path.join(include_dir, 'duckdb', 'common', 'types', 'blob.hpp'),
     os.path.join(include_dir, 'duckdb', 'common', 'types', 'decimal.hpp'),
     os.path.join(include_dir, 'duckdb', 'common', 'types', 'hugeint.hpp'),
@@ -69,7 +67,6 @@ if '--extended' in sys.argv:
         "duckdb/planner/filter/null_filter.hpp",
         "duckdb/common/arrow/arrow_wrapper.hpp",
         "duckdb/common/hive_partitioning.hpp",
-        "duckdb/common/union_by_name.hpp",
         "duckdb/planner/operator/logical_get.hpp",
         "duckdb/common/compressed_file_system.hpp"]]
     main_header_files += add_include_dir(os.path.join(include_dir, 'duckdb/parser/expression'))
@@ -103,8 +100,6 @@ def get_includes(fpath, text):
         if skip_duckdb_includes and 'duckdb' in included_file:
             continue
         if 'extension_helper.cpp' in fpath and included_file.endswith('-extension.hpp'):
-            continue
-        if 'allocator.cpp' in fpath and included_file.endswith('jemalloc-extension.hpp'):
             continue
         if x[0] in include_statements:
             raise Exception(f"duplicate include {x[0]} in file {fpath}")
@@ -233,20 +228,17 @@ def git_commit_hash():
     return subprocess.check_output(['git','log','-1','--format=%h']).strip().decode('utf8')
 
 def git_dev_version():
-    try:
-        version = subprocess.check_output(['git','describe','--tags','--abbrev=0']).strip().decode('utf8')
-        long_version = subprocess.check_output(['git','describe','--tags','--long']).strip().decode('utf8')
-        version_splits = version.split('.')
-        dev_version = long_version.split('-')[1]
-        if int(dev_version) == 0:
-            # directly on a tag: emit the regular version
-            return '.'.join(version_splits)
-        else:
-            # not on a tag: increment the version by one and add a -devX suffix
-            version_splits[2] = str(int(version_splits[2]) + 1)
-            return '.'.join(version_splits) + "-dev" + dev_version
-    except:
-        return "0.0.0"
+    version = subprocess.check_output(['git','describe','--tags','--abbrev=0']).strip().decode('utf8')
+    long_version = subprocess.check_output(['git','describe','--tags','--long']).strip().decode('utf8')
+    version_splits = version.split('.')
+    dev_version = long_version.split('-')[1]
+    if int(dev_version) == 0:
+        # directly on a tag: emit the regular version
+        return '.'.join(version_splits)
+    else:
+        # not on a tag: increment the version by one and add a -devX suffix
+        version_splits[2] = str(int(version_splits[2]) + 1)
+        return '.'.join(version_splits) + "-dev" + dev_version
 
 def generate_duckdb_hpp(header_file):
     print("-----------------------")

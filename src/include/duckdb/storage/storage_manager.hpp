@@ -46,18 +46,22 @@ public:
 //! database on disk
 class StorageManager {
 public:
-	StorageManager(AttachedDatabase &db, string path, bool read_only);
+	StorageManager(DatabaseInstance &db, string path, bool read_only);
 	virtual ~StorageManager();
 
+	//! The BufferManager of the database
+	unique_ptr<BufferManager> buffer_manager;
+	//! The database this storagemanager belongs to
+	DatabaseInstance &db;
+
 public:
-	static StorageManager &Get(AttachedDatabase &db);
-	static StorageManager &Get(Catalog &catalog);
+	static StorageManager &GetStorageManager(ClientContext &context);
+	static StorageManager &GetStorageManager(DatabaseInstance &db);
 
 	//! Initialize a database or load an existing database from the given path
 	void Initialize();
 
-	DatabaseInstance &GetDatabase();
-	AttachedDatabase &GetAttached() {
+	DatabaseInstance &GetDatabase() {
 		return db;
 	}
 
@@ -80,14 +84,13 @@ public:
 
 protected:
 	virtual void LoadDatabase() = 0;
+	virtual void CreateBufferManager();
 
-protected:
-	//! The database this storagemanager belongs to
-	AttachedDatabase &db;
 	//! The path of the database
 	string path;
 	//! The WriteAheadLog of the storage manager
 	unique_ptr<WriteAheadLog> wal;
+
 	//! Whether or not the database is opened in read-only mode
 	bool read_only;
 };
@@ -95,7 +98,7 @@ protected:
 //! Stores database in a single file.
 class SingleFileStorageManager : public StorageManager {
 public:
-	SingleFileStorageManager(AttachedDatabase &db, string path, bool read_only);
+	SingleFileStorageManager(DatabaseInstance &db, string path, bool read_only);
 
 	//! The BlockManager to read/store meta information and data in blocks
 	unique_ptr<BlockManager> block_manager;

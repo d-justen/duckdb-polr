@@ -19,14 +19,11 @@ contains more mapped functions.
 }
 \examples{
 library(dplyr, warn.conflicts = FALSE)
-con <- DBI::dbConnect(duckdb(), path = ":memory:")
+con <- DBI::dbConnect(duckdb::duckdb(), path = ":memory:")
 
 dbiris <- copy_to(con, iris, overwrite = TRUE)
 
-dbiris \%>\%
-  select(Petal.Length, Petal.Width) \%>\%
-  filter(Petal.Length > 1.5) \%>\%
-  head(5)
+dbiris \%>\% select(Petal.Length, Petal.Width) \%>\% filter(Petal.Length > 1.5) \%>\% head(5)
 
 DBI::dbDisconnect(con, shutdown = TRUE)
 }

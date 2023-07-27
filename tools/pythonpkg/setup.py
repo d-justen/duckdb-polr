@@ -5,7 +5,6 @@ import os
 import sys
 import platform
 import multiprocessing.pool
-from glob import glob
 
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
@@ -63,9 +62,6 @@ extensions = ['parquet', 'icu', 'fts', 'tpch', 'tpcds', 'visualizer', 'json', 'e
 if platform.system() == 'Windows':
     extensions = ['parquet', 'icu', 'fts', 'tpch', 'json', 'excel']
 
-if platform.system() == 'Linux' and platform.architecture()[0] == '64bit':
-    extensions.append('jemalloc')
-
 unity_build = 0
 if 'DUCKDB_BUILD_UNITY' in os.environ:
     unity_build = 16
@@ -90,7 +86,7 @@ def parallel_cpp_compile(self, sources, output_dir=None, macros=None, include_di
 
 
 # speed up compilation with: -j = cpu_number() on non Windows machines
-if os.name != 'nt' and os.environ.get('DUCKDB_DISABLE_PARALLEL_COMPILE', '') != '1':
+if os.name != 'nt':
     import distutils.ccompiler
     distutils.ccompiler.CCompiler.compile = parallel_cpp_compile
 
@@ -106,7 +102,7 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 if os.name == 'nt':
     # windows:
-    toolchain_args = ['/wd4244', '/wd4267', '/wd4200', '/wd26451', '/wd26495', '/D_CRT_SECURE_NO_WARNINGS', '/utf-8']
+    toolchain_args = ['/wd4244', '/wd4267', '/wd4200', '/wd26451', '/wd26495', '/D_CRT_SECURE_NO_WARNINGS']
 else:
     # macos/linux
     toolchain_args = ['-std=c++11', '-g0']
@@ -161,14 +157,10 @@ class get_numpy_include(object):
 extra_files = []
 header_files = []
 
-def list_source_files(directory):
-    sources = glob('src/**/*.cpp', recursive=True)
-    return sources
-
 script_path = os.path.dirname(os.path.abspath(__file__))
 main_include_path = os.path.join(script_path, 'src', 'include')
 main_source_path = os.path.join(script_path, 'src')
-main_source_files = ['duckdb_python.cpp'] + list_source_files(main_source_path)
+main_source_files = ['duckdb_python.cpp'] + [os.path.join('src', x) for x in os.listdir(main_source_path) if '.cpp' in x]
 include_directories = [main_include_path, get_numpy_include(), get_pybind_include(), get_pybind_include(user=True)]
 
 if len(existing_duckdb_dir) == 0:
@@ -294,7 +286,7 @@ setup(
         'duckdb-stubs'
     ],
     include_package_data=True,
-    setup_requires=setup_requires + ["setuptools_scm<7.0.0", 'numpy>=1.14', 'pybind11>=2.6.0'],
+    setup_requires=setup_requires + ["setuptools_scm", 'numpy>=1.14', 'pybind11>=2.6.0'],
     use_scm_version = setuptools_scm_conf,
     tests_require=['google-cloud-storage', 'mypy', 'pytest'],
     classifiers = [

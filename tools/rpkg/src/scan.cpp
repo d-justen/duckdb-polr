@@ -139,7 +139,7 @@ static unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context, TableF
 		}
 		case RType::STRING:
 			if (experimental) {
-				duckdb_col_type = RStringsType::Get();
+				duckdb_col_type = LogicalType::DEDUP_POINTER_ENUM();
 				coldata_ptr = (data_ptr_t)DATAPTR_RO(coldata);
 			} else {
 				duckdb_col_type = LogicalType::VARCHAR;
@@ -166,17 +166,8 @@ static unique_ptr<FunctionData> DataFrameScanBind(ClientContext &context, TableF
 			coldata_ptr = (data_ptr_t)INTEGER_POINTER(coldata);
 			break;
 		case RType::DATE:
-			if (!IS_NUMERIC(coldata)) {
-				cpp11::stop("DATE should really be integer");
-			}
-			coldata_ptr = (data_ptr_t)NUMERIC_POINTER(coldata);
-			duckdb_col_type = LogicalType::DATE;
-			break;
 		case RType::DATE_INTEGER:
-			if (!IS_INTEGER(coldata)) {
-				cpp11::stop("DATE_INTEGER should really be integer");
-			}
-			coldata_ptr = (data_ptr_t)INTEGER_POINTER(coldata);
+			coldata_ptr = (data_ptr_t)NUMERIC_POINTER(coldata);
 			duckdb_col_type = LogicalType::DATE;
 			break;
 		case RType::BLOB:
@@ -206,7 +197,7 @@ static unique_ptr<GlobalTableFunctionState> DataFrameScanInitGlobal(ClientContex
                                                                     TableFunctionInitInput &input) {
 	auto result = make_unique<DataFrameGlobalState>(DataFrameScanMaxThreads(context, input.bind_data));
 	result->position = 0;
-	return std::move(result);
+	return move(result);
 }
 
 static bool DataFrameScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p,
@@ -238,15 +229,15 @@ static unique_ptr<LocalTableFunctionState> DataFrameScanInitLocal(ExecutionConte
 
 	result->column_ids = input.column_ids;
 	DataFrameScanParallelStateNext(context.client, input.bind_data, *result, gstate);
-	return std::move(result);
+	return move(result);
 }
 
 struct DedupPointerEnumType {
 	static bool IsNull(SEXP val) {
 		return val == NA_STRING;
 	}
-	static uintptr_t Convert(SEXP val) {
-		return (uintptr_t)DATAPTR(val);
+	static uint64_t Convert(SEXP val) {
+		return (uint64_t)DATAPTR(val);
 	}
 };
 
@@ -301,8 +292,8 @@ static void DataFrameScanFunc(ClientContext &context, TableFunctionInput &data, 
 		case RType::STRING: {
 			if (bind_data.experimental) {
 				auto data_ptr = (SEXP *)coldata_ptr + sexp_offset;
-				D_ASSERT(v.GetType().id() == LogicalTypeId::POINTER);
-				AppendColumnSegment<SEXP, uintptr_t, DedupPointerEnumType>(data_ptr, v, this_count);
+				//  DEDUP_POINTER_ENUM
+				AppendColumnSegment<SEXP, uint64_t, DedupPointerEnumType>(data_ptr, v, this_count);
 			} else {
 				AppendStringSegment(((data_frame)bind_data.df)[(R_xlen_t)src_df_col_idx], v, sexp_offset, this_count);
 			}

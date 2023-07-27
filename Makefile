@@ -1,4 +1,4 @@
-.PHONY: all opt unit clean debug release test unittest allunit benchmark docs doxygen format sqlite imdb
+.PHONY: all opt unit clean debug release release_expanded test unittest allunit benchmark docs doxygen format sqlite imdb
 
 all: release
 opt: release
@@ -13,7 +13,6 @@ DISABLE_UNITY_FLAG=
 DISABLE_SANITIZER_FLAG=
 OSX_BUILD_UNIVERSAL_FLAG=
 FORCE_32_BIT_FLAG=
-
 ifeq ($(GEN),ninja)
 	GENERATOR=-G "Ninja"
 	FORCE_COLOR=-DFORCE_COLORED_OUTPUT=1
@@ -88,9 +87,6 @@ endif
 ifeq (${BUILD_JSON}, 1)
 	EXTENSIONS:=${EXTENSIONS} -DBUILD_JSON_EXTENSION=1
 endif
-ifeq (${BUILD_JEMALLOC}, 1)
-	EXTENSIONS:=${EXTENSIONS} -DBUILD_JEMALLOC_EXTENSION=1
-endif
 ifeq (${BUILD_EXCEL}, 1)
 	EXTENSIONS:=${EXTENSIONS} -DBUILD_EXCEL_EXTENSION=1
 endif
@@ -121,14 +117,8 @@ endif
 ifeq (${BUILD_PYTHON}, 1)
 	EXTENSIONS:=${EXTENSIONS} -DBUILD_PYTHON=1 -DBUILD_JSON_EXTENSION=1 -DBUILD_FTS_EXTENSION=1 -DBUILD_TPCH_EXTENSION=1 -DBUILD_VISUALIZER_EXTENSION=1 -DBUILD_TPCDS_EXTENSION=1
 endif
-ifeq (${PYTHON_USER_SPACE}, 1)
-	EXTENSIONS:=${EXTENSIONS} -DUSER_SPACE=1
-endif
 ifeq (${BUILD_R}, 1)
 	EXTENSIONS:=${EXTENSIONS} -DBUILD_R=1
-endif
-ifeq (${BUILD_NODE}, 1)
-	EXTENSIONS:=${EXTENSIONS} -DBUILD_NODE=1 -DBUILD_JSON_EXTENSION=1
 endif
 ifeq (${CONFIGURE_R}, 1)
 	EXTENSIONS:=${EXTENSIONS} -DCONFIGURE_R=1
@@ -139,7 +129,9 @@ endif
 ifneq ($(TIDY_BINARY),)
 	TIDY_BINARY_PARAMETER := -clang-tidy-binary ${TIDY_BINARY}
 endif
-
+ifeq ($(BUILD_ARROW_ABI_TEST), 1)
+	EXTENSIONS:=${EXTENSIONS} -DBUILD_ARROW_ABI_TEST=1
+endif
 ifneq ("${FORCE_QUERY_LOG}a", "a")
 	EXTENSIONS:=${EXTENSIONS} -DFORCE_QUERY_LOG=${FORCE_QUERY_LOG}
 endif
@@ -152,18 +144,9 @@ endif
 ifeq (${DISABLE_STRING_INLINE}, 1)
 	EXTENSIONS:=${EXTENSIONS} -DDISABLE_STR_INLINE=1
 endif
-ifeq (${DESTROY_UNPINNED_BLOCKS}, 1)
-	EXTENSIONS:=${EXTENSIONS} -DDESTROY_UNPINNED_BLOCKS=1
-endif
-ifeq (${DEBUG_MOVE}, 1)
-	EXTENSIONS:=${EXTENSIONS} -DDEBUG_MOVE=1
-endif
 
 clean:
 	rm -rf build
-
-clean-python:
-	tools/pythonpkg/clean.sh
 
 debug:
 	mkdir -p build/debug && \
@@ -171,10 +154,10 @@ debug:
 	cmake $(GENERATOR) $(FORCE_COLOR) ${WARNINGS_AS_ERRORS} ${FORCE_32_BIT_FLAG} ${DISABLE_UNITY_FLAG} ${DISABLE_SANITIZER_FLAG} ${STATIC_LIBCPP} ${EXTENSIONS} -DCMAKE_BUILD_TYPE=Debug ../.. && \
 	cmake --build . --config Debug
 
-release:
-	mkdir -p build/release && \
-	cd build/release && \
-	cmake $(GENERATOR) $(FORCE_COLOR) ${WARNINGS_AS_ERRORS} ${FORCE_WARN_UNUSED_FLAG} ${FORCE_32_BIT_FLAG} ${DISABLE_UNITY_FLAG} ${DISABLE_SANITIZER_FLAG} ${OSX_BUILD_UNIVERSAL_FLAG} ${STATIC_LIBCPP} ${EXTENSIONS} -DCMAKE_BUILD_TYPE=Release ../.. && \
+release_expanded:
+	mkdir -p build/release_expanded && \
+	cd build/release_expanded && \
+	cmake $(GENERATOR) $(FORCE_COLOR) ${WARNINGS_AS_ERRORS} ${FORCE_WARN_UNUSED_FLAG} ${FORCE_32_BIT_FLAG} ${DISABLE_UNITY_FLAG} ${DISABLE_SANITIZER_FLAG} ${STATIC_LIBCPP} ${EXTENSIONS} -DCMAKE_BUILD_TYPE=Release ../.. && \
 	cmake --build . --config Release
 
 cldebug:
@@ -201,8 +184,8 @@ unittestarrow:
 	build/debug/test/unittest "[arrow]"
 
 
-allunit: release # uses release build because otherwise allunit takes forever
-	build/release/test/unittest "*"
+allunit: release_expanded # uses release build because otherwise allunit takes forever
+	build/release_expanded/test/unittest "*"
 
 docs:
 	mkdir -p build/docs && \
@@ -210,6 +193,12 @@ docs:
 
 doxygen: docs
 	open build/docs/html/index.html
+
+release:
+	mkdir -p build/release && \
+	cd build/release && \
+	cmake $(GENERATOR) $(FORCE_COLOR) ${WARNINGS_AS_ERRORS} ${FORCE_WARN_UNUSED_FLAG} ${FORCE_32_BIT_FLAG} ${DISABLE_UNITY_FLAG} ${DISABLE_SANITIZER_FLAG} ${OSX_BUILD_UNIVERSAL_FLAG} ${STATIC_LIBCPP} ${EXTENSIONS} -DCMAKE_BUILD_TYPE=Release ../.. && \
+	cmake --build . --config Release
 
 reldebug:
 	mkdir -p build/reldebug && \
@@ -276,9 +265,9 @@ third_party/sqllogictest:
 third_party/imdb/data:
 	wget -i "http://download.duckdb.org/imdb/list.txt" -P third_party/imdb/data
 
-sqlite: release | third_party/sqllogictest
+sqlite: release_expanded | third_party/sqllogictest
 	git --git-dir third_party/sqllogictest/.git pull
-	./build/release/test/unittest "[sqlitelogic]"
+	./build/release_expanded/test/unittest "[sqlitelogic]"
 
 sqlsmith: debug
 	./build/debug/third_party/sqlsmith/sqlsmith --duckdb=:memory:

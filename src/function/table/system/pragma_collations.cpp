@@ -26,12 +26,13 @@ static unique_ptr<FunctionData> PragmaCollateBind(ClientContext &context, TableF
 unique_ptr<GlobalTableFunctionState> PragmaCollateInit(ClientContext &context, TableFunctionInitInput &input) {
 	auto result = make_unique<PragmaCollateData>();
 
-	auto schemas = Catalog::GetAllSchemas(context);
-	for (auto schema : schemas) {
+	Catalog::GetCatalog(context).schemas->Scan(context, [&](CatalogEntry *entry) {
+		auto schema = (SchemaCatalogEntry *)entry;
 		schema->Scan(context, CatalogType::COLLATION_ENTRY,
 		             [&](CatalogEntry *entry) { result->entries.push_back(entry->name); });
-	}
-	return std::move(result);
+	});
+
+	return move(result);
 }
 
 static void PragmaCollateFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {

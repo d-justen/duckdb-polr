@@ -42,7 +42,6 @@
 	PGWithClause			*with;
 	PGInferClause			*infer;
 	PGOnConflictClause	*onconflict;
-	PGOnConflictActionAlias onconflictshorthand;
 	PGAIndices			*aind;
 	PGResTarget			*target;
 	PGInsertStmt			*istmt;
@@ -139,7 +138,7 @@
  * blame any funny behavior of UNBOUNDED on the SQL standard, though.
  */
 %nonassoc	UNBOUNDED		/* ideally should have same precedence as IDENT */
-%nonassoc	IDENT GENERATED NULL_P PARTITION RANGE ROWS PRECEDING FOLLOWING CUBE ROLLUP ENUM_P
+%nonassoc	IDENT GENERATED NULL_P PARTITION RANGE ROWS PRECEDING FOLLOWING CUBE ROLLUP
 %left		Op OPERATOR		/* multi-character ops and user-defined operators */
 %left		'+' '-'
 %left		'*' '/' '%'
@@ -159,7 +158,7 @@
  * They wouldn't be given a precedence at all, were it not that we need
  * left-associativity among the JOIN rules themselves.
  */
-%left		JOIN CROSS LEFT FULL RIGHT INNER_P NATURAL POSITIONAL
+%left		JOIN CROSS LEFT FULL RIGHT INNER_P NATURAL
 /* kluge to keep from causing shift/reduce conflicts */
 %right		PRESERVE STRIP_P IGNORE_P RESPECT_P
 

@@ -1,5 +1,5 @@
 test_that("one-level lists can be read", {
-  con <- dbConnect(duckdb())
+  con <- dbConnect(duckdb::duckdb())
   on.exit(dbDisconnect(con, shutdown = TRUE))
 
   res <- dbGetQuery(con, "SELECT [] a")$a

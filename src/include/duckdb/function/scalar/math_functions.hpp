@@ -10,7 +10,6 @@
 
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/function/function_set.hpp"
-#include "duckdb/function/built_in_functions.hpp"
 
 namespace duckdb {
 
@@ -107,10 +106,6 @@ struct EvenFun {
 };
 
 struct IsNanFun {
-	static void RegisterFunction(BuiltinFunctions &set);
-};
-
-struct SignBitFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 

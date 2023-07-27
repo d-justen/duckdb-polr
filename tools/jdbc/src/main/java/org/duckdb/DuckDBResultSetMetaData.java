@@ -62,10 +62,6 @@ public class DuckDBResultSetMetaData implements ResultSetMetaData {
 	protected DuckDBColumnTypeMetaData[] column_types_meta;
 	protected final StatementReturnType return_type;
 
-	public StatementReturnType getReturnType() {
-		return return_type;
-	}
-
 	public int getColumnCount() throws SQLException {
 		return column_count;
 	}
@@ -254,11 +250,11 @@ public class DuckDBResultSetMetaData implements ResultSetMetaData {
 	}
 
 	public <T> T unwrap(Class<T> iface) throws SQLException {
-		throw new SQLFeatureNotSupportedException("unwrap");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public boolean isWrapperFor(Class<?> iface) throws SQLException {
-		throw new SQLFeatureNotSupportedException("isWrapperFor");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	private DuckDBColumnTypeMetaData typeMetadataForColumn(int columnIndex) throws SQLException {

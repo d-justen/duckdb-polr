@@ -6,24 +6,24 @@ namespace duckdb {
 
 PhysicalFilter::PhysicalFilter(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
                                idx_t estimated_cardinality)
-    : CachingPhysicalOperator(PhysicalOperatorType::FILTER, std::move(types), estimated_cardinality) {
+    : PhysicalOperator(PhysicalOperatorType::FILTER, move(types), estimated_cardinality) {
 	D_ASSERT(select_list.size() > 0);
 	if (select_list.size() > 1) {
 		// create a big AND out of the expressions
 		auto conjunction = make_unique<BoundConjunctionExpression>(ExpressionType::CONJUNCTION_AND);
 		for (auto &expr : select_list) {
-			conjunction->children.push_back(std::move(expr));
+			conjunction->children.push_back(move(expr));
 		}
-		expression = std::move(conjunction);
+		expression = move(conjunction);
 	} else {
-		expression = std::move(select_list[0]);
+		expression = move(select_list[0]);
 	}
 }
 
-class FilterState : public CachingOperatorState {
+class FilterState : public OperatorState {
 public:
 	explicit FilterState(ExecutionContext &context, Expression &expr)
-	    : executor(context.client, expr), sel(STANDARD_VECTOR_SIZE) {
+	    : executor(Allocator::Get(context.client), expr), sel(STANDARD_VECTOR_SIZE) {
 	}
 
 	ExpressionExecutor executor;
@@ -39,8 +39,8 @@ unique_ptr<OperatorState> PhysicalFilter::GetOperatorState(ExecutionContext &con
 	return make_unique<FilterState>(context, *expression);
 }
 
-OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-                                                   GlobalOperatorState &gstate, OperatorState &state_p) const {
+OperatorResultType PhysicalFilter::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                           GlobalOperatorState &gstate, OperatorState &state_p) const {
 	auto &state = (FilterState &)state_p;
 	idx_t result_count = state.executor.SelectExpression(input, state.sel);
 	if (result_count == input.size()) {
@@ -53,10 +53,7 @@ OperatorResultType PhysicalFilter::ExecuteInternal(ExecutionContext &context, Da
 }
 
 string PhysicalFilter::ParamsToString() const {
-	auto result = expression->GetName();
-	result += "\n[INFOSEPARATOR]\n";
-	result += StringUtil::Format("EC: %llu", estimated_props->GetCardinality<idx_t>());
-	return result;
+	return expression->GetName();
 }
 
 } // namespace duckdb

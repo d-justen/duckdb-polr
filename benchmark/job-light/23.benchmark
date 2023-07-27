@@ -1,0 +1,7 @@
+# name: benchmark/job-light/23.benchmark
+# description: Run query 23 from the job-light benchmark
+# group: [job-light]
+
+template benchmark/job-light/imdb.benchmark.in
+QUERY_NUMBER=23
+QUERY_NUMBER_PADDED=23

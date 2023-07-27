@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include "duckdb/common/types/data_chunk.hpp"
-#include "duckdb/parallel/pipeline.hpp"
-#include "duckdb/execution/physical_operator.hpp"
-#include "duckdb/parallel/thread_context.hpp"
-#include "duckdb/execution/execution_context.hpp"
 #include "duckdb/common/stack.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
+#include "duckdb/execution/execution_context.hpp"
+#include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/parallel/pipeline.hpp"
+#include "duckdb/parallel/thread_context.hpp"
 
 #include <functional>
 
@@ -22,14 +22,16 @@ class Executor;
 
 //! The Pipeline class represents an execution pipeline
 class PipelineExecutor {
+
 public:
 	PipelineExecutor(ClientContext &context, Pipeline &pipeline);
+	virtual ~PipelineExecutor() = default;
 
 	//! Fully execute a pipeline with a source and a sink until the source is completely exhausted
 	void Execute();
 	//! Execute a pipeline with a source and a sink until finished, or until max_chunks have been processed
 	//! Returns true if execution is finished, false if Execute should be called again
-	bool Execute(idx_t max_chunks);
+	virtual bool Execute(idx_t max_chunks);
 
 	//! Push a single input DataChunk into the pipeline.
 	//! Returns either OperatorResultType::NEED_MORE_INPUT or OperatorResultType::FINISHED
@@ -37,7 +39,7 @@ public:
 	OperatorResultType ExecutePush(DataChunk &input);
 	//! Called after depleting the source: finalizes the execution of this pipeline executor
 	//! This should only be called once per PipelineExecutor
-	void PushFinalize();
+	virtual void PushFinalize();
 
 	//! Initializes a chunk with the types that will flow out of ExecutePull
 	void InitializeChunk(DataChunk &chunk);
@@ -48,7 +50,7 @@ public:
 	//! This flushes profiler states
 	void PullFinalize();
 
-private:
+protected:
 	//! The pipeline to process
 	Pipeline &pipeline;
 	//! The thread context of this executor
@@ -69,13 +71,6 @@ private:
 	//! The final chunk used for moving data into the sink
 	DataChunk final_chunk;
 
-	//! Indicates that the first non-finished operator in the pipeline with RequireFinalExecute has some pending result
-	bool pending_final_execute = false;
-	//! The OperatorFinalizeResultType corresponding to the currently pending final_execute result
-	OperatorFinalizeResultType cached_final_execute_result;
-	//! Source has been exhausted
-	bool source_empty = false;
-
 	//! The operators that are not yet finished executing and have data remaining
 	//! If the stack of in_process_operators is empty, we fetch from the source instead
 	stack<idx_t> in_process_operators;
@@ -86,7 +81,12 @@ private:
 	//! Whether or not this pipeline requires keeping track of the batch index of the source
 	bool requires_batch_index = false;
 
-private:
+	//! Cached chunks for any operators that require caching
+	vector<unique_ptr<DataChunk>> cached_chunks;
+
+	static constexpr const idx_t CACHE_THRESHOLD = 64;
+
+protected:
 	void StartOperator(PhysicalOperator *op);
 	void EndOperator(PhysicalOperator *op, DataChunk *chunk);
 
@@ -100,11 +100,7 @@ private:
 	OperatorResultType ExecutePushInternal(DataChunk &input, idx_t initial_idx = 0);
 	//! Pushes a chunk through the pipeline and returns a single result chunk
 	//! Returns whether or not a new input chunk is needed, or whether or not we are finished
-	OperatorResultType Execute(DataChunk &input, DataChunk &result, idx_t initial_index = 0);
-
-	//! FlushCachedOperators methods push/pull any remaining cached results through the pipeline
-	void FlushCachingOperatorsPull(DataChunk &result);
-	void FlushCachingOperatorsPush();
+	virtual OperatorResultType Execute(DataChunk &input, DataChunk &result, idx_t initial_index = 0);
 
 	static bool CanCacheType(const LogicalType &type);
 	void CacheChunk(DataChunk &input, idx_t operator_idx);

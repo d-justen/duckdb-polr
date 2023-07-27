@@ -19,7 +19,7 @@ bool StringUtil::Contains(const string &haystack, const string &needle) {
 
 void StringUtil::LTrim(string &str) {
 	auto it = str.begin();
-	while (it != str.end() && CharacterIsSpace(*it)) {
+	while (CharacterIsSpace(*it)) {
 		it++;
 	}
 	str.erase(str.begin(), it);
@@ -165,10 +165,6 @@ string StringUtil::Lower(const string &str) {
 	return (copy);
 }
 
-bool StringUtil::CIEquals(const string &l1, const string &l2) {
-	return StringUtil::Lower(l1) == StringUtil::Lower(l2);
-}
-
 vector<string> StringUtil::Split(const string &input, const string &split) {
 	vector<string> splits;
 
@@ -192,9 +188,6 @@ vector<string> StringUtil::Split(const string &input, const string &split) {
 }
 
 string StringUtil::Replace(string source, const string &from, const string &to) {
-	if (from.empty()) {
-		throw InternalException("Invalid argument to StringUtil::Replace - empty FROM");
-	}
 	idx_t start_pos = 0;
 	while ((start_pos = source.find(from, start_pos)) != string::npos) {
 		source.replace(start_pos, from.length(), to);

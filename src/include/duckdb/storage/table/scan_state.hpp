@@ -13,7 +13,6 @@
 #include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/execution/adaptive_filter.hpp"
-#include "duckdb/storage/table/segment_lock.hpp"
 
 namespace duckdb {
 class ColumnSegment;
@@ -60,9 +59,6 @@ struct ColumnScanState {
 	//! This is used to detect if the ColumnData has been changed out from under us during a scan
 	//! If this is the case, we re-initialize the scan
 	idx_t version;
-	//! We initialize one SegmentScanState per segment, however, if scanning a DataChunk requires us to scan over more
-	//! than one Segment, we need to keep the scan states of the previous segments around
-	vector<unique_ptr<SegmentScanState>> previous_states;
 
 public:
 	//! Move the scan state forward by "count" rows (including all child states)
@@ -110,15 +106,12 @@ private:
 
 class CollectionScanState {
 public:
-	CollectionScanState(TableScanState &parent_p)
-	    : row_group_state(*this), max_row(0), batch_index(0), parent(parent_p) {};
+	CollectionScanState(TableScanState &parent_p) : row_group_state(*this), max_row(0), parent(parent_p) {};
 
 	//! The row_group scan state
 	RowGroupScanState row_group_state;
 	//! The total maximum row index
 	idx_t max_row;
-	//! The current batch index
-	idx_t batch_index;
 
 public:
 	const vector<column_t> &GetColumnIds();
@@ -162,7 +155,6 @@ struct ParallelCollectionScanState {
 	RowGroup *current_row_group;
 	idx_t vector_index;
 	idx_t max_row;
-	idx_t batch_index;
 };
 
 struct ParallelTableScanState {
@@ -176,7 +168,7 @@ class CreateIndexScanState : public TableScanState {
 public:
 	vector<unique_ptr<StorageLockKey>> locks;
 	unique_lock<mutex> append_lock;
-	SegmentLock segment_lock;
+	unique_lock<mutex> delete_lock;
 };
 
 } // namespace duckdb

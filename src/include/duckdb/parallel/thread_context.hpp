@@ -10,6 +10,8 @@
 
 #include "duckdb/main/query_profiler.hpp"
 
+#include <functional>
+
 namespace duckdb {
 class ClientContext;
 
@@ -20,6 +22,8 @@ public:
 
 	//! The operator profiler for the individual thread context
 	OperatorProfiler profiler;
+	//! The next POLR path to choose
+	vector<idx_t> *current_join_path;
 };
 
 } // namespace duckdb

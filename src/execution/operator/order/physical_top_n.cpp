@@ -12,7 +12,7 @@ namespace duckdb {
 
 PhysicalTopN::PhysicalTopN(vector<LogicalType> types, vector<BoundOrderByNode> orders, idx_t limit, idx_t offset,
                            idx_t estimated_cardinality)
-    : PhysicalOperator(PhysicalOperatorType::TOP_N, std::move(types), estimated_cardinality), orders(std::move(orders)),
+    : PhysicalOperator(PhysicalOperatorType::TOP_N, move(types), estimated_cardinality), orders(move(orders)),
       limit(limit), offset(offset) {
 }
 
@@ -56,7 +56,7 @@ public:
 	         idx_t limit, idx_t offset);
 	TopNHeap(ExecutionContext &context, const vector<LogicalType> &payload_types,
 	         const vector<BoundOrderByNode> &orders, idx_t limit, idx_t offset);
-	TopNHeap(ClientContext &context, Allocator &allocator, const vector<LogicalType> &payload_types,
+	TopNHeap(BufferManager &buffer_manager, Allocator &allocator, const vector<LogicalType> &payload_types,
 	         const vector<BoundOrderByNode> &orders, idx_t limit, idx_t offset);
 
 	Allocator &allocator;
@@ -132,8 +132,8 @@ void TopNSortState::Sink(DataChunk &input) {
 }
 
 void TopNSortState::Move(TopNSortState &other) {
-	local_state = std::move(other.local_state);
-	global_state = std::move(other.global_state);
+	local_state = move(other.local_state);
+	global_state = move(other.global_state);
 	count = other.count;
 	is_sorted = other.is_sorted;
 }
@@ -221,10 +221,10 @@ void TopNSortState::Scan(TopNScanState &state, DataChunk &chunk) {
 //===--------------------------------------------------------------------===//
 // TopNHeap
 //===--------------------------------------------------------------------===//
-TopNHeap::TopNHeap(ClientContext &context, Allocator &allocator, const vector<LogicalType> &payload_types_p,
+TopNHeap::TopNHeap(BufferManager &buffer_manager, Allocator &allocator, const vector<LogicalType> &payload_types_p,
                    const vector<BoundOrderByNode> &orders_p, idx_t limit, idx_t offset)
-    : allocator(allocator), buffer_manager(BufferManager::GetBufferManager(context)), payload_types(payload_types_p),
-      orders(orders_p), limit(limit), offset(offset), sort_state(*this), executor(context), has_boundary_values(false),
+    : allocator(allocator), buffer_manager(buffer_manager), payload_types(payload_types_p), orders(orders_p),
+      limit(limit), offset(offset), sort_state(*this), executor(allocator), has_boundary_values(false),
       final_sel(STANDARD_VECTOR_SIZE), true_sel(STANDARD_VECTOR_SIZE), false_sel(STANDARD_VECTOR_SIZE),
       new_remaining_sel(STANDARD_VECTOR_SIZE) {
 	// initialize the executor and the sort_chunk
@@ -243,12 +243,14 @@ TopNHeap::TopNHeap(ClientContext &context, Allocator &allocator, const vector<Lo
 
 TopNHeap::TopNHeap(ClientContext &context, const vector<LogicalType> &payload_types,
                    const vector<BoundOrderByNode> &orders, idx_t limit, idx_t offset)
-    : TopNHeap(context, BufferAllocator::Get(context), payload_types, orders, limit, offset) {
+    : TopNHeap(BufferManager::GetBufferManager(context), BufferAllocator::Get(context), payload_types, orders, limit,
+               offset) {
 }
 
 TopNHeap::TopNHeap(ExecutionContext &context, const vector<LogicalType> &payload_types,
                    const vector<BoundOrderByNode> &orders, idx_t limit, idx_t offset)
-    : TopNHeap(context.client, Allocator::Get(context.client), payload_types, orders, limit, offset) {
+    : TopNHeap(BufferManager::GetBufferManager(context.client), Allocator::Get(context.client), payload_types, orders,
+               limit, offset) {
 }
 
 void TopNHeap::Sink(DataChunk &input) {

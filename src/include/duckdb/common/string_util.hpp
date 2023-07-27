@@ -30,9 +30,6 @@ public:
 	DUCKDB_API static bool CharacterIsDigit(char c) {
 		return c >= '0' && c <= '9';
 	}
-	DUCKDB_API static bool CharacterIsHex(char c) {
-		return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-	}
 	DUCKDB_API static char CharacterToLower(char c) {
 		if (c >= 'A' && c <= 'Z') {
 			return c - ('A' - 'a');
@@ -120,9 +117,6 @@ public:
 
 	//! Convert a string to lowercase
 	DUCKDB_API static string Lower(const string &str);
-
-	//! Case insensitive equals
-	DUCKDB_API static bool CIEquals(const string &l1, const string &l2);
 
 	//! Format a string using printf semantics
 	template <typename... Args>

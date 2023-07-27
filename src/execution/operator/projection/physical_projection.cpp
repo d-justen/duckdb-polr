@@ -7,7 +7,7 @@ namespace duckdb {
 class ProjectionState : public OperatorState {
 public:
 	explicit ProjectionState(ExecutionContext &context, const vector<unique_ptr<Expression>> &expressions)
-	    : executor(context.client, expressions) {
+	    : executor(Allocator::Get(context.client), expressions) {
 	}
 
 	ExpressionExecutor executor;
@@ -20,8 +20,8 @@ public:
 
 PhysicalProjection::PhysicalProjection(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
                                        idx_t estimated_cardinality)
-    : PhysicalOperator(PhysicalOperatorType::PROJECTION, std::move(types), estimated_cardinality),
-      select_list(std::move(select_list)) {
+    : PhysicalOperator(PhysicalOperatorType::PROJECTION, move(types), estimated_cardinality),
+      select_list(move(select_list)) {
 }
 
 OperatorResultType PhysicalProjection::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,

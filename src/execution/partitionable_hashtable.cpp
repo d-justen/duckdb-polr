@@ -44,12 +44,12 @@ RadixPartitionInfo::RadixPartitionInfo(const idx_t n_partitions_upper_bound)
 	D_ASSERT(radix_bits <= 8);
 }
 
-PartitionableHashTable::PartitionableHashTable(ClientContext &context, Allocator &allocator,
+PartitionableHashTable::PartitionableHashTable(Allocator &allocator, BufferManager &buffer_manager_p,
                                                RadixPartitionInfo &partition_info_p, vector<LogicalType> group_types_p,
                                                vector<LogicalType> payload_types_p,
                                                vector<BoundAggregateExpression *> bindings_p)
-    : context(context), allocator(allocator), group_types(std::move(group_types_p)),
-      payload_types(std::move(payload_types_p)), bindings(std::move(bindings_p)), is_partitioned(false),
+    : allocator(allocator), buffer_manager(buffer_manager_p), group_types(move(group_types_p)),
+      payload_types(move(payload_types_p)), bindings(move(bindings_p)), is_partitioned(false),
       partition_info(partition_info_p), hashes(LogicalType::HASH), hashes_subset(LogicalType::HASH) {
 
 	sel_vectors.resize(partition_info.n_partitions);
@@ -65,22 +65,19 @@ PartitionableHashTable::PartitionableHashTable(ClientContext &context, Allocator
 }
 
 idx_t PartitionableHashTable::ListAddChunk(HashTableList &list, DataChunk &groups, Vector &group_hashes,
-                                           DataChunk &payload, const vector<idx_t> &filter) {
-	// If this is false, a single AddChunk would overflow the max capacity
-	D_ASSERT(list.empty() || groups.size() <= list.back()->MaxCapacity());
+                                           DataChunk &payload) {
 	if (list.empty() || list.back()->Size() + groups.size() > list.back()->MaxCapacity()) {
 		if (!list.empty()) {
 			// early release first part of ht and prevent adding of more data
 			list.back()->Finalize();
 		}
-		list.push_back(make_unique<GroupedAggregateHashTable>(context, allocator, group_types, payload_types, bindings,
-		                                                      HtEntryType::HT_WIDTH_32));
+		list.push_back(make_unique<GroupedAggregateHashTable>(allocator, buffer_manager, group_types, payload_types,
+		                                                      bindings, HtEntryType::HT_WIDTH_32));
 	}
-	return list.back()->AddChunk(groups, group_hashes, payload, filter);
+	return list.back()->AddChunk(groups, group_hashes, payload);
 }
 
-idx_t PartitionableHashTable::AddChunk(DataChunk &groups, DataChunk &payload, bool do_partition,
-                                       const vector<idx_t> &filter) {
+idx_t PartitionableHashTable::AddChunk(DataChunk &groups, DataChunk &payload, bool do_partition) {
 	groups.Hash(hashes);
 
 	// we partition when we are asked to or when the unpartitioned ht runs out of space
@@ -89,7 +86,7 @@ idx_t PartitionableHashTable::AddChunk(DataChunk &groups, DataChunk &payload, bo
 	}
 
 	if (!IsPartitioned()) {
-		return ListAddChunk(unpartitioned_hts, groups, hashes, payload, filter);
+		return ListAddChunk(unpartitioned_hts, groups, hashes, payload);
 	}
 
 	// makes no sense to do this with 1 partition
@@ -102,7 +99,6 @@ idx_t PartitionableHashTable::AddChunk(DataChunk &groups, DataChunk &payload, bo
 	hashes.Flatten(groups.size());
 	auto hashes_ptr = FlatVector::GetData<hash_t>(hashes);
 
-	// Determine for every partition how much data will be sinked into it
 	for (idx_t i = 0; i < groups.size(); i++) {
 		auto partition = partition_info.GetHashPartition(hashes_ptr[i]);
 		D_ASSERT(partition < partition_info.n_partitions);
@@ -127,7 +123,7 @@ idx_t PartitionableHashTable::AddChunk(DataChunk &groups, DataChunk &payload, bo
 		}
 		hashes_subset.Slice(hashes, sel_vectors[r], sel_vector_sizes[r]);
 
-		group_count += ListAddChunk(radix_partitioned_hts[r], group_subset, hashes_subset, payload_subset, filter);
+		group_count += ListAddChunk(radix_partitioned_hts[r], group_subset, hashes_subset, payload_subset);
 	}
 	return group_count;
 }
@@ -141,7 +137,7 @@ void PartitionableHashTable::Partition() {
 	for (auto &unpartitioned_ht : unpartitioned_hts) {
 		for (idx_t r = 0; r < partition_info.n_partitions; r++) {
 			radix_partitioned_hts[r].push_back(make_unique<GroupedAggregateHashTable>(
-			    context, allocator, group_types, payload_types, bindings, HtEntryType::HT_WIDTH_32));
+			    allocator, buffer_manager, group_types, payload_types, bindings, HtEntryType::HT_WIDTH_32));
 			partition_hts[r] = radix_partitioned_hts[r].back().get();
 		}
 		unpartitioned_ht->Partition(partition_hts, partition_info.radix_mask, partition_info.RADIX_SHIFT);
@@ -159,11 +155,11 @@ HashTableList PartitionableHashTable::GetPartition(idx_t partition) {
 	D_ASSERT(IsPartitioned());
 	D_ASSERT(partition < partition_info.n_partitions);
 	D_ASSERT(radix_partitioned_hts.size() > partition);
-	return std::move(radix_partitioned_hts[partition]);
+	return move(radix_partitioned_hts[partition]);
 }
 HashTableList PartitionableHashTable::GetUnpartitioned() {
 	D_ASSERT(!IsPartitioned());
-	return std::move(unpartitioned_hts);
+	return move(unpartitioned_hts);
 }
 
 void PartitionableHashTable::Finalize() {

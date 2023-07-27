@@ -1,0 +1,6 @@
+o_orderpriority        |order_count
+1-URGENT        |8290
+2-HIGH  		|8221
+3-MEDIUM        |8223
+4-NOT SPECIFIED |8270
+5-LOW   		|8147

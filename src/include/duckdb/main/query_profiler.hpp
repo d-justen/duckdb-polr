@@ -206,6 +206,10 @@ private:
 	//! Whether or not we are running as part of a explain_analyze query
 	bool is_explain_analyze;
 
+	//! POLR ops
+	unique_ptr<TreeNode> multiplexer_node;
+	unique_ptr<TreeNode> adaptive_union_node;
+
 public:
 	const TreeMap &GetTreeMap() const {
 		return tree_map;
@@ -232,12 +236,10 @@ private:
 //! The QueryProfilerHistory can be used to access the profiler of previous queries
 class QueryProfilerHistory {
 private:
-	static constexpr uint64_t DEFAULT_SIZE = 20;
-
 	//! Previous Query profilers
 	deque<pair<transaction_t, shared_ptr<QueryProfiler>>> prev_profilers;
 	//! Previous Query profilers size
-	uint64_t prev_profilers_size = DEFAULT_SIZE;
+	uint64_t prev_profilers_size = 20;
 
 public:
 	deque<pair<transaction_t, shared_ptr<QueryProfiler>>> &GetPrevProfilers() {
@@ -256,9 +258,6 @@ public:
 public:
 	void SetProfilerHistorySize(uint64_t size) {
 		this->prev_profilers_size = size;
-	}
-	void ResetProfilerHistorySize() {
-		this->prev_profilers_size = DEFAULT_SIZE;
 	}
 };
 } // namespace duckdb

@@ -211,7 +211,7 @@ unique_ptr<SegmentScanState> ValidityInitScan(ColumnSegment &segment) {
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	result->handle = buffer_manager.Pin(segment.block);
 	result->block_id = segment.block->BlockId();
-	return std::move(result);
+	return move(result);
 }
 
 //===--------------------------------------------------------------------===//
@@ -395,14 +395,14 @@ void ValidityFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row
 static unique_ptr<CompressionAppendState> ValidityInitAppend(ColumnSegment &segment) {
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	auto handle = buffer_manager.Pin(segment.block);
-	return make_unique<CompressionAppendState>(std::move(handle));
+	return make_unique<CompressionAppendState>(move(handle));
 }
 
 unique_ptr<CompressedSegmentState> ValidityInitSegment(ColumnSegment &segment, block_id_t block_id) {
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	if (block_id == INVALID_BLOCK) {
 		auto handle = buffer_manager.Pin(segment.block);
-		memset(handle.Ptr(), 0xFF, segment.SegmentSize());
+		memset(handle.Ptr(), 0xFF, Storage::BLOCK_SIZE);
 	}
 	return nullptr;
 }
@@ -412,7 +412,7 @@ idx_t ValidityAppend(CompressionAppendState &append_state, ColumnSegment &segmen
 	D_ASSERT(segment.GetBlockOffset() == 0);
 	auto &validity_stats = (ValidityStatistics &)*stats.statistics;
 
-	auto max_tuples = segment.SegmentSize() / ValidityMask::STANDARD_MASK_SIZE * STANDARD_VECTOR_SIZE;
+	auto max_tuples = Storage::BLOCK_SIZE / ValidityMask::STANDARD_MASK_SIZE * STANDARD_VECTOR_SIZE;
 	idx_t append_count = MinValue<idx_t>(vcount, max_tuples - segment.count);
 	if (data.validity.AllValid()) {
 		// no null values: skip append
@@ -459,7 +459,7 @@ void ValidityRevertAppend(ColumnSegment &segment, idx_t start_row) {
 		revert_start = start_bit / 8;
 	}
 	// for the rest, we just memset
-	memset(handle.Ptr() + revert_start, 0xFF, segment.SegmentSize() - revert_start);
+	memset(handle.Ptr() + revert_start, 0xFF, Storage::BLOCK_SIZE - revert_start);
 }
 
 //===--------------------------------------------------------------------===//

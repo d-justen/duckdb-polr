@@ -27,11 +27,7 @@ unique_ptr<LogicalOperator> LogicalWindow::Deserialize(LogicalDeserializationSta
 	auto window_index = reader.ReadRequired<idx_t>();
 	auto result = make_unique<LogicalWindow>(window_index);
 	result->expressions = reader.ReadRequiredSerializableList<Expression>(state.gstate);
-	return std::move(result);
-}
-
-vector<idx_t> LogicalWindow::GetTableIndex() const {
-	return vector<idx_t> {window_index};
+	return move(result);
 }
 
 } // namespace duckdb

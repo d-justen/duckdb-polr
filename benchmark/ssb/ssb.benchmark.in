@@ -1,0 +1,14 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [ssb]
+
+name Q${QUERY_NUMBER_PADDED}
+group ssb
+
+require httpfs
+
+cache ssb.duckdb
+
+load benchmark/ssb/init/load.sql
+
+run benchmark/ssb/queries/${QUERY_NUMBER_PADDED}.sql

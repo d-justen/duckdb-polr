@@ -2,8 +2,6 @@
 \set country  '\'Belarus\''
  */
 
-pragma enable_profiling;
-
 WITH persons_of_country_w_friends AS (
     SELECT p.p_personid AS personid
          , k.k_person2id as friendid

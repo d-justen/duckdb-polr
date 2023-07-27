@@ -26,15 +26,16 @@ public:
 public:
 	// Operator Interface
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
+	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
 	bool ParallelOperator() const override {
 		return true;
 	}
 
-protected:
-	// CachingOperatorState Interface
-	OperatorResultType ExecuteInternal(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-	                                   GlobalOperatorState &gstate, OperatorState &state) const override;
+	bool RequiresCache() const override {
+		return true;
+	}
 
 public:
 	// Source interface

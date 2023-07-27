@@ -84,10 +84,6 @@ void BenchmarkRunner::LogLine(string message) {
 
 void BenchmarkRunner::LogResult(string message) {
 	LogLine(message);
-	if (out_file.good()) {
-		out_file << message << endl;
-		out_file.flush();
-	}
 }
 
 void BenchmarkRunner::LogOutput(string message) {
@@ -102,8 +98,14 @@ void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 	auto display_name = benchmark->DisplayName();
 
 	auto state = benchmark->Initialize(configuration);
-	auto nruns = benchmark->NRuns();
-	for (size_t i = 0; i < nruns + 1; i++) {
+
+	auto benchmark_runs = nruns;
+
+	if (nruns > 1) {
+		benchmark_runs += 1;
+	}
+
+	for (size_t i = 0; i < benchmark_runs; i++) {
 		bool hotrun = i > 0;
 		if (hotrun) {
 			Log(StringUtil::Format("%s\t%d\t", benchmark->name, i));
@@ -137,6 +139,10 @@ void BenchmarkRunner::RunBenchmark(Benchmark *benchmark) {
 					break;
 				} else {
 					LogResult(std::to_string(profiler.Elapsed()));
+					if (out_file.good()) {
+						out_file << benchmark->name << "," << i << "," << profiler.Elapsed() << endl;
+						out_file.flush();
+					}
 				}
 			}
 		}
@@ -164,6 +170,8 @@ void print_help() {
 	fprintf(stderr, "              --log=[file]           Move log output to file\n");
 	fprintf(stderr, "              --info                 Prints info about the benchmark\n");
 	fprintf(stderr, "              --query                Prints query of the benchmark\n");
+	fprintf(stderr, "              --polr_mode=[std/bushy]\n");
+	fprintf(stderr, "              --cardinalities=[disabled/random]\n");
 	fprintf(stderr,
 	        "              [name_pattern]         Run only the benchmark which names match the specified name pattern, "
 	        "e.g., DS.* for TPC-DS benchmarks\n");
@@ -208,9 +216,16 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			// write info of benchmark
 			auto splits = StringUtil::Split(arg, '=');
 			instance.threads = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
+		} else if (StringUtil::StartsWith(arg, "--nruns=")) {
+			// write info of benchmark
+			auto splits = StringUtil::Split(arg, '=');
+			instance.nruns = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
 		} else if (arg == "--query") {
 			// write group of benchmark
 			instance.configuration.meta = BenchmarkMetaType::QUERY;
+		} else if (arg == "--measure_pipeline") {
+			// write group of benchmark
+			instance.measure_pipeline = true;
 		} else if (StringUtil::StartsWith(arg, "--out=") || StringUtil::StartsWith(arg, "--log=")) {
 			auto splits = StringUtil::Split(arg, '=');
 			if (splits.size() != 2) {
@@ -223,6 +238,96 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				fprintf(stderr, "Could not open file %s for writing\n", splits[1].c_str());
 				exit(1);
 			}
+		} else if (StringUtil::StartsWith(arg, "--polr_mode=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			if (splits[1] == "std") {
+				instance.enable_polr = true;
+			} else if (splits[1] == "bushy") {
+				instance.enable_polr_bushy = true;
+			} else {
+				print_help();
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--regret_budget=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			instance.regret_budget = std::stod(splits[1]);
+		} else if (StringUtil::StartsWith(arg, "--cardinalities=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			if (splits[1] == "random") {
+				instance.enable_random_cardinalities = true;
+			} else {
+				print_help();
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--multiplexer_routing=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+
+			if (splits[1] == "alternate" || splits[1] == "adaptive_reinit" || splits[1] == "dynamic" ||
+			    splits[1] == "init_once" || splits[1] == "opportunistic" || splits[1] == "default_path" ||
+			    splits[1] == "backpressure") {
+				instance.multiplexer_routing = splits[1];
+			} else {
+				print_help();
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--optimizer_mode=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			if (splits[1] == "dphyp-equisets" || splits[1] == "dphyp-constant" || splits[1] == "greedy-equisets" ||
+			    splits[1] == "greedy-constant" || splits[1] == "greedy-equisets-ldt" ||
+			    splits[1] == "greedy-constant-ldt" || splits[1] == "nostats") {
+				instance.optimizer_mode = splits[1];
+			} else {
+				print_help();
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--enumerator=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			if (splits[1] == "dfs_random" || splits[1] == "dfs_min_card" || splits[1] == "dfs_uncertain" ||
+			    splits[1] == "bfs_random" || splits[1] == "bfs_min_card" || splits[1] == "bfs_uncertain" ||
+			    splits[1] == "each_last_once" || splits[1] == "each_first_once") {
+				instance.enumerator = splits[1];
+			} else {
+				print_help();
+				exit(1);
+			}
+		} else if (StringUtil::StartsWith(arg, "--max_join_orders=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			instance.max_join_orders = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
+		} else if (arg == "--log_tuples_routed") {
+			instance.log_tuples_routed = true;
+		} else if (arg == "--disable_caching") {
+			instance.caching = false;
 		} else {
 			if (!instance.configuration.name_pattern.empty()) {
 				fprintf(stderr, "Only one benchmark can be specified.\n");
@@ -280,6 +385,7 @@ ConfigurationError run_benchmarks() {
 			}
 		} else {
 			instance.LogLine("name\trun\ttiming");
+
 			for (const auto &benchmark_index : benchmark_indices) {
 				instance.RunBenchmark(benchmarks[benchmark_index]);
 			}

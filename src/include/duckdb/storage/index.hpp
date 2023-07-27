@@ -17,14 +17,12 @@
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/meta_block_writer.hpp"
 #include "duckdb/execution/expression_executor.hpp"
-#include "duckdb/common/types/constraint_conflict_info.hpp"
 
 namespace duckdb {
 
 class ClientContext;
 class TableIOManager;
 class Transaction;
-class ConflictManager;
 
 struct IndexLock;
 
@@ -41,7 +39,7 @@ public:
 	TableIOManager &table_io_manager;
 	//! Column identifiers to extract from the base table
 	vector<column_t> column_ids;
-	//! Unordered_set of column_ids used by the index
+	//! unordered_set of column_ids used by the index
 	unordered_set<column_t> column_id_set;
 	//! Unbound expressions used by the index
 	vector<unique_ptr<Expression>> unbound_expressions;
@@ -49,7 +47,7 @@ public:
 	vector<PhysicalType> types;
 	//! The logical types of the expressions
 	vector<LogicalType> logical_types;
-	//! Index constraint type (primary key, foreign key, ...)
+	//! constraint type
 	IndexConstraintType constraint_type;
 
 public:
@@ -74,12 +72,10 @@ public:
 	bool Append(DataChunk &entries, Vector &row_identifiers);
 	//! Verify that data can be appended to the index
 	virtual void VerifyAppend(DataChunk &chunk) = 0;
-	//! Verify that data can be appended to the index
-	virtual void VerifyAppend(DataChunk &chunk, ConflictManager &conflict_manager) = 0;
 	//! Verify that data can be appended to the index for foreign key constraint
-	virtual void VerifyAppendForeignKey(DataChunk &chunk) = 0;
+	virtual void VerifyAppendForeignKey(DataChunk &chunk, string *err_msg_ptr) = 0;
 	//! Verify that data can be delete from the index for foreign key constraint
-	virtual void VerifyDeleteForeignKey(DataChunk &chunk) = 0;
+	virtual void VerifyDeleteForeignKey(DataChunk &chunk, string *err_msg_ptr) = 0;
 
 	//! Called when data inside the index is Deleted
 	virtual void Delete(IndexLock &state, DataChunk &entries, Vector &row_identifiers) = 0;
@@ -87,6 +83,8 @@ public:
 
 	//! Insert data into the index. Does not lock the index.
 	virtual bool Insert(IndexLock &lock, DataChunk &input, Vector &row_identifiers) = 0;
+	//! Construct an index from sorted chunks of keys.
+	virtual void ConstructAndMerge(IndexLock &lock, PayloadScanner &scanner, Allocator &allocator) = 0;
 
 	//! Merge other_index into this index.
 	virtual bool MergeIndexes(IndexLock &state, Index *other_index) = 0;
@@ -96,13 +94,7 @@ public:
 	virtual string ToString() = 0;
 
 	//! Returns true if the index is affected by updates on the specified column ids, and false otherwise
-	bool IndexIsUpdated(const vector<PhysicalIndex> &column_ids) const;
-
-	//! Returns how many of the input values were found in the 'input' chunk, with the option to also record what those
-	//! matches were
-	//  what row_ids those matches have
-	//  for this purpose, nulls count as a match, and are returned in 'null_count'
-	virtual void LookupValues(DataChunk &input, ConflictManager &conflict_manager) = 0;
+	bool IndexIsUpdated(const vector<column_t> &column_ids) const;
 
 	//! Returns unique flag
 	bool IsUnique() {

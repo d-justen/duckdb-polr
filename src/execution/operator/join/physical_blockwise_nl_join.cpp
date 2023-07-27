@@ -13,9 +13,9 @@ PhysicalBlockwiseNLJoin::PhysicalBlockwiseNLJoin(LogicalOperator &op, unique_ptr
                                                  unique_ptr<PhysicalOperator> right, unique_ptr<Expression> condition,
                                                  JoinType join_type, idx_t estimated_cardinality)
     : PhysicalJoin(op, PhysicalOperatorType::BLOCKWISE_NL_JOIN, join_type, estimated_cardinality),
-      condition(std::move(condition)) {
-	children.push_back(std::move(left));
-	children.push_back(std::move(right));
+      condition(move(condition)) {
+	children.push_back(move(left));
+	children.push_back(move(right));
 	// MARK and SINGLE joins not handled
 	D_ASSERT(join_type != JoinType::MARK);
 	D_ASSERT(join_type != JoinType::SINGLE);
@@ -74,12 +74,12 @@ SinkFinalizeType PhysicalBlockwiseNLJoin::Finalize(Pipeline &pipeline, Event &ev
 //===--------------------------------------------------------------------===//
 // Operator
 //===--------------------------------------------------------------------===//
-class BlockwiseNLJoinState : public CachingOperatorState {
+class BlockwiseNLJoinState : public OperatorState {
 public:
 	explicit BlockwiseNLJoinState(ExecutionContext &context, ColumnDataCollection &rhs,
 	                              const PhysicalBlockwiseNLJoin &op)
 	    : cross_product(rhs), left_outer(IsLeftOuterJoin(op.join_type)), match_sel(STANDARD_VECTOR_SIZE),
-	      executor(context.client, *op.condition) {
+	      executor(Allocator::Get(context.client), *op.condition) {
 		left_outer.Initialize(STANDARD_VECTOR_SIZE);
 	}
 
@@ -94,9 +94,8 @@ unique_ptr<OperatorState> PhysicalBlockwiseNLJoin::GetOperatorState(ExecutionCon
 	return make_unique<BlockwiseNLJoinState>(context, gstate.right_chunks, *this);
 }
 
-OperatorResultType PhysicalBlockwiseNLJoin::ExecuteInternal(ExecutionContext &context, DataChunk &input,
-                                                            DataChunk &chunk, GlobalOperatorState &gstate_p,
-                                                            OperatorState &state_p) const {
+OperatorResultType PhysicalBlockwiseNLJoin::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                                    GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	D_ASSERT(input.size() > 0);
 	auto &state = (BlockwiseNLJoinState &)state_p;
 	auto &gstate = (BlockwiseNLJoinGlobalState &)*sink_state;

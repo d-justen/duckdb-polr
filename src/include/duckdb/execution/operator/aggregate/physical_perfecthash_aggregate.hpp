@@ -56,10 +56,6 @@ public:
 		return true;
 	}
 
-	bool IsOrderPreserving() const override {
-		return false;
-	}
-
 public:
 	//! The group types
 	vector<LogicalType> group_types;

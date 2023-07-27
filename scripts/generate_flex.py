@@ -5,15 +5,10 @@ import os
 import subprocess
 import re
 from sys import platform
-import sys
 from python_helpers import open_utf8
 
-flex_bin = 'flex'
-for arg in sys.argv[1:]:
-    if arg.startswith("--flex="):
-        flex_bin = arg.replace("--flex=", "")
-
 pg_path = os.path.join('third_party', 'libpg_query')
+flex_bin = 'flex'
 flex_file_path = os.path.join(pg_path, 'scan.l')
 target_file = os.path.join(pg_path, 'src_backend_parser_scan.cpp')
 
@@ -28,9 +23,6 @@ if proc.returncode != None or len(stderr) > 0:
 
 with open_utf8(target_file, 'r') as f:
 	text = f.read()
-
-# convert this from 'int' to 'yy_size_t' to avoid triggering a warning
-text = text.replace('int yy_buf_size;\n', 'yy_size_t yy_buf_size;\n')
 
 # add the libpg_query namespace
 text = text.replace('''

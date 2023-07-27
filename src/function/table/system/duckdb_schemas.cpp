@@ -21,12 +21,6 @@ static unique_ptr<FunctionData> DuckDBSchemasBind(ClientContext &context, TableF
 	names.emplace_back("oid");
 	return_types.emplace_back(LogicalType::BIGINT);
 
-	names.emplace_back("database_name");
-	return_types.emplace_back(LogicalType::VARCHAR);
-
-	names.emplace_back("database_oid");
-	return_types.emplace_back(LogicalType::BIGINT);
-
 	names.emplace_back("schema_name");
 	return_types.emplace_back(LogicalType::VARCHAR);
 
@@ -43,9 +37,12 @@ unique_ptr<GlobalTableFunctionState> DuckDBSchemasInit(ClientContext &context, T
 	auto result = make_unique<DuckDBSchemasData>();
 
 	// scan all the schemas and collect them
-	result->entries = Catalog::GetAllSchemas(context);
+	Catalog::GetCatalog(context).ScanSchemas(
+	    context, [&](CatalogEntry *entry) { result->entries.push_back((SchemaCatalogEntry *)entry); });
+	// get the temp schema as well
+	result->entries.push_back(ClientData::Get(context).temporary_objects.get());
 
-	return std::move(result);
+	return move(result);
 }
 
 void DuckDBSchemasFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
@@ -61,19 +58,14 @@ void DuckDBSchemasFunction(ClientContext &context, TableFunctionInput &data_p, D
 		auto &entry = data.entries[data.offset];
 
 		// return values:
-		idx_t col = 0;
 		// "oid", PhysicalType::BIGINT
-		output.SetValue(col++, count, Value::BIGINT(entry->oid));
-		// database_name, VARCHAR
-		output.SetValue(col++, count, entry->catalog->GetName());
-		// database_oid, BIGINT
-		output.SetValue(col++, count, Value::BIGINT(entry->catalog->GetOid()));
+		output.SetValue(0, count, Value::BIGINT(entry->oid));
 		// "schema_name", PhysicalType::VARCHAR
-		output.SetValue(col++, count, Value(entry->name));
+		output.SetValue(1, count, Value(entry->name));
 		// "internal", PhysicalType::BOOLEAN
-		output.SetValue(col++, count, Value::BOOLEAN(entry->internal));
+		output.SetValue(2, count, Value::BOOLEAN(entry->internal));
 		// "sql", PhysicalType::VARCHAR
-		output.SetValue(col++, count, Value());
+		output.SetValue(3, count, Value());
 
 		data.offset++;
 		count++;

@@ -614,7 +614,7 @@ static unique_ptr<BaseStatistics> DateTruncStatistics(vector<unique_ptr<BaseStat
 	if (child_stats[0]->validity_stats) {
 		result->validity_stats = child_stats[1]->validity_stats->Copy();
 	}
-	return std::move(result);
+	return move(result);
 }
 
 template <class TA, class TR, class OP>
@@ -670,7 +670,7 @@ static unique_ptr<FunctionData> DateTruncBind(ClientContext &context, ScalarFunc
 	}
 
 	// Rebind to return a date if we are truncating that far
-	Value part_value = ExpressionExecutor::EvaluateScalar(context, *arguments[0]);
+	Value part_value = ExpressionExecutor::EvaluateScalar(*arguments[0]);
 	if (part_value.IsNull()) {
 		return nullptr;
 	}
@@ -710,7 +710,7 @@ static unique_ptr<FunctionData> DateTruncBind(ClientContext &context, ScalarFunc
 			bound_function.statistics = DateTruncStats<timestamp_t, timestamp_t>(part_code);
 			break;
 		case LogicalType::DATE:
-			bound_function.statistics = DateTruncStats<date_t, timestamp_t>(part_code);
+			bound_function.statistics = DateTruncStats<timestamp_t, date_t>(part_code);
 			break;
 		default:
 			throw NotImplementedException("Temporal argument type for DATETRUNC");

@@ -48,26 +48,16 @@ function get_extra_data(bind_info::BindInfo)
 end
 
 function _add_global_object(main_function, object)
-    begin
-        lock(main_function.global_lock)
-        try
-            push!(main_function.global_objects, object)
-        finally
-            unlock(main_function.global_lock)
-        end
-    end
+    lock(main_function.global_lock)
+    push!(main_function.global_objects, object)
+    unlock(main_function.global_lock)
     return
 end
 
 function _remove_global_object(main_function, object)
-    begin
-        lock(main_function.global_lock)
-        try
-            delete!(main_function.global_objects, object)
-        finally
-            unlock(main_function.global_lock)
-        end
-    end
+    lock(main_function.global_lock)
+    delete!(main_function.global_objects, object)
+    unlock(main_function.global_lock)
     return
 end
 

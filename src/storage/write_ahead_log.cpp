@@ -11,9 +11,9 @@
 
 namespace duckdb {
 
-WriteAheadLog::WriteAheadLog(AttachedDatabase &database, const string &path) : skip_writing(false), database(database) {
+WriteAheadLog::WriteAheadLog(DatabaseInstance &database, const string &path) : skip_writing(false), database(database) {
 	wal_path = path;
-	writer = make_unique<BufferedFileWriter>(FileSystem::Get(database), path.c_str(),
+	writer = make_unique<BufferedFileWriter>(database.GetFileSystem(), path.c_str(),
 	                                         FileFlags::FILE_FLAGS_WRITE | FileFlags::FILE_FLAGS_FILE_CREATE |
 	                                             FileFlags::FILE_FLAGS_APPEND);
 }
@@ -41,7 +41,7 @@ void WriteAheadLog::Delete() {
 	}
 	writer.reset();
 
-	auto &fs = FileSystem::Get(database);
+	auto &fs = FileSystem::GetFileSystem(database);
 	fs.RemoveFile(wal_path);
 }
 

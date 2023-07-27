@@ -20,7 +20,7 @@ RegexpBaseBindData::RegexpBaseBindData() : constant_pattern(false) {
 }
 RegexpBaseBindData::RegexpBaseBindData(duckdb_re2::RE2::Options options, string constant_string_p,
                                        bool constant_pattern)
-    : options(options), constant_string(std::move(constant_string_p)), constant_pattern(constant_pattern) {
+    : options(options), constant_string(move(constant_string_p)), constant_pattern(constant_pattern) {
 }
 
 RegexpBaseBindData::~RegexpBaseBindData() {
@@ -36,8 +36,18 @@ static inline duckdb_re2::StringPiece CreateStringPiece(string_t &input) {
 	return duckdb_re2::StringPiece(input.GetDataUnsafe(), input.GetSize());
 }
 
-unique_ptr<FunctionLocalState> RegexInitLocalState(ExpressionState &state, const BoundFunctionExpression &expr,
-                                                   FunctionData *bind_data) {
+struct RegexLocalState : public FunctionLocalState {
+	explicit RegexLocalState(RegexpBaseBindData &info)
+	    : constant_pattern(duckdb_re2::StringPiece(info.constant_string.c_str(), info.constant_string.size()),
+	                       info.options) {
+		D_ASSERT(info.constant_pattern);
+	}
+
+	RE2 constant_pattern;
+};
+
+static unique_ptr<FunctionLocalState> RegexInitLocalState(const BoundFunctionExpression &expr,
+                                                          FunctionData *bind_data) {
 	auto &info = (RegexpBaseBindData &)*bind_data;
 	if (info.constant_pattern) {
 		return make_unique<RegexLocalState>(info);
@@ -89,24 +99,24 @@ static void ParseRegexOptions(const string &options, duckdb_re2::RE2::Options &r
 	}
 }
 
-void ParseRegexOptions(ClientContext &context, Expression &expr, RE2::Options &target, bool *global_replace = nullptr) {
+void ParseRegexOptions(Expression &expr, RE2::Options &target, bool *global_replace = nullptr) {
 	if (expr.HasParameter()) {
 		throw ParameterNotResolvedException();
 	}
 	if (!expr.IsFoldable()) {
 		throw InvalidInputException("Regex options field must be a constant");
 	}
-	Value options_str = ExpressionExecutor::EvaluateScalar(context, expr);
+	Value options_str = ExpressionExecutor::EvaluateScalar(expr);
 	if (!options_str.IsNull() && options_str.type().id() == LogicalTypeId::VARCHAR) {
 		ParseRegexOptions(StringValue::Get(options_str), target, global_replace);
 	}
 }
 
-static bool TryParseConstantPattern(ClientContext &context, Expression &expr, string &constant_string) {
+static bool TryParseConstantPattern(Expression &expr, string &constant_string) {
 	if (!expr.IsFoldable()) {
 		return false;
 	}
-	Value pattern_str = ExpressionExecutor::EvaluateScalar(context, expr);
+	Value pattern_str = ExpressionExecutor::EvaluateScalar(expr);
 	if (!pattern_str.IsNull() && pattern_str.type().id() == LogicalTypeId::VARCHAR) {
 		constant_string = StringValue::Get(pattern_str);
 		return true;
@@ -119,7 +129,7 @@ static bool TryParseConstantPattern(ClientContext &context, Expression &expr, st
 //===--------------------------------------------------------------------===//
 RegexpMatchesBindData::RegexpMatchesBindData(duckdb_re2::RE2::Options options, string constant_string_p,
                                              bool constant_pattern)
-    : RegexpBaseBindData(options, std::move(constant_string_p), constant_pattern) {
+    : RegexpBaseBindData(options, move(constant_string_p), constant_pattern) {
 	if (constant_pattern) {
 		auto pattern = make_unique<RE2>(constant_string, options);
 		if (!pattern->ok()) {
@@ -135,8 +145,8 @@ RegexpMatchesBindData::RegexpMatchesBindData(duckdb_re2::RE2::Options options, s
 RegexpMatchesBindData::RegexpMatchesBindData(duckdb_re2::RE2::Options options, string constant_string_p,
                                              bool constant_pattern, string range_min_p, string range_max_p,
                                              bool range_success)
-    : RegexpBaseBindData(options, std::move(constant_string_p), constant_pattern), range_min(std::move(range_min_p)),
-      range_max(std::move(range_max_p)), range_success(range_success) {
+    : RegexpBaseBindData(options, move(constant_string_p), constant_pattern), range_min(move(range_min_p)),
+      range_max(move(range_max_p)), range_success(range_success) {
 }
 
 unique_ptr<FunctionData> RegexpMatchesBindData::Copy() const {
@@ -144,20 +154,20 @@ unique_ptr<FunctionData> RegexpMatchesBindData::Copy() const {
 	                                          range_success);
 }
 
-unique_ptr<FunctionData> RegexpMatchesBind(ClientContext &context, ScalarFunction &bound_function,
-                                           vector<unique_ptr<Expression>> &arguments) {
+static unique_ptr<FunctionData> RegexpMatchesBind(ClientContext &context, ScalarFunction &bound_function,
+                                                  vector<unique_ptr<Expression>> &arguments) {
 	// pattern is the second argument. If its constant, we can already prepare the pattern and store it for later.
 	D_ASSERT(arguments.size() == 2 || arguments.size() == 3);
 	RE2::Options options;
 	options.set_log_errors(false);
 	if (arguments.size() == 3) {
-		ParseRegexOptions(context, *arguments[2], options);
+		ParseRegexOptions(*arguments[2], options);
 	}
 
 	string constant_string;
 	bool constant_pattern;
-	constant_pattern = TryParseConstantPattern(context, *arguments[1], constant_string);
-	return make_unique<RegexpMatchesBindData>(options, std::move(constant_string), constant_pattern);
+	constant_pattern = TryParseConstantPattern(*arguments[1], constant_string);
+	return make_unique<RegexpMatchesBindData>(options, move(constant_string), constant_pattern);
 }
 
 struct RegexPartialMatch {
@@ -205,12 +215,12 @@ RegexpReplaceBindData::RegexpReplaceBindData() : global_replace(false) {
 
 RegexpReplaceBindData::RegexpReplaceBindData(duckdb_re2::RE2::Options options, string constant_string_p,
                                              bool constant_pattern, bool global_replace)
-    : RegexpBaseBindData(options, std::move(constant_string_p), constant_pattern), global_replace(global_replace) {
+    : RegexpBaseBindData(options, move(constant_string_p), constant_pattern), global_replace(global_replace) {
 }
 
 unique_ptr<FunctionData> RegexpReplaceBindData::Copy() const {
 	auto copy = make_unique<RegexpReplaceBindData>(options, constant_string, constant_pattern, global_replace);
-	return std::move(copy);
+	return move(copy);
 }
 
 bool RegexpReplaceBindData::Equals(const FunctionData &other_p) const {
@@ -222,12 +232,12 @@ static unique_ptr<FunctionData> RegexReplaceBind(ClientContext &context, ScalarF
                                                  vector<unique_ptr<Expression>> &arguments) {
 	auto data = make_unique<RegexpReplaceBindData>();
 
-	data->constant_pattern = TryParseConstantPattern(context, *arguments[1], data->constant_string);
+	data->constant_pattern = TryParseConstantPattern(*arguments[1], data->constant_string);
 	if (arguments.size() == 4) {
-		ParseRegexOptions(context, *arguments[3], data->options, &data->global_replace);
+		ParseRegexOptions(*arguments[3], data->options, &data->global_replace);
 	}
 	data->options.set_log_errors(false);
-	return std::move(data);
+	return move(data);
 }
 
 static void RegexReplaceFunction(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -273,8 +283,8 @@ RegexpExtractBindData::RegexpExtractBindData() {
 
 RegexpExtractBindData::RegexpExtractBindData(duckdb_re2::RE2::Options options, string constant_string_p,
                                              bool constant_pattern, string group_string_p)
-    : RegexpBaseBindData(options, std::move(constant_string_p), constant_pattern),
-      group_string(std::move(group_string_p)), rewrite(group_string) {
+    : RegexpBaseBindData(options, move(constant_string_p), constant_pattern), group_string(move(group_string_p)),
+      rewrite(group_string) {
 }
 
 unique_ptr<FunctionData> RegexpExtractBindData::Copy() const {
@@ -293,7 +303,7 @@ static unique_ptr<FunctionData> RegexExtractBind(ClientContext &context, ScalarF
 	duckdb_re2::RE2::Options options;
 
 	string constant_string;
-	bool constant_pattern = TryParseConstantPattern(context, *arguments[1], constant_string);
+	bool constant_pattern = TryParseConstantPattern(*arguments[1], constant_string);
 
 	string group_string = "";
 	if (arguments.size() >= 3) {
@@ -303,7 +313,7 @@ static unique_ptr<FunctionData> RegexExtractBind(ClientContext &context, ScalarF
 		if (!arguments[2]->IsFoldable()) {
 			throw InvalidInputException("Group index field field must be a constant!");
 		}
-		Value group = ExpressionExecutor::EvaluateScalar(context, *arguments[2]);
+		Value group = ExpressionExecutor::EvaluateScalar(*arguments[2]);
 		if (!group.IsNull()) {
 			auto group_idx = group.GetValue<int32_t>();
 			if (group_idx < 0 || group_idx > 9) {
@@ -315,10 +325,9 @@ static unique_ptr<FunctionData> RegexExtractBind(ClientContext &context, ScalarF
 		group_string = "\\0";
 	}
 	if (arguments.size() >= 4) {
-		ParseRegexOptions(context, *arguments[3], options);
+		ParseRegexOptions(*arguments[3], options);
 	}
-	return make_unique<RegexpExtractBindData>(options, std::move(constant_string), constant_pattern,
-	                                          std::move(group_string));
+	return make_unique<RegexpExtractBindData>(options, move(constant_string), constant_pattern, move(group_string));
 }
 
 inline static string_t Extract(const string_t &input, Vector &result, const RE2 &re,

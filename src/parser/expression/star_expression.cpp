@@ -6,19 +6,11 @@
 namespace duckdb {
 
 StarExpression::StarExpression(string relation_name_p)
-    : ParsedExpression(ExpressionType::STAR, ExpressionClass::STAR), relation_name(std::move(relation_name_p)) {
+    : ParsedExpression(ExpressionType::STAR, ExpressionClass::STAR), relation_name(move(relation_name_p)) {
 }
 
 string StarExpression::ToString() const {
-	if (!regex.empty()) {
-		D_ASSERT(columns);
-		return "COLUMNS('" + regex + "')";
-	}
-	string result;
-	if (columns) {
-		result += "COLUMNS(";
-	}
-	result += relation_name.empty() ? "*" : relation_name + ".*";
+	string result = relation_name.empty() ? "*" : relation_name + ".*";
 	if (!exclude_list.empty()) {
 		result += " EXCLUDE (";
 		bool first_entry = true;
@@ -45,17 +37,11 @@ string StarExpression::ToString() const {
 		}
 		result += ")";
 	}
-	if (columns) {
-		result += ")";
-	}
 	return result;
 }
 
-bool StarExpression::Equal(const StarExpression *a, const StarExpression *b) {
+bool StarExpression::Equals(const StarExpression *a, const StarExpression *b) {
 	if (a->relation_name != b->relation_name || a->exclude_list != b->exclude_list) {
-		return false;
-	}
-	if (a->columns != b->columns) {
 		return false;
 	}
 	if (a->replace_list.size() != b->replace_list.size()) {
@@ -69,9 +55,6 @@ bool StarExpression::Equal(const StarExpression *a, const StarExpression *b) {
 		if (!entry.second->Equals(other_entry->second.get())) {
 			return false;
 		}
-	}
-	if (a->regex != b->regex) {
-		return false;
 	}
 	return true;
 }
@@ -92,8 +75,6 @@ void StarExpression::Serialize(FieldWriter &writer) const {
 		serializer.WriteString(entry.first);
 		entry.second->Serialize(serializer);
 	}
-	writer.WriteField<bool>(columns);
-	writer.WriteString(regex);
 }
 
 unique_ptr<ParsedExpression> StarExpression::Deserialize(ExpressionType type, FieldReader &reader) {
@@ -109,11 +90,9 @@ unique_ptr<ParsedExpression> StarExpression::Deserialize(ExpressionType type, Fi
 	for (idx_t i = 0; i < replace_count; i++) {
 		auto name = source.Read<string>();
 		auto expr = ParsedExpression::Deserialize(source);
-		result->replace_list.insert(make_pair(name, std::move(expr)));
+		result->replace_list.insert(make_pair(name, move(expr)));
 	}
-	result->columns = reader.ReadField<bool>(false);
-	result->regex = reader.ReadField<string>(string());
-	return std::move(result);
+	return move(result);
 }
 
 unique_ptr<ParsedExpression> StarExpression::Copy() const {
@@ -122,10 +101,8 @@ unique_ptr<ParsedExpression> StarExpression::Copy() const {
 	for (auto &entry : replace_list) {
 		copy->replace_list[entry.first] = entry.second->Copy();
 	}
-	copy->columns = columns;
-	copy->regex = regex;
 	copy->CopyProperties(*this);
-	return std::move(copy);
+	return move(copy);
 }
 
 } // namespace duckdb

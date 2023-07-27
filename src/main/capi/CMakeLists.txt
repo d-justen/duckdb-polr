@@ -1,5 +1,3 @@
-add_subdirectory(cast)
-
 add_library_unity(
   duckdb_main_capi
   OBJECT

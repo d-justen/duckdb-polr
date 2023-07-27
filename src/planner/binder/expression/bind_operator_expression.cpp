@@ -11,7 +11,7 @@ namespace duckdb {
 static LogicalType ResolveNotType(OperatorExpression &op, vector<BoundExpression *> &children) {
 	// NOT expression, cast child to BOOLEAN
 	D_ASSERT(children.size() == 1);
-	children[0]->expr = BoundCastExpression::AddDefaultCastToType(std::move(children[0]->expr), LogicalType::BOOLEAN);
+	children[0]->expr = BoundCastExpression::AddDefaultCastToType(move(children[0]->expr), LogicalType::BOOLEAN);
 	return LogicalType(LogicalTypeId::BOOLEAN);
 }
 
@@ -27,7 +27,7 @@ static LogicalType ResolveInType(OperatorExpression &op, vector<BoundExpression 
 
 	// cast all children to the same type
 	for (idx_t i = 0; i < children.size(); i++) {
-		children[i]->expr = BoundCastExpression::AddDefaultCastToType(std::move(children[i]->expr), max_type);
+		children[i]->expr = BoundCastExpression::AddDefaultCastToType(move(children[i]->expr), max_type);
 	}
 	// (NOT) IN always returns a boolean
 	return LogicalType::BOOLEAN;
@@ -94,14 +94,13 @@ BindResult ExpressionBinder::BindExpression(OperatorExpression &op, idx_t depth)
 		D_ASSERT(op.children[1]->expression_class == ExpressionClass::BOUND_EXPRESSION);
 		auto &extract_exp = (BoundExpression &)*op.children[0];
 		auto &name_exp = (BoundExpression &)*op.children[1];
-		auto extract_expr_type = extract_exp.expr->return_type.id();
-		if (extract_expr_type != LogicalTypeId::STRUCT && extract_expr_type != LogicalTypeId::UNION &&
-		    extract_expr_type != LogicalTypeId::SQLNULL) {
-			return BindResult(StringUtil::Format(
-			    "Cannot extract field %s from expression \"%s\" because it is not a struct or a union",
-			    name_exp.ToString(), extract_exp.ToString()));
+		if (extract_exp.expr->return_type.id() != LogicalTypeId::STRUCT &&
+		    extract_exp.expr->return_type.id() != LogicalTypeId::SQLNULL) {
+			return BindResult(
+			    StringUtil::Format("Cannot extract field %s from expression \"%s\" because it is not a struct",
+			                       name_exp.ToString(), extract_exp.ToString()));
 		}
-		function_name = extract_expr_type == LogicalTypeId::UNION ? "union_extract" : "struct_extract";
+		function_name = "struct_extract";
 		break;
 	}
 	case ExpressionType::ARRAY_CONSTRUCTOR:
@@ -114,7 +113,7 @@ BindResult ExpressionBinder::BindExpression(OperatorExpression &op, idx_t depth)
 		break;
 	}
 	if (!function_name.empty()) {
-		auto function = make_unique<FunctionExpression>(function_name, std::move(op.children));
+		auto function = make_unique<FunctionExpression>(function_name, move(op.children));
 		return BindExpression(*function, depth, nullptr);
 	}
 
@@ -130,15 +129,15 @@ BindResult ExpressionBinder::BindExpression(OperatorExpression &op, idx_t depth)
 			throw BinderException("COALESCE needs at least one child");
 		}
 		if (children.size() == 1) {
-			return BindResult(std::move(children[0]->expr));
+			return BindResult(move(children[0]->expr));
 		}
 	}
 
 	auto result = make_unique<BoundOperatorExpression>(op.type, result_type);
 	for (auto &child : children) {
-		result->children.push_back(std::move(child->expr));
+		result->children.push_back(move(child->expr));
 	}
-	return BindResult(std::move(result));
+	return BindResult(move(result));
 }
 
 } // namespace duckdb

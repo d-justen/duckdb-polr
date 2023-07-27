@@ -12,13 +12,12 @@ namespace duckdb {
 PhysicalNestedLoopJoin::PhysicalNestedLoopJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
                                                unique_ptr<PhysicalOperator> right, vector<JoinCondition> cond,
                                                JoinType join_type, idx_t estimated_cardinality)
-    : PhysicalComparisonJoin(op, PhysicalOperatorType::NESTED_LOOP_JOIN, std::move(cond), join_type,
-                             estimated_cardinality) {
-	children.push_back(std::move(left));
-	children.push_back(std::move(right));
+    : PhysicalComparisonJoin(op, PhysicalOperatorType::NESTED_LOOP_JOIN, move(cond), join_type, estimated_cardinality) {
+	children.push_back(move(left));
+	children.push_back(move(right));
 }
 
-bool PhysicalJoin::HasNullValues(DataChunk &chunk) {
+static bool HasNullValues(DataChunk &chunk) {
 	for (idx_t col_idx = 0; col_idx < chunk.ColumnCount(); col_idx++) {
 		UnifiedVectorFormat vdata;
 		chunk.data[col_idx].ToUnifiedFormat(chunk.size(), vdata);
@@ -107,10 +106,7 @@ void PhysicalJoin::ConstructMarkJoinResult(DataChunk &join_keys, DataChunk &left
 	}
 }
 
-bool PhysicalNestedLoopJoin::IsSupported(const vector<JoinCondition> &conditions, JoinType join_type) {
-	if (join_type == JoinType::MARK) {
-		return true;
-	}
+bool PhysicalNestedLoopJoin::IsSupported(const vector<JoinCondition> &conditions) {
 	for (auto &cond : conditions) {
 		if (cond.left->return_type.InternalType() == PhysicalType::STRUCT ||
 		    cond.left->return_type.InternalType() == PhysicalType::LIST) {
@@ -125,14 +121,14 @@ bool PhysicalNestedLoopJoin::IsSupported(const vector<JoinCondition> &conditions
 //===--------------------------------------------------------------------===//
 class NestedLoopJoinLocalState : public LocalSinkState {
 public:
-	explicit NestedLoopJoinLocalState(ClientContext &context, const vector<JoinCondition> &conditions)
-	    : rhs_executor(context) {
+	explicit NestedLoopJoinLocalState(Allocator &allocator, const vector<JoinCondition> &conditions)
+	    : rhs_executor(allocator) {
 		vector<LogicalType> condition_types;
 		for (auto &cond : conditions) {
 			rhs_executor.AddExpression(*cond.right);
 			condition_types.push_back(cond.right->return_type);
 		}
-		right_condition.Initialize(Allocator::Get(context), condition_types);
+		right_condition.Initialize(allocator, condition_types);
 	}
 
 	//! The chunk holding the right condition
@@ -154,7 +150,7 @@ public:
 	//! Materialized join condition of the RHS
 	ColumnDataCollection right_condition_data;
 	//! Whether or not the RHS of the nested loop join has NULL values
-	atomic<bool> has_null;
+	bool has_null;
 	//! A bool indicating for each tuple in the RHS if they found a match (only used in FULL OUTER JOIN)
 	OuterJoinMarker right_outer;
 };
@@ -214,24 +210,23 @@ unique_ptr<GlobalSinkState> PhysicalNestedLoopJoin::GetGlobalSinkState(ClientCon
 }
 
 unique_ptr<LocalSinkState> PhysicalNestedLoopJoin::GetLocalSinkState(ExecutionContext &context) const {
-	return make_unique<NestedLoopJoinLocalState>(context.client, conditions);
+	return make_unique<NestedLoopJoinLocalState>(Allocator::Get(context.client), conditions);
 }
 
 //===--------------------------------------------------------------------===//
 // Operator
 //===--------------------------------------------------------------------===//
-class PhysicalNestedLoopJoinState : public CachingOperatorState {
+class PhysicalNestedLoopJoinState : public OperatorState {
 public:
-	PhysicalNestedLoopJoinState(ClientContext &context, const PhysicalNestedLoopJoin &op,
+	PhysicalNestedLoopJoinState(Allocator &allocator, const PhysicalNestedLoopJoin &op,
 	                            const vector<JoinCondition> &conditions)
-	    : fetch_next_left(true), fetch_next_right(false), lhs_executor(context), left_tuple(0), right_tuple(0),
+	    : fetch_next_left(true), fetch_next_right(false), lhs_executor(allocator), left_tuple(0), right_tuple(0),
 	      left_outer(IsLeftOuterJoin(op.join_type)) {
 		vector<LogicalType> condition_types;
 		for (auto &cond : conditions) {
 			lhs_executor.AddExpression(*cond.left);
 			condition_types.push_back(cond.left->return_type);
 		}
-		auto &allocator = Allocator::Get(context);
 		left_condition.Initialize(allocator, condition_types);
 		right_condition.Initialize(allocator, condition_types);
 		right_payload.Initialize(allocator, op.children[1]->GetTypes());
@@ -261,12 +256,11 @@ public:
 };
 
 unique_ptr<OperatorState> PhysicalNestedLoopJoin::GetOperatorState(ExecutionContext &context) const {
-	return make_unique<PhysicalNestedLoopJoinState>(context.client, *this, conditions);
+	return make_unique<PhysicalNestedLoopJoinState>(Allocator::Get(context.client), *this, conditions);
 }
 
-OperatorResultType PhysicalNestedLoopJoin::ExecuteInternal(ExecutionContext &context, DataChunk &input,
-                                                           DataChunk &chunk, GlobalOperatorState &gstate_p,
-                                                           OperatorState &state_p) const {
+OperatorResultType PhysicalNestedLoopJoin::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                                   GlobalOperatorState &gstate_p, OperatorState &state_p) const {
 	auto &gstate = (NestedLoopJoinGlobalState &)*sink_state;
 
 	if (gstate.right_payload_data.Count() == 0) {

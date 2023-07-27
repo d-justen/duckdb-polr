@@ -7,8 +7,7 @@ void DuckDBAssertInternal(bool condition, const char *condition_name, const char
 	if (condition) {
 		return;
 	}
-	throw InternalException("Assertion triggered in file \"%s\" on line %d: %s%s", file, linenr, condition_name,
-	                        Exception::GetStackTrace());
+	throw InternalException("Assertion triggered in file \"%s\" on line %d: %s", file, linenr, condition_name);
 }
 
 } // namespace duckdb

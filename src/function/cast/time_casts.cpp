@@ -7,6 +7,7 @@ BoundCastInfo DefaultCasts::DateCastSwitch(BindCastInput &input, const LogicalTy
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// date to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<date_t, duckdb::StringCast>);
 	case LogicalTypeId::TIMESTAMP:
@@ -28,6 +29,7 @@ BoundCastInfo DefaultCasts::TimeCastSwitch(BindCastInput &input, const LogicalTy
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// time to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<dtime_t, duckdb::StringCast>);
 	case LogicalTypeId::TIME_TZ:
@@ -43,6 +45,7 @@ BoundCastInfo DefaultCasts::TimeTzCastSwitch(BindCastInput &input, const Logical
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// time with time zone to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<dtime_t, duckdb::StringCastTZ>);
 	case LogicalTypeId::TIME:
@@ -58,6 +61,7 @@ BoundCastInfo DefaultCasts::TimestampCastSwitch(BindCastInput &input, const Logi
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// timestamp to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<timestamp_t, duckdb::StringCast>);
 	case LogicalTypeId::DATE:
@@ -92,6 +96,7 @@ BoundCastInfo DefaultCasts::TimestampTzCastSwitch(BindCastInput &input, const Lo
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// timestamp with time zone to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<timestamp_t, duckdb::StringCastTZ>);
 	case LogicalTypeId::TIME_TZ:
@@ -111,6 +116,7 @@ BoundCastInfo DefaultCasts::TimestampNsCastSwitch(BindCastInput &input, const Lo
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// timestamp (ns) to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<timestamp_t, duckdb::CastFromTimestampNS>);
 	case LogicalTypeId::TIMESTAMP:
@@ -127,6 +133,7 @@ BoundCastInfo DefaultCasts::TimestampMsCastSwitch(BindCastInput &input, const Lo
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// timestamp (ms) to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<timestamp_t, duckdb::CastFromTimestampMS>);
 	case LogicalTypeId::TIMESTAMP:
@@ -143,6 +150,7 @@ BoundCastInfo DefaultCasts::TimestampSecCastSwitch(BindCastInput &input, const L
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// timestamp (sec) to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<timestamp_t, duckdb::CastFromTimestampSec>);
 	case LogicalTypeId::TIMESTAMP:
@@ -158,6 +166,7 @@ BoundCastInfo DefaultCasts::IntervalCastSwitch(BindCastInput &input, const Logic
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// time to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<interval_t, duckdb::StringCast>);
 	default:

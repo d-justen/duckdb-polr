@@ -38,7 +38,3 @@ CREATE TYPE alias AS VARCHAR;
 
 statement ok
 DROP TYPE IF EXISTS alias;
-
-# create a type with a non-existant type as source
-statement error
-CREATE TYPE alias as BLOBL;

@@ -8,13 +8,9 @@
 
 #pragma once
 
-#include "duckdb/common/string.hpp"
-#include "duckdb/common/vector.hpp"
+#include "duckdb/planner/logical_operator.hpp"
 
 namespace duckdb {
-
-class LogicalOperator;
-struct LogicalType;
 
 struct BoundStatement {
 	unique_ptr<LogicalOperator> plan;

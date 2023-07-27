@@ -1,6 +1,6 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/pair.hpp"
-#include "duckdb/common/case_insensitive_map.hpp"
+#include "duckdb/common/unordered_set.hpp"
 
 #include "duckdb/parser/transformer.hpp"
 #include "duckdb/common/types/decimal.hpp"
@@ -20,14 +20,12 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName *type_n
 	LogicalType result_type;
 	if (base_type == LogicalTypeId::LIST) {
 		throw ParserException("LIST is not valid as a stand-alone type");
-	} else if (base_type == LogicalTypeId::ENUM) {
-		throw ParserException("ENUM is not valid as a stand-alone type");
 	} else if (base_type == LogicalTypeId::STRUCT) {
 		if (!type_name->typmods || type_name->typmods->length == 0) {
 			throw ParserException("Struct needs a name and entries");
 		}
 		child_list_t<LogicalType> children;
-		case_insensitive_set_t name_collision_set;
+		unordered_set<string> name_collision_set;
 
 		for (auto node = type_name->typmods->head; node; node = node->next) {
 			auto &type_val = *((duckdb_libpgquery::PGList *)node->data.ptr_value);
@@ -52,52 +50,23 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName *type_n
 			children.push_back(make_pair(entry_name, entry_type));
 		}
 		D_ASSERT(!children.empty());
-		result_type = LogicalType::STRUCT(std::move(children));
+		result_type = LogicalType::STRUCT(move(children));
 	} else if (base_type == LogicalTypeId::MAP) {
+		//! We transform MAP<TYPE_KEY, TYPE_VALUE> to STRUCT<LIST<key: TYPE_KEY>, LIST<value: TYPE_VALUE>>
 
 		if (!type_name->typmods || type_name->typmods->length != 2) {
 			throw ParserException("Map type needs exactly two entries, key and value type");
 		}
+		child_list_t<LogicalType> children;
 		auto key_type = TransformTypeName((duckdb_libpgquery::PGTypeName *)type_name->typmods->head->data.ptr_value);
 		auto value_type = TransformTypeName((duckdb_libpgquery::PGTypeName *)type_name->typmods->tail->data.ptr_value);
 
-		result_type = LogicalType::MAP(std::move(key_type), std::move(value_type));
-	} else if (base_type == LogicalTypeId::UNION) {
-		if (!type_name->typmods || type_name->typmods->length == 0) {
-			throw ParserException("Union type needs at least one member");
-		}
-		if (type_name->typmods->length > (int)UnionType::MAX_UNION_MEMBERS) {
-			throw ParserException("Union types can have at most %d members", UnionType::MAX_UNION_MEMBERS);
-		}
+		children.push_back({"key", LogicalType::LIST(key_type)});
+		children.push_back({"value", LogicalType::LIST(value_type)});
 
-		child_list_t<LogicalType> children;
-		case_insensitive_set_t name_collision_set;
+		D_ASSERT(children.size() == 2);
 
-		for (auto node = type_name->typmods->head; node; node = node->next) {
-			auto &type_val = *((duckdb_libpgquery::PGList *)node->data.ptr_value);
-			if (type_val.length != 2) {
-				throw ParserException("Union type member needs a tag name and a type name");
-			}
-
-			auto entry_name_node = (duckdb_libpgquery::PGValue *)(type_val.head->data.ptr_value);
-			D_ASSERT(entry_name_node->type == duckdb_libpgquery::T_PGString);
-			auto entry_type_node = (duckdb_libpgquery::PGValue *)(type_val.tail->data.ptr_value);
-			D_ASSERT(entry_type_node->type == duckdb_libpgquery::T_PGTypeName);
-
-			auto entry_name = string(entry_name_node->val.str);
-			D_ASSERT(!entry_name.empty());
-
-			if (name_collision_set.find(entry_name) != name_collision_set.end()) {
-				throw ParserException("Duplicate union type tag name \"%s\"", entry_name);
-			}
-
-			name_collision_set.insert(entry_name);
-
-			auto entry_type = TransformTypeName((duckdb_libpgquery::PGTypeName *)entry_type_node);
-			children.push_back(make_pair(entry_name, entry_type));
-		}
-		D_ASSERT(!children.empty());
-		result_type = LogicalType::UNION(std::move(children));
+		result_type = LogicalType::MAP(move(children));
 	} else {
 		int64_t width, scale;
 		if (base_type == LogicalTypeId::DECIMAL) {
@@ -164,27 +133,6 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName *type_n
 			result_type = LogicalType::USER(user_type_name);
 			break;
 		}
-		case LogicalTypeId::TIMESTAMP:
-			if (modifier_idx == 0) {
-				result_type = LogicalType::TIMESTAMP;
-			} else {
-				if (modifier_idx > 1) {
-					throw ParserException("TIMESTAMP only supports a single modifier");
-				}
-				if (width > 10) {
-					throw ParserException("TIMESTAMP only supports until nano-second precision (9)");
-				}
-				if (width == 0) {
-					result_type = LogicalType::TIMESTAMP_S;
-				} else if (width <= 3) {
-					result_type = LogicalType::TIMESTAMP_MS;
-				} else if (width <= 6) {
-					result_type = LogicalType::TIMESTAMP;
-				} else {
-					result_type = LogicalType::TIMESTAMP_NS;
-				}
-			}
-			break;
 		default:
 			if (modifier_idx > 0) {
 				throw ParserException("Type %s does not support any modifiers!", LogicalType(base_type).ToString());
@@ -197,7 +145,7 @@ LogicalType Transformer::TransformTypeName(duckdb_libpgquery::PGTypeName *type_n
 		// array bounds: turn the type into a list
 		idx_t extra_stack = 0;
 		for (auto cell = type_name->arrayBounds->head; cell != nullptr; cell = cell->next) {
-			result_type = LogicalType::LIST(std::move(result_type));
+			result_type = LogicalType::LIST(move(result_type));
 			StackCheck(extra_stack++);
 		}
 	}

@@ -10,23 +10,11 @@
 
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/function/scalar/strftime.hpp"
-#include "duckdb/execution/operator/persistent/csv_reader_options.hpp"
 #include "duckdb/execution/operator/persistent/buffered_csv_reader.hpp"
-#include "duckdb/execution/operator/persistent/parallel_csv_reader.hpp"
-#include "duckdb/execution/operator/persistent/csv_file_handle.hpp"
-#include "duckdb/execution/operator/persistent/csv_buffer.hpp"
-#include "duckdb/function/built_in_functions.hpp"
 
 namespace duckdb {
 
-class ReadCSV {
-public:
-	static unique_ptr<CSVFileHandle> OpenCSV(const BufferedCSVReaderOptions &options, ClientContext &context);
-};
-
 struct BaseCSVData : public TableFunctionData {
-	virtual ~BaseCSVData() {
-	}
 	//! The file path of the CSV file to read or write
 	vector<string> files;
 	//! The CSV reader options
@@ -39,10 +27,9 @@ struct BaseCSVData : public TableFunctionData {
 };
 
 struct WriteCSVData : public BaseCSVData {
-	WriteCSVData(string file_path, vector<LogicalType> sql_types, vector<string> names)
-	    : sql_types(std::move(sql_types)) {
-		files.push_back(std::move(file_path));
-		options.names = std::move(names);
+	WriteCSVData(string file_path, vector<LogicalType> sql_types, vector<string> names) : sql_types(move(sql_types)) {
+		files.push_back(move(file_path));
+		options.names = move(names);
 	}
 
 	//! The SQL types to write
@@ -61,14 +48,9 @@ struct ReadCSVData : public BaseCSVData {
 	//! The initial reader (if any): this is used when automatic detection is used during binding.
 	//! In this case, the CSV reader is already created and might as well be re-used.
 	unique_ptr<BufferedCSVReader> initial_reader;
-	//! The union readers are created (when csv union_by_name option is on) during binding
-	//! Those readers can be re-used during ReadCSVFunction
+	//! The union readers is created(when csv union_by_name option is on) during binding
+	//! Those reader can be re-used during ReadCSVFunction
 	vector<unique_ptr<BufferedCSVReader>> union_readers;
-	//! Whether or not the single-threaded reader should be used
-	bool single_threaded = false;
-
-	void InitializeFiles(ClientContext &context, const vector<string> &patterns);
-	void FinalizeRead(ClientContext &context);
 };
 
 struct CSVCopyFunction {

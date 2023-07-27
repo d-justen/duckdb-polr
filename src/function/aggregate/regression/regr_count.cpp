@@ -8,11 +8,10 @@
 namespace duckdb {
 
 void RegrCountFun::RegisterFunction(BuiltinFunctions &set) {
-	auto regr_count = AggregateFunction::BinaryAggregate<size_t, double, double, uint32_t, RegrCountFunction>(
-	    LogicalType::DOUBLE, LogicalType::DOUBLE, LogicalType::UINTEGER);
-	regr_count.name = "regr_count";
-	regr_count.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
-	set.AddFunction(regr_count);
+	AggregateFunctionSet corr("regr_count");
+	corr.AddFunction(AggregateFunction::BinaryAggregate<size_t, double, double, uint32_t, RegrCountFunction>(
+	    LogicalType::DOUBLE, LogicalType::DOUBLE, LogicalType::UINTEGER));
+	set.AddFunction(corr);
 }
 
 } // namespace duckdb

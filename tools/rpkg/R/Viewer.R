@@ -20,6 +20,7 @@ rs_list_object_types <- function(connection) {
 }
 
 rs_list_objects <- function(connection, catalog = NULL, schema = NULL, name = NULL, type = NULL, ...) {
+
   # if no schema was supplied but this database has schema, return a list of
   # schema
   if (is.null(schema)) {

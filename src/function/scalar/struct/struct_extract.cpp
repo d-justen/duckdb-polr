@@ -8,8 +8,7 @@
 namespace duckdb {
 
 struct StructExtractBindData : public FunctionData {
-	StructExtractBindData(string key, idx_t index, LogicalType type)
-	    : key(std::move(key)), index(index), type(std::move(type)) {
+	StructExtractBindData(string key, idx_t index, LogicalType type) : key(move(key)), index(index), type(move(type)) {
 	}
 
 	string key;
@@ -62,7 +61,7 @@ static unique_ptr<FunctionData> StructExtractBind(ClientContext &context, Scalar
 	if (key_child->return_type.id() != LogicalTypeId::VARCHAR || !key_child->IsFoldable()) {
 		throw BinderException("Key name for struct_extract needs to be a constant string");
 	}
-	Value key_val = ExpressionExecutor::EvaluateScalar(context, *key_child.get());
+	Value key_val = ExpressionExecutor::EvaluateScalar(*key_child.get());
 	D_ASSERT(key_val.type().id() == LogicalTypeId::VARCHAR);
 	auto &key_str = StringValue::Get(key_val);
 	if (key_val.IsNull() || key_str.empty()) {

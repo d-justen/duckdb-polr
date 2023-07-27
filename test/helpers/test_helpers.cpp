@@ -10,7 +10,6 @@
 #include "duckdb/parser/parsed_data/copy_info.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "pid.hpp"
-#include "duckdb/function/table/read_csv.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -137,7 +136,7 @@ bool CHECK_COLUMN(QueryResult &result_, size_t column_number, vector<duckdb::Val
 		result.Print();
 		return false;
 	}
-	if (values.empty()) {
+	if (values.size() == 0) {
 		if (result.RowCount() != 0) {
 			result.Print();
 			return false;
@@ -267,7 +266,7 @@ bool compare_result(string csv, ColumnDataCollection &collection, vector<Logical
 
 	DuckDB db;
 	Connection con(db);
-	BufferedCSVReader reader(*con.context, std::move(options), sql_types);
+	BufferedCSVReader reader(*con.context, move(options), sql_types);
 
 	ColumnDataCollection csv_data_collection(*con.context, sql_types);
 	while (true) {

@@ -17,9 +17,7 @@ set(ICU_EXTENSION_FILES
     icu-datesub.cpp
     icu-datetrunc.cpp
     icu-makedate.cpp
-    icu-strptime.cpp
-    icu-timebucket.cpp
-    icu-timezone.cpp)
+    icu-strptime.cpp)
 
 add_library(icu_extension STATIC ${ICU_EXTENSION_FILES})
 link_threads(icu_extension)

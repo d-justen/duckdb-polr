@@ -14,7 +14,6 @@ unique_ptr<CreateStatement> Transformer::TransformCreateSequence(duckdb_libpgque
 	auto info = make_unique<CreateSequenceInfo>();
 
 	auto qname = TransformQualifiedName(stmt->sequence);
-	info->catalog = qname.catalog;
 	info->schema = qname.schema;
 	info->name = qname.name;
 
@@ -123,7 +122,7 @@ unique_ptr<CreateStatement> Transformer::TransformCreateSequence(duckdb_libpgque
 		throw ParserException("START value (%lld) cannot be greater than MAXVALUE (%lld)", info->start_value,
 		                      info->max_value);
 	}
-	result->info = std::move(info);
+	result->info = move(info);
 	return result;
 }
 

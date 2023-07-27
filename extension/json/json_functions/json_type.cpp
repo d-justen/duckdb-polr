@@ -1,39 +1,34 @@
-#include "json_executors.hpp"
+#include "json_common.hpp"
+#include "json_functions.hpp"
 
 namespace duckdb {
 
-static inline string_t GetType(yyjson_val *val, yyjson_alc *alc, Vector &result) {
-	return JSONCommon::ValTypeToStringT<yyjson_val>(val);
+static inline string_t GetType(yyjson_val *val, Vector &result) {
+	return StringVector::AddString(result, JSONCommon::ValTypeToString(val));
 }
 
 static void UnaryTypeFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	JSONExecutors::UnaryExecute<string_t>(args, state, result, GetType);
+	JSONCommon::UnaryExecute<string_t>(args, state, result, GetType);
 }
 
 static void BinaryTypeFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	JSONExecutors::BinaryExecute<string_t>(args, state, result, GetType);
+	JSONCommon::BinaryExecute<string_t>(args, state, result, GetType);
 }
 
 static void ManyTypeFunction(DataChunk &args, ExpressionState &state, Vector &result) {
-	JSONExecutors::ExecuteMany<string_t>(args, state, result, GetType);
-}
-
-static void GetTypeFunctionsInternal(ScalarFunctionSet &set, const LogicalType &input_type) {
-	set.AddFunction(ScalarFunction({input_type}, LogicalType::VARCHAR, UnaryTypeFunction, nullptr, nullptr, nullptr,
-	                               JSONFunctionLocalState::Init));
-	set.AddFunction(ScalarFunction({input_type, LogicalType::VARCHAR}, LogicalType::VARCHAR, BinaryTypeFunction,
-	                               JSONReadFunctionData::Bind, nullptr, nullptr, JSONFunctionLocalState::Init));
-	set.AddFunction(ScalarFunction({input_type, LogicalType::LIST(LogicalType::VARCHAR)},
-	                               LogicalType::LIST(LogicalType::VARCHAR), ManyTypeFunction,
-	                               JSONReadManyFunctionData::Bind, nullptr, nullptr, JSONFunctionLocalState::Init));
+	JSONCommon::ExecuteMany<string_t>(args, state, result, GetType);
 }
 
 CreateScalarFunctionInfo JSONFunctions::GetTypeFunction() {
 	ScalarFunctionSet set("json_type");
-	GetTypeFunctionsInternal(set, LogicalType::VARCHAR);
-	GetTypeFunctionsInternal(set, JSONCommon::JSONType());
+	set.AddFunction(ScalarFunction({LogicalType::JSON}, LogicalType::VARCHAR, UnaryTypeFunction));
+	set.AddFunction(ScalarFunction({LogicalType::JSON, LogicalType::VARCHAR}, LogicalType::VARCHAR, BinaryTypeFunction,
+	                               JSONReadFunctionData::Bind));
+	set.AddFunction(ScalarFunction({LogicalType::JSON, LogicalType::LIST(LogicalType::VARCHAR)},
+	                               LogicalType::LIST(LogicalType::VARCHAR), ManyTypeFunction,
+	                               JSONReadManyFunctionData::Bind));
 
-	return CreateScalarFunctionInfo(std::move(set));
+	return CreateScalarFunctionInfo(move(set));
 }
 
 } // namespace duckdb

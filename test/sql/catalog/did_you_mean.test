@@ -2,6 +2,8 @@
 # description: The error messages suggest possible alternative
 # group: [catalog]
 
+require test_helper
+
 require skip_reload
 
 statement ok
@@ -15,10 +17,16 @@ CREATE TABLE test.bye(i INTEGER);
 
 statement error
 SELECT * FROM helloo;
+
+query I
+SELECT test_helper_last_error() LIKE '%Did you mean "hello"?%'
 ----
-Did you mean "hello"
+true
 
 statement error
 SELECT * FROM bye;
+
+query I
+SELECT test_helper_last_error() LIKE '%Did you mean "test.bye"?%'
 ----
-Did you mean "test.bye
+true

@@ -28,11 +28,11 @@ typedef vector<unique_ptr<GroupedAggregateHashTable>> HashTableList; // NOLINT
 
 class PartitionableHashTable {
 public:
-	PartitionableHashTable(ClientContext &context, Allocator &allocator, RadixPartitionInfo &partition_info_p,
+	PartitionableHashTable(Allocator &allocator, BufferManager &buffer_manager_p, RadixPartitionInfo &partition_info_p,
 	                       vector<LogicalType> group_types_p, vector<LogicalType> payload_types_p,
 	                       vector<BoundAggregateExpression *> bindings_p);
 
-	idx_t AddChunk(DataChunk &groups, DataChunk &payload, bool do_partition, const vector<idx_t> &filter);
+	idx_t AddChunk(DataChunk &groups, DataChunk &payload, bool do_partition);
 	void Partition();
 	bool IsPartitioned();
 
@@ -42,8 +42,8 @@ public:
 	void Finalize();
 
 private:
-	ClientContext &context;
 	Allocator &allocator;
+	BufferManager &buffer_manager;
 	vector<LogicalType> group_types;
 	vector<LogicalType> payload_types;
 	vector<BoundAggregateExpression *> bindings;
@@ -59,7 +59,6 @@ private:
 	unordered_map<hash_t, HashTableList> radix_partitioned_hts;
 
 private:
-	idx_t ListAddChunk(HashTableList &list, DataChunk &groups, Vector &group_hashes, DataChunk &payload,
-	                   const vector<idx_t> &filter);
+	idx_t ListAddChunk(HashTableList &list, DataChunk &groups, Vector &group_hashes, DataChunk &payload);
 };
 } // namespace duckdb

@@ -1,10 +1,9 @@
 #include "duckdb/main/extension_helper.hpp"
-
 #include "duckdb/common/file_system.hpp"
-#include "duckdb/common/string_util.hpp"
 #include "duckdb/common/windows.hpp"
-#include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
+#include "duckdb/main/client_context.hpp"
+#include "duckdb/common/string_util.hpp"
 
 #if defined(BUILD_ICU_EXTENSION) && !defined(DISABLE_BUILTIN_EXTENSIONS)
 #define ICU_STATICALLY_LOADED true
@@ -59,13 +58,6 @@
 #define JSON_STATICALLY_LOADED false
 #endif
 
-#if defined(BUILD_JEMALLOC_EXTENSION) && !defined(DISABLE_BUILTIN_EXTENSIONS)
-#define JEMALLOC_STATICALLY_LOADED true
-#include "jemalloc-extension.hpp"
-#else
-#define JEMALLOC_STATICALLY_LOADED false
-#endif
-
 #if defined(BUILD_EXCEL_EXTENSION) && !defined(DISABLE_BUILTIN_EXTENSIONS)
 #include "excel-extension.hpp"
 #endif
@@ -91,7 +83,6 @@ static DefaultExtension internal_extensions[] = {
     {"fts", "Adds support for Full-Text Search Indexes", FTS_STATICALLY_LOADED},
     {"httpfs", "Adds support for reading and writing files over a HTTP(S) connection", HTTPFS_STATICALLY_LOADED},
     {"json", "Adds support for JSON operations", JSON_STATICALLY_LOADED},
-    {"jemalloc", "Overwrites system allocator with JEMalloc", JEMALLOC_STATICALLY_LOADED},
     {"sqlite_scanner", "Adds support for reading SQLite database files", false},
     {"postgres_scanner", "Adds support for reading from a Postgres database", false},
     {"inet", "Adds support for IP-related data types and functions", false},
@@ -113,8 +104,8 @@ DefaultExtension ExtensionHelper::GetDefaultExtension(idx_t index) {
 // Load Statically Compiled Extension
 //===--------------------------------------------------------------------===//
 void ExtensionHelper::LoadAllExtensions(DuckDB &db) {
-	unordered_set<string> extensions {"parquet",    "icu",  "tpch",  "tpcds",    "fts",  "httpfs",
-	                                  "visualizer", "json", "excel", "sqlsmith", "inet", "jemalloc"};
+	unordered_set<string> extensions {"parquet",    "icu",  "tpch",  "tpcds",    "fts", "httpfs",
+	                                  "visualizer", "json", "excel", "sqlsmith", "inet"};
 	for (auto &ext : extensions) {
 		LoadExtensionInternal(db, ext, true);
 	}
@@ -211,18 +202,11 @@ ExtensionLoadResult ExtensionHelper::LoadExtensionInternal(DuckDB &db, const std
 		// excel extension required but not build: skip this test
 		return ExtensionLoadResult::NOT_LOADED;
 #endif
-	} else if (extension == "jemalloc") {
-#if defined(BUILD_JEMALLOC_EXTENSION) && !defined(DISABLE_BUILTIN_EXTENSIONS)
-		db.LoadExtension<JEMallocExtension>();
-#else
-		// jemalloc extension required but not build: skip this test
-		return ExtensionLoadResult::NOT_LOADED;
-#endif
 	} else if (extension == "inet") {
 #if defined(BUILD_INET_EXTENSION) && !defined(DISABLE_BUILTIN_EXTENSIONS)
 		db.LoadExtension<INETExtension>();
 #else
-		// inet extension required but not build: skip this test
+		// excel extension required but not build: skip this test
 		return ExtensionLoadResult::NOT_LOADED;
 #endif
 	} else {

@@ -16,7 +16,14 @@
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/planner/operator/logical_join.hpp"
 
+#include <map>
+
 namespace duckdb {
+
+class HashJoinGlobalSinkState;
+
+class HashJoinLocalSourceState;
+class HashJoinGlobalSourceState;
 
 //! PhysicalHashJoin represents a hash loop join between two tables
 class PhysicalHashJoin : public PhysicalComparisonJoin {
@@ -41,22 +48,28 @@ public:
 	vector<LogicalType> delim_types;
 	//! Used in perfect hash join
 	PerfectHashJoinStats perfect_join_statistics;
-	//! Whether we can go external (can't yet if recursive CTE)
+	//! Whether we can go external (can't yet if recursive CTE or full outer TODO)
 	bool can_go_external;
+
+	bool is_polr_root_join = false;
 
 public:
 	// Operator Interface
 	unique_ptr<OperatorState> GetOperatorState(ExecutionContext &context) const override;
+	unique_ptr<OperatorState> GetOperatorStateWithBindings(ExecutionContext &context,
+	                                                       std::map<idx_t, idx_t> &bindings) const;
+	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+	                           GlobalOperatorState &gstate, OperatorState &state) const override;
 
 	bool ParallelOperator() const override {
 		return true;
 	}
 
-protected:
-	// CachingOperator Interface
-	OperatorResultType ExecuteInternal(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-	                                   GlobalOperatorState &gstate, OperatorState &state) const override;
+	bool RequiresCache() const override {
+		return true;
+	}
 
+public:
 	// Source interface
 	unique_ptr<GlobalSourceState> GetGlobalSourceState(ClientContext &context) const override;
 	unique_ptr<LocalSourceState> GetLocalSourceState(ExecutionContext &context,

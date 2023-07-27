@@ -19,10 +19,10 @@ unique_ptr<ParsedExpression> ParameterExpression::Copy() const {
 	auto copy = make_unique<ParameterExpression>();
 	copy->parameter_nr = parameter_nr;
 	copy->CopyProperties(*this);
-	return std::move(copy);
+	return move(copy);
 }
 
-bool ParameterExpression::Equal(const ParameterExpression *a, const ParameterExpression *b) {
+bool ParameterExpression::Equals(const ParameterExpression *a, const ParameterExpression *b) {
 	return a->parameter_nr == b->parameter_nr;
 }
 
@@ -38,7 +38,7 @@ void ParameterExpression::Serialize(FieldWriter &writer) const {
 unique_ptr<ParsedExpression> ParameterExpression::Deserialize(ExpressionType type, FieldReader &reader) {
 	auto expression = make_unique<ParameterExpression>();
 	expression->parameter_nr = reader.ReadRequired<idx_t>();
-	return std::move(expression);
+	return move(expression);
 }
 
 } // namespace duckdb

@@ -1,13 +1,13 @@
-#include "duckdb/planner/expression/bound_parameter_expression.hpp"
 #include "json_common.hpp"
 #include "json_functions.hpp"
+#include "duckdb/planner/expression/bound_parameter_expression.hpp"
 
 namespace duckdb {
 
 struct JSONCreateFunctionData : public FunctionData {
 public:
 	JSONCreateFunctionData(unordered_map<string, unique_ptr<Vector>> const_struct_names)
-	    : const_struct_names(std::move(const_struct_names)) {
+	    : const_struct_names(move(const_struct_names)) {
 	}
 	unique_ptr<FunctionData> Copy() const override {
 		// Have to do this because we can't implicitly copy Vector
@@ -16,7 +16,7 @@ public:
 			// The vectors are const vectors of the key value
 			map_copy[kv.first] = make_unique<Vector>(Value(kv.first));
 		}
-		return make_unique<JSONCreateFunctionData>(std::move(map_copy));
+		return make_unique<JSONCreateFunctionData>(move(map_copy));
 	}
 	bool Equals(const FunctionData &other_p) const override {
 		return true;
@@ -28,13 +28,10 @@ public:
 };
 
 static LogicalType GetJSONType(unordered_map<string, unique_ptr<Vector>> &const_struct_names, const LogicalType &type) {
-	if (JSONCommon::LogicalTypeIsJSON(type)) {
-		return type;
-	}
-
 	switch (type.id()) {
 	// These types can go directly into JSON
 	case LogicalTypeId::SQLNULL:
+	case LogicalTypeId::JSON:
 	case LogicalTypeId::BOOLEAN:
 	case LogicalTypeId::BIGINT:
 	case LogicalTypeId::UBIGINT:
@@ -68,17 +65,6 @@ static LogicalType GetJSONType(unordered_map<string, unique_ptr<Vector>> &const_
 	case LogicalTypeId::MAP: {
 		return LogicalType::MAP(LogicalType::VARCHAR, GetJSONType(const_struct_names, MapType::ValueType(type)));
 	}
-	case LogicalTypeId::UNION: {
-		child_list_t<LogicalType> member_types;
-		for (idx_t member_idx = 0; member_idx < UnionType::GetMemberCount(type); member_idx++) {
-			auto &member_name = UnionType::GetMemberName(type, member_idx);
-			auto &member_type = UnionType::GetMemberType(type, member_idx);
-
-			const_struct_names[member_name] = make_unique<Vector>(Value(member_name));
-			member_types.emplace_back(member_name, GetJSONType(const_struct_names, member_type));
-		}
-		return LogicalType::UNION(member_types);
-	}
 	// All other types (e.g. date) are cast to VARCHAR
 	default:
 		return LogicalTypeId::VARCHAR;
@@ -103,7 +89,7 @@ static unique_ptr<FunctionData> JSONCreateBindParams(ScalarFunction &bound_funct
 			bound_function.arguments.push_back(GetJSONType(const_struct_names, type));
 		}
 	}
-	return make_unique<JSONCreateFunctionData>(std::move(const_struct_names));
+	return make_unique<JSONCreateFunctionData>(move(const_struct_names));
 }
 
 static unique_ptr<FunctionData> JSONObjectBind(ClientContext &context, ScalarFunction &bound_function,
@@ -188,7 +174,7 @@ inline yyjson_mut_val *CreateJSONValue(yyjson_mut_doc *doc, const string_t &valu
 }
 
 inline yyjson_mut_val *CreateJSONValueFromJSON(yyjson_mut_doc *doc, const string_t &value) {
-	auto value_doc = JSONCommon::ReadDocument(value, JSONCommon::READ_FLAG, &doc->alc);
+	auto value_doc = JSONCommon::ReadDocument(value);
 	auto result = yyjson_val_mut_copy(doc, value_doc->root);
 	return result;
 }
@@ -231,12 +217,12 @@ static void TemplatedCreateValues(yyjson_mut_doc *doc, yyjson_mut_val *vals[], V
 	value_v.ToUnifiedFormat(count, value_data);
 	auto values = (T *)value_data.data;
 
-	const auto type_is_json = JSONCommon::LogicalTypeIsJSON(value_v.GetType());
+	const auto value_type = value_v.GetType().id();
 	for (idx_t i = 0; i < count; i++) {
 		idx_t val_idx = value_data.sel->get_index(i);
 		if (!value_data.validity.RowIsValid(val_idx)) {
 			vals[i] = yyjson_mut_null(doc);
-		} else if (type_is_json) {
+		} else if (value_type == LogicalTypeId::JSON) {
 			vals[i] = CreateJSONValueFromJSON(doc, (string_t &)values[val_idx]);
 		} else {
 			vals[i] = CreateJSONValue<T>(doc, values[val_idx]);
@@ -274,22 +260,27 @@ static void CreateValuesStruct(const JSONCreateFunctionData &info, yyjson_mut_do
 
 static void CreateValuesMap(const JSONCreateFunctionData &info, yyjson_mut_doc *doc, yyjson_mut_val *vals[],
                             Vector &value_v, idx_t count) {
+	auto &entries = StructVector::GetEntries(value_v);
 	// Create nested keys
-	auto &map_key_v = MapVector::GetKeys(value_v);
-	auto map_key_count = ListVector::GetListSize(value_v);
+	auto &map_key_list_v = *entries[0];
+	auto &map_key_v = ListVector::GetEntry(map_key_list_v);
+	auto map_key_count = ListVector::GetListSize(map_key_list_v);
 	auto nested_keys_ptr = unique_ptr<yyjson_mut_val *[]>(new yyjson_mut_val *[map_key_count]);
 	auto nested_keys = nested_keys_ptr.get();
 	TemplatedCreateValues<string_t>(doc, nested_keys, map_key_v, map_key_count);
 	// Create nested values
-	auto &map_val_v = MapVector::GetValues(value_v);
-	auto map_val_count = ListVector::GetListSize(value_v);
+	auto &map_val_list_v = *entries[1];
+	auto &map_val_v = ListVector::GetEntry(map_val_list_v);
+	auto map_val_count = ListVector::GetListSize(map_val_list_v);
 	auto nested_vals_ptr = unique_ptr<yyjson_mut_val *[]>(new yyjson_mut_val *[map_val_count]);
 	auto nested_vals = nested_vals_ptr.get();
 	CreateValues(info, doc, nested_vals, map_val_v, map_val_count);
 	// Add the key/value pairs to the objects
 	UnifiedVectorFormat map_data;
 	value_v.ToUnifiedFormat(count, map_data);
-	auto map_key_list_entries = (list_entry_t *)map_data.data;
+	UnifiedVectorFormat map_key_list_data;
+	map_key_list_v.ToUnifiedFormat(map_key_count, map_key_list_data);
+	auto map_key_list_entries = (list_entry_t *)map_key_list_data.data;
 	for (idx_t i = 0; i < count; i++) {
 		idx_t idx = map_data.sel->get_index(i);
 		if (!map_data.validity.RowIsValid(idx)) {
@@ -297,63 +288,14 @@ static void CreateValuesMap(const JSONCreateFunctionData &info, yyjson_mut_doc *
 			vals[i] = yyjson_mut_null(doc);
 		} else {
 			vals[i] = yyjson_mut_obj(doc);
-			const auto &key_list_entry = map_key_list_entries[idx];
+			idx_t key_idx = map_key_list_data.sel->get_index(i);
+			const auto &key_list_entry = map_key_list_entries[key_idx];
 			for (idx_t child_i = key_list_entry.offset; child_i < key_list_entry.offset + key_list_entry.length;
 			     child_i++) {
 				if (!unsafe_yyjson_is_null(nested_keys[child_i])) {
 					yyjson_mut_obj_add(vals[i], nested_keys[child_i], nested_vals[child_i]);
 				}
 			}
-		}
-	}
-}
-
-static void CreateValuesUnion(const JSONCreateFunctionData &info, yyjson_mut_doc *doc, yyjson_mut_val *vals[],
-                              Vector &value_v, idx_t count) {
-	// Structs become objects, therefore we initialize vals to JSON objects
-	for (idx_t i = 0; i < count; i++) {
-		vals[i] = yyjson_mut_obj(doc);
-	}
-
-	// Initialize re-usable array for the nested values
-	auto nested_vals_ptr = unique_ptr<yyjson_mut_val *[]>(new yyjson_mut_val *[count]);
-	auto nested_vals = nested_vals_ptr.get();
-
-	auto &tag_v = UnionVector::GetTags(value_v);
-	UnifiedVectorFormat tag_data;
-	tag_v.ToUnifiedFormat(count, tag_data);
-
-	// Add the key/value pairs to the objects
-	for (idx_t member_idx = 0; member_idx < UnionType::GetMemberCount(value_v.GetType()); member_idx++) {
-		auto &member_val_v = UnionVector::GetMember(value_v, member_idx);
-		auto &member_key_v = *info.const_struct_names.at(UnionType::GetMemberName(value_v.GetType(), member_idx));
-
-		// This implementation is not optimal since we convert the entire member vector,
-		// and then skip the rows not matching the tag afterwards.
-
-		CreateValues(info, doc, nested_vals, member_val_v, count);
-
-		// This is a inlined copy of AddKeyValuePairs but we also skip null tags
-		// and the rows where the member is not matching the tag
-		UnifiedVectorFormat key_data;
-		member_key_v.ToUnifiedFormat(count, key_data);
-		auto keys = (string_t *)key_data.data;
-
-		for (idx_t i = 0; i < count; i++) {
-			auto tag_idx = tag_data.sel->get_index(i);
-			if (!tag_data.validity.RowIsValid(tag_idx)) {
-				continue;
-			}
-			auto tag = ((uint8_t *)tag_data.data)[tag_idx];
-			if (tag != member_idx) {
-				continue;
-			}
-			auto key_idx = key_data.sel->get_index(i);
-			if (!key_data.validity.RowIsValid(key_idx)) {
-				continue;
-			}
-			auto key = CreateJSONValue<string_t>(doc, keys[key_idx]);
-			yyjson_mut_obj_add(vals[i], key, nested_vals[i]);
 		}
 	}
 }
@@ -404,6 +346,7 @@ static void CreateValues(const JSONCreateFunctionData &info, yyjson_mut_doc *doc
 		TemplatedCreateValues<double>(doc, vals, value_v, count);
 		break;
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		TemplatedCreateValues<string_t>(doc, vals, value_v, count);
 		break;
 	case LogicalTypeId::STRUCT:
@@ -415,9 +358,6 @@ static void CreateValues(const JSONCreateFunctionData &info, yyjson_mut_doc *doc
 	case LogicalTypeId::LIST:
 		CreateValuesList(info, doc, vals, value_v, count);
 		break;
-	case LogicalTypeId::UNION:
-		CreateValuesUnion(info, doc, vals, value_v, count);
-		break;
 	default:
 		throw InternalException("Unsupported type arrived at JSON create function");
 	}
@@ -426,15 +366,12 @@ static void CreateValues(const JSONCreateFunctionData &info, yyjson_mut_doc *doc
 static void ObjectFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &func_expr = (BoundFunctionExpression &)state.expr;
 	const auto &info = (JSONCreateFunctionData &)*func_expr.bind_info;
-	auto &lstate = JSONFunctionLocalState::ResetAndGet(state);
-	auto alc = lstate.json_allocator.GetYYJSONAllocator();
-
 	// Initialize objects
 	const idx_t count = args.size();
-	auto doc = JSONCommon::CreateDocument(alc);
+	auto doc = JSONCommon::CreateDocument();
 	yyjson_mut_val *objs[STANDARD_VECTOR_SIZE];
 	for (idx_t i = 0; i < count; i++) {
-		objs[i] = yyjson_mut_obj(doc);
+		objs[i] = yyjson_mut_obj(*doc);
 	}
 	// Initialize a re-usable value array
 	yyjson_mut_val *vals[STANDARD_VECTOR_SIZE];
@@ -442,12 +379,13 @@ static void ObjectFunction(DataChunk &args, ExpressionState &state, Vector &resu
 	for (idx_t pair_idx = 0; pair_idx < args.data.size() / 2; pair_idx++) {
 		Vector &key_v = args.data[pair_idx * 2];
 		Vector &value_v = args.data[pair_idx * 2 + 1];
-		CreateKeyValuePairs(info, doc, objs, vals, key_v, value_v, count);
+		CreateKeyValuePairs(info, *doc, objs, vals, key_v, value_v, count);
 	}
 	// Write JSON objects to string
 	auto objects = FlatVector::GetData<string_t>(result);
 	for (idx_t i = 0; i < count; i++) {
-		objects[i] = JSONCommon::WriteVal<yyjson_mut_val>(objs[i], alc);
+		yyjson_mut_doc_set_root(*doc, objs[i]);
+		objects[i] = JSONCommon::WriteDoc(*doc, result);
 	}
 
 	if (args.AllConstant()) {
@@ -458,21 +396,18 @@ static void ObjectFunction(DataChunk &args, ExpressionState &state, Vector &resu
 static void ArrayFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &func_expr = (BoundFunctionExpression &)state.expr;
 	const auto &info = (JSONCreateFunctionData &)*func_expr.bind_info;
-	auto &lstate = JSONFunctionLocalState::ResetAndGet(state);
-	auto alc = lstate.json_allocator.GetYYJSONAllocator();
-
 	// Initialize arrays
 	const idx_t count = args.size();
-	auto doc = JSONCommon::CreateDocument(alc);
+	auto doc = JSONCommon::CreateDocument();
 	yyjson_mut_val *arrs[STANDARD_VECTOR_SIZE];
 	for (idx_t i = 0; i < count; i++) {
-		arrs[i] = yyjson_mut_arr(doc);
+		arrs[i] = yyjson_mut_arr(*doc);
 	}
 	// Initialize a re-usable value array
 	yyjson_mut_val *vals[STANDARD_VECTOR_SIZE];
 	// Loop through args
 	for (auto &v : args.data) {
-		CreateValues(info, doc, vals, v, count);
+		CreateValues(info, *doc, vals, v, count);
 		for (idx_t i = 0; i < count; i++) {
 			yyjson_mut_arr_append(arrs[i], vals[i]);
 		}
@@ -480,7 +415,8 @@ static void ArrayFunction(DataChunk &args, ExpressionState &state, Vector &resul
 	// Write JSON arrays to string
 	auto objects = FlatVector::GetData<string_t>(result);
 	for (idx_t i = 0; i < count; i++) {
-		objects[i] = JSONCommon::WriteVal<yyjson_mut_val>(arrs[i], alc);
+		yyjson_mut_doc_set_root(*doc, arrs[i]);
+		objects[i] = JSONCommon::WriteDoc(*doc, result);
 	}
 
 	if (args.AllConstant()) {
@@ -491,14 +427,11 @@ static void ArrayFunction(DataChunk &args, ExpressionState &state, Vector &resul
 static void ToJSONFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &func_expr = (BoundFunctionExpression &)state.expr;
 	const auto &info = (JSONCreateFunctionData &)*func_expr.bind_info;
-	auto &lstate = JSONFunctionLocalState::ResetAndGet(state);
-	auto alc = lstate.json_allocator.GetYYJSONAllocator();
-
 	// Initialize array for values
 	const idx_t count = args.size();
-	auto doc = JSONCommon::CreateDocument(alc);
+	auto doc = JSONCommon::CreateDocument();
 	yyjson_mut_val *vals[STANDARD_VECTOR_SIZE];
-	CreateValues(info, doc, vals, args.data[0], count);
+	CreateValues(info, *doc, vals, args.data[0], count);
 	// Write JSON values to string
 	auto objects = FlatVector::GetData<string_t>(result);
 	auto &result_validity = FlatVector::Validity(result);
@@ -507,7 +440,8 @@ static void ToJSONFunction(DataChunk &args, ExpressionState &state, Vector &resu
 	for (idx_t i = 0; i < count; i++) {
 		idx_t idx = input_data.sel->get_index(i);
 		if (input_data.validity.RowIsValid(idx)) {
-			objects[i] = JSONCommon::WriteVal<yyjson_mut_val>(vals[i], alc);
+			yyjson_mut_doc_set_root(*doc, vals[i]);
+			objects[i] = JSONCommon::WriteDoc(*doc, result);
 		} else {
 			result_validity.SetInvalid(i);
 		}
@@ -519,38 +453,33 @@ static void ToJSONFunction(DataChunk &args, ExpressionState &state, Vector &resu
 }
 
 CreateScalarFunctionInfo JSONFunctions::GetObjectFunction() {
-	auto fun = ScalarFunction("json_object", {}, JSONCommon::JSONType(), ObjectFunction, JSONObjectBind, nullptr,
-	                          nullptr, JSONFunctionLocalState::Init);
+	auto fun = ScalarFunction("json_object", {}, LogicalType::JSON, ObjectFunction, JSONObjectBind);
 	fun.varargs = LogicalType::ANY;
 	fun.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
 	return CreateScalarFunctionInfo(fun);
 }
 
 CreateScalarFunctionInfo JSONFunctions::GetArrayFunction() {
-	auto fun = ScalarFunction("json_array", {}, JSONCommon::JSONType(), ArrayFunction, JSONArrayBind, nullptr, nullptr,
-	                          JSONFunctionLocalState::Init);
+	auto fun = ScalarFunction("json_array", {}, LogicalType::JSON, ArrayFunction, JSONArrayBind);
 	fun.varargs = LogicalType::ANY;
 	fun.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
 	return CreateScalarFunctionInfo(fun);
 }
 
 CreateScalarFunctionInfo JSONFunctions::GetToJSONFunction() {
-	auto fun = ScalarFunction("to_json", {}, JSONCommon::JSONType(), ToJSONFunction, ToJSONBind, nullptr, nullptr,
-	                          JSONFunctionLocalState::Init);
+	auto fun = ScalarFunction("to_json", {}, LogicalType::JSON, ToJSONFunction, ToJSONBind);
 	fun.varargs = LogicalType::ANY;
 	return CreateScalarFunctionInfo(fun);
 }
 
 CreateScalarFunctionInfo JSONFunctions::GetArrayToJSONFunction() {
-	auto fun = ScalarFunction("array_to_json", {}, JSONCommon::JSONType(), ToJSONFunction, ArrayToJSONBind, nullptr,
-	                          nullptr, JSONFunctionLocalState::Init);
+	auto fun = ScalarFunction("array_to_json", {}, LogicalType::JSON, ToJSONFunction, ArrayToJSONBind);
 	fun.varargs = LogicalType::ANY;
 	return CreateScalarFunctionInfo(fun);
 }
 
 CreateScalarFunctionInfo JSONFunctions::GetRowToJSONFunction() {
-	auto fun = ScalarFunction("row_to_json", {}, JSONCommon::JSONType(), ToJSONFunction, RowToJSONBind, nullptr,
-	                          nullptr, JSONFunctionLocalState::Init);
+	auto fun = ScalarFunction("row_to_json", {}, LogicalType::JSON, ToJSONFunction, RowToJSONBind);
 	fun.varargs = LogicalType::ANY;
 	return CreateScalarFunctionInfo(fun);
 }

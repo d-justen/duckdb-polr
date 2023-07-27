@@ -44,10 +44,6 @@ class SchemaCatalogEntry : public CatalogEntry {
 	friend class Catalog;
 
 public:
-	static constexpr const CatalogType Type = CatalogType::SCHEMA_ENTRY;
-	static constexpr const char *Name = "schema";
-
-public:
 	SchemaCatalogEntry(Catalog *catalog, string name, bool is_internal);
 
 private:
@@ -86,44 +82,42 @@ public:
 	//! Creates an index with the given name in the schema
 	CatalogEntry *CreateIndex(ClientContext &context, CreateIndexInfo *info, TableCatalogEntry *table);
 
-	void Verify(Catalog &catalog) override;
-
 private:
 	//! Create a scalar or aggregate function within the given schema
-	CatalogEntry *CreateFunction(CatalogTransaction transaction, CreateFunctionInfo *info);
+	CatalogEntry *CreateFunction(ClientContext &context, CreateFunctionInfo *info);
 	//! Creates a table with the given name in the schema
-	CatalogEntry *CreateTable(CatalogTransaction transaction, BoundCreateTableInfo *info);
+	CatalogEntry *CreateTable(ClientContext &context, BoundCreateTableInfo *info);
 	//! Creates a view with the given name in the schema
-	CatalogEntry *CreateView(CatalogTransaction transaction, CreateViewInfo *info);
+	CatalogEntry *CreateView(ClientContext &context, CreateViewInfo *info);
 	//! Creates a sequence with the given name in the schema
-	CatalogEntry *CreateSequence(CatalogTransaction transaction, CreateSequenceInfo *info);
+	CatalogEntry *CreateSequence(ClientContext &context, CreateSequenceInfo *info);
 	//! Create a table function within the given schema
-	CatalogEntry *CreateTableFunction(CatalogTransaction transaction, CreateTableFunctionInfo *info);
+	CatalogEntry *CreateTableFunction(ClientContext &context, CreateTableFunctionInfo *info);
 	//! Create a copy function within the given schema
-	CatalogEntry *CreateCopyFunction(CatalogTransaction transaction, CreateCopyFunctionInfo *info);
+	CatalogEntry *CreateCopyFunction(ClientContext &context, CreateCopyFunctionInfo *info);
 	//! Create a pragma function within the given schema
-	CatalogEntry *CreatePragmaFunction(CatalogTransaction transaction, CreatePragmaFunctionInfo *info);
+	CatalogEntry *CreatePragmaFunction(ClientContext &context, CreatePragmaFunctionInfo *info);
 	//! Create a collation within the given schema
-	CatalogEntry *CreateCollation(CatalogTransaction transaction, CreateCollationInfo *info);
+	CatalogEntry *CreateCollation(ClientContext &context, CreateCollationInfo *info);
 	//! Create a enum within the given schema
-	CatalogEntry *CreateType(CatalogTransaction transaction, CreateTypeInfo *info);
+	CatalogEntry *CreateType(ClientContext &context, CreateTypeInfo *info);
 
 	//! Drops an entry from the schema
 	void DropEntry(ClientContext &context, DropInfo *info);
+
+	//! Append a scalar or aggregate function within the given schema
+	CatalogEntry *AddFunction(ClientContext &context, CreateFunctionInfo *info);
 
 	//! Alters a catalog entry
 	void Alter(ClientContext &context, AlterInfo *info);
 
 	//! Add a catalog entry to this schema
-	CatalogEntry *AddEntry(CatalogTransaction transaction, unique_ptr<StandardEntry> entry,
-	                       OnCreateConflict on_conflict);
+	CatalogEntry *AddEntry(ClientContext &context, unique_ptr<StandardEntry> entry, OnCreateConflict on_conflict);
 	//! Add a catalog entry to this schema
-	CatalogEntry *AddEntry(CatalogTransaction transaction, unique_ptr<StandardEntry> entry,
-	                       OnCreateConflict on_conflict, DependencyList dependencies);
+	CatalogEntry *AddEntry(ClientContext &context, unique_ptr<StandardEntry> entry, OnCreateConflict on_conflict,
+	                       unordered_set<CatalogEntry *> dependencies);
 
 	//! Get the catalog set for the specified type
 	CatalogSet &GetCatalogSet(CatalogType type);
-
-	CatalogTransaction GetCatalogTransaction(ClientContext &context);
 };
 } // namespace duckdb

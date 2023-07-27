@@ -12,7 +12,6 @@
 #include "duckdb/main/materialized_query_result.hpp"
 #include "duckdb/main/pending_query_result.hpp"
 #include "duckdb/common/preserved_error.hpp"
-#include "duckdb/common/case_insensitive_map.hpp"
 
 namespace duckdb {
 class ClientContext;
@@ -23,7 +22,7 @@ class PreparedStatement {
 public:
 	//! Create a successfully prepared prepared statement object with the given name
 	DUCKDB_API PreparedStatement(shared_ptr<ClientContext> context, shared_ptr<PreparedStatementData> data,
-	                             string query, idx_t n_param, case_insensitive_map_t<idx_t> named_param_map);
+	                             string query, idx_t n_param);
 	//! Create a prepared statement that was not successfully prepared
 	DUCKDB_API explicit PreparedStatement(PreservedError error);
 
@@ -42,26 +41,22 @@ public:
 	PreservedError error;
 	//! The amount of bound parameters
 	idx_t n_param;
-	//! The (optional) named parameters
-	case_insensitive_map_t<idx_t> named_param_map;
 
 public:
 	//! Returns the stored error message
-	DUCKDB_API const string &GetError();
+	const string &GetError();
 	//! Returns whether or not an error occurred
-	DUCKDB_API bool HasError() const;
+	bool HasError() const;
 	//! Returns the number of columns in the result
-	DUCKDB_API idx_t ColumnCount();
+	idx_t ColumnCount();
 	//! Returns the statement type of the underlying prepared statement object
-	DUCKDB_API StatementType GetStatementType();
+	StatementType GetStatementType();
 	//! Returns the underlying statement properties
-	DUCKDB_API StatementProperties GetStatementProperties();
+	StatementProperties GetStatementProperties();
 	//! Returns the result SQL types of the prepared statement
-	DUCKDB_API const vector<LogicalType> &GetTypes();
+	const vector<LogicalType> &GetTypes();
 	//! Returns the result names of the prepared statement
-	DUCKDB_API const vector<string> &GetNames();
-	//! Returns the map of parameter index to the expected type of parameter
-	DUCKDB_API vector<LogicalType> GetExpectedParameterTypes() const;
+	const vector<string> &GetNames();
 
 	//! Create a pending query result of the prepared statement with the given set of arguments
 	template <typename... Args>

@@ -3,7 +3,6 @@
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_create_index.hpp"
 #include "duckdb/planner/operator/logical_delim_join.hpp"
-#include "duckdb/planner/operator/logical_insert.hpp"
 
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
@@ -52,7 +51,7 @@ void ColumnBindingResolver::VisitOperator(LogicalOperator &op) {
 		// CREATE INDEX statement, add the columns of the table with table index 0 to the binding set
 		// afterwards bind the expressions of the CREATE INDEX statement
 		auto &create_index = (LogicalCreateIndex &)op;
-		bindings = LogicalOperator::GenerateColumnBindings(0, create_index.table.columns.LogicalColumnCount());
+		bindings = LogicalOperator::GenerateColumnBindings(0, create_index.table.columns.size());
 		VisitOperatorExpressions(op);
 		return;
 	} else if (op.type == LogicalOperatorType::LOGICAL_GET) {
@@ -60,25 +59,6 @@ void ColumnBindingResolver::VisitOperator(LogicalOperator &op) {
 		bindings = op.GetColumnBindings();
 		VisitOperatorExpressions(op);
 		return;
-	} else if (op.type == LogicalOperatorType::LOGICAL_INSERT) {
-		//! We want to execute the normal path, but also add a dummy 'excluded' binding if there is a
-		// ON CONFLICT DO UPDATE clause
-		auto &insert_op = (LogicalInsert &)op;
-		if (insert_op.action_type != OnConflictAction::THROW) {
-			VisitOperatorChildren(op);
-			auto dummy_bindings = LogicalOperator::GenerateColumnBindings(
-			    insert_op.excluded_table_index, insert_op.table->columns.PhysicalColumnCount());
-			bindings.insert(bindings.begin(), dummy_bindings.begin(), dummy_bindings.end());
-			if (insert_op.on_conflict_condition) {
-				VisitExpression(&insert_op.on_conflict_condition);
-			}
-			if (insert_op.do_update_condition) {
-				VisitExpression(&insert_op.do_update_condition);
-			}
-			VisitOperatorExpressions(op);
-			bindings = op.GetColumnBindings();
-			return;
-		}
 	}
 	// general case
 	// first visit the children of this operator
@@ -113,35 +93,6 @@ unique_ptr<Expression> ColumnBindingResolver::VisitReplace(BoundColumnRefExpress
 	throw InternalException("Failed to bind column reference \"%s\" [%d.%d] (bindings: %s)", expr.alias,
 	                        expr.binding.table_index, expr.binding.column_index, bound_columns);
 	// LCOV_EXCL_STOP
-}
-
-unordered_set<idx_t> ColumnBindingResolver::VerifyInternal(LogicalOperator &op) {
-	unordered_set<idx_t> result;
-	for (auto &child : op.children) {
-		auto child_indexes = VerifyInternal(*child);
-		for (auto index : child_indexes) {
-			D_ASSERT(index != DConstants::INVALID_INDEX);
-			if (result.find(index) != result.end()) {
-				throw InternalException("Duplicate table index \"%lld\" found", index);
-			}
-			result.insert(index);
-		}
-	}
-	auto indexes = op.GetTableIndex();
-	for (auto index : indexes) {
-		D_ASSERT(index != DConstants::INVALID_INDEX);
-		if (result.find(index) != result.end()) {
-			throw InternalException("Duplicate table index \"%lld\" found", index);
-		}
-		result.insert(index);
-	}
-	return result;
-}
-
-void ColumnBindingResolver::Verify(LogicalOperator &op) {
-#ifdef DEBUG
-	VerifyInternal(op);
-#endif
 }
 
 } // namespace duckdb

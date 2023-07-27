@@ -18,10 +18,6 @@ namespace duckdb {
 //! A macro function in the catalog
 class ScalarMacroCatalogEntry : public MacroCatalogEntry {
 public:
-	static constexpr const CatalogType Type = CatalogType::MACRO_ENTRY;
-	static constexpr const char *Name = "macro function";
-
-public:
 	ScalarMacroCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schema, CreateMacroInfo *info);
 
 public:

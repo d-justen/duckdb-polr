@@ -12,9 +12,6 @@
 #include "duckdb/storage/index.hpp"
 
 namespace duckdb {
-
-class ConflictManager;
-
 class TableIndexList {
 public:
 	//! Scan the catalog set, invoking the callback method for every entry
@@ -29,10 +26,6 @@ public:
 		}
 	}
 
-	const vector<unique_ptr<Index>> &Indexes() const {
-		return indexes;
-	}
-
 	void AddIndex(unique_ptr<Index> index);
 
 	void RemoveIndex(Index *index);
@@ -43,8 +36,8 @@ public:
 
 	void Move(TableIndexList &other);
 
-	Index *FindForeignKeyIndex(const vector<PhysicalIndex> &fk_keys, ForeignKeyType fk_type);
-	void VerifyForeignKey(const vector<PhysicalIndex> &fk_keys, DataChunk &chunk, ConflictManager &conflict_manager);
+	Index *FindForeignKeyIndex(const vector<idx_t> &fk_keys, ForeignKeyType fk_type);
+	void VerifyForeignKey(const vector<idx_t> &fk_keys, bool is_append, DataChunk &chunk, vector<string> &err_msg);
 
 	//! Serialize all indexes owned by this table, returns a vector of block info of all indexes
 	vector<BlockPointer> SerializeIndexes(duckdb::MetaBlockWriter &writer);

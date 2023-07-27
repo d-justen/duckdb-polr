@@ -8,7 +8,6 @@
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parallel/event.hpp"
-#include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 #include "duckdb/planner/expression/bound_reference_expression.hpp"
 
@@ -19,8 +18,8 @@ namespace duckdb {
 PhysicalIEJoin::PhysicalIEJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
                                unique_ptr<PhysicalOperator> right, vector<JoinCondition> cond, JoinType join_type,
                                idx_t estimated_cardinality)
-    : PhysicalRangeJoin(op, PhysicalOperatorType::IE_JOIN, std::move(left), std::move(right), std::move(cond),
-                        join_type, estimated_cardinality) {
+    : PhysicalRangeJoin(op, PhysicalOperatorType::IE_JOIN, move(left), move(right), move(cond), join_type,
+                        estimated_cardinality) {
 
 	// 1. let L1 (resp. L2) be the array of column X (resp. Y)
 	D_ASSERT(conditions.size() >= 2);
@@ -52,8 +51,8 @@ PhysicalIEJoin::PhysicalIEJoin(LogicalOperator &op, unique_ptr<PhysicalOperator>
 		default:
 			throw NotImplementedException("Unimplemented join type for IEJoin");
 		}
-		lhs_orders[i].emplace_back(BoundOrderByNode(sense, OrderByNullType::NULLS_LAST, std::move(left)));
-		rhs_orders[i].emplace_back(BoundOrderByNode(sense, OrderByNullType::NULLS_LAST, std::move(right)));
+		lhs_orders[i].emplace_back(BoundOrderByNode(sense, OrderByNullType::NULLS_LAST, move(left)));
+		rhs_orders[i].emplace_back(BoundOrderByNode(sense, OrderByNullType::NULLS_LAST, move(right)));
 	}
 
 	for (idx_t i = 2; i < conditions.size(); ++i) {
@@ -70,8 +69,8 @@ class IEJoinLocalState : public LocalSinkState {
 public:
 	using LocalSortedTable = PhysicalRangeJoin::LocalSortedTable;
 
-	IEJoinLocalState(ClientContext &context, const PhysicalRangeJoin &op, const idx_t child)
-	    : table(context, op, child) {
+	IEJoinLocalState(Allocator &allocator, const PhysicalRangeJoin &op, const idx_t child)
+	    : table(allocator, op, child) {
 	}
 
 	//! The local sort state
@@ -99,7 +98,7 @@ public:
 	}
 
 	IEJoinGlobalState(IEJoinGlobalState &prev)
-	    : GlobalSinkState(prev), tables(std::move(prev.tables)), child(prev.child + 1) {
+	    : GlobalSinkState(prev), tables(move(prev.tables)), child(prev.child + 1) {
 	}
 
 	void Sink(DataChunk &input, IEJoinLocalState &lstate) {
@@ -131,7 +130,7 @@ unique_ptr<LocalSinkState> PhysicalIEJoin::GetLocalSinkState(ExecutionContext &c
 		const auto &ie_sink = (IEJoinGlobalState &)*sink_state;
 		sink_child = ie_sink.child;
 	}
-	return make_unique<IEJoinLocalState>(context.client, *this, sink_child);
+	return make_unique<IEJoinLocalState>(Allocator::Get(context.client), *this, sink_child);
 }
 
 SinkResultType PhysicalIEJoin::Sink(ExecutionContext &context, GlobalSinkState &gstate_p, LocalSinkState &lstate_p,
@@ -184,8 +183,8 @@ SinkFinalizeType PhysicalIEJoin::Finalize(Pipeline &pipeline, Event &event, Clie
 //===--------------------------------------------------------------------===//
 // Operator
 //===--------------------------------------------------------------------===//
-OperatorResultType PhysicalIEJoin::ExecuteInternal(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
-                                                   GlobalOperatorState &gstate, OperatorState &state) const {
+OperatorResultType PhysicalIEJoin::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
+                                           GlobalOperatorState &gstate, OperatorState &state) const {
 	return OperatorResultType::FINISHED;
 }
 
@@ -346,6 +345,7 @@ idx_t IEJoinUnion::AppendKey(SortedTable &table, ExpressionExecutor &executor, S
 IEJoinUnion::IEJoinUnion(ClientContext &context, const PhysicalIEJoin &op, SortedTable &t1, const idx_t b1,
                          SortedTable &t2, const idx_t b2)
     : n(0), i(0) {
+	auto &allocator = Allocator::Get(context);
 	// input : query Q with 2 join predicates t1.X op1 t2.X' and t1.Y op2 t2.Y', tables T, T' of sizes m and n resp.
 	// output: a list of tuple pairs (ti , tj)
 	// Note that T/T' are already sorted on X/X' and contain the payload data
@@ -386,18 +386,18 @@ IEJoinUnion::IEJoinUnion(ClientContext &context, const PhysicalIEJoin &op, Sorte
 	// Sort on the first expression
 	auto ref = make_unique<BoundReferenceExpression>(order1.expression->return_type, 0);
 	vector<BoundOrderByNode> orders;
-	orders.emplace_back(BoundOrderByNode(order1.type, order1.null_order, std::move(ref)));
+	orders.emplace_back(BoundOrderByNode(order1.type, order1.null_order, move(ref)));
 
 	l1 = make_unique<SortedTable>(context, orders, payload_layout);
 
 	// LHS has positive rids
-	ExpressionExecutor l_executor(context);
+	ExpressionExecutor l_executor(allocator);
 	l_executor.AddExpression(*order1.expression);
 	l_executor.AddExpression(*order2.expression);
 	AppendKey(t1, l_executor, *l1, 1, 1, b1);
 
 	// RHS has negative rids
-	ExpressionExecutor r_executor(context);
+	ExpressionExecutor r_executor(allocator);
 	r_executor.AddExpression(*op.rhs_orders[0][0].expression);
 	r_executor.AddExpression(*op.rhs_orders[1][0].expression);
 	AppendKey(t2, r_executor, *l1, -1, -1, b2);
@@ -422,9 +422,9 @@ IEJoinUnion::IEJoinUnion(ClientContext &context, const PhysicalIEJoin &op, Sorte
 	// Sort on the first expression
 	orders.clear();
 	ref = make_unique<BoundReferenceExpression>(order2.expression->return_type, 0);
-	orders.emplace_back(BoundOrderByNode(order2.type, order2.null_order, std::move(ref)));
+	orders.emplace_back(BoundOrderByNode(order2.type, order2.null_order, move(ref)));
 
-	ExpressionExecutor executor(context);
+	ExpressionExecutor executor(allocator);
 	executor.AddExpression(*orders[0].expression);
 
 	l2 = make_unique<SortedTable>(context, orders, payload_layout);
@@ -632,12 +632,19 @@ idx_t IEJoinUnion::JoinComplexBlocks(SelectionVector &lsel, SelectionVector &rse
 	return result_count;
 }
 
+class IEJoinState : public OperatorState {
+public:
+	explicit IEJoinState(Allocator &allocator, const PhysicalIEJoin &op) : local_left(allocator, op, 0) {};
+
+	IEJoinLocalState local_left;
+};
+
 class IEJoinLocalSourceState : public LocalSourceState {
 public:
-	explicit IEJoinLocalSourceState(ClientContext &context, const PhysicalIEJoin &op)
-	    : op(op), true_sel(STANDARD_VECTOR_SIZE), left_executor(context), right_executor(context),
+	explicit IEJoinLocalSourceState(Allocator &allocator, const PhysicalIEJoin &op)
+	    : op(op), true_sel(STANDARD_VECTOR_SIZE), left_executor(allocator), right_executor(allocator),
 	      left_matches(nullptr), right_matches(nullptr) {
-		auto &allocator = Allocator::Get(context);
+
 		if (op.conditions.size() < 3) {
 			return;
 		}
@@ -925,7 +932,7 @@ unique_ptr<GlobalSourceState> PhysicalIEJoin::GetGlobalSourceState(ClientContext
 
 unique_ptr<LocalSourceState> PhysicalIEJoin::GetLocalSourceState(ExecutionContext &context,
                                                                  GlobalSourceState &gstate) const {
-	return make_unique<IEJoinLocalSourceState>(context.client, *this);
+	return make_unique<IEJoinLocalSourceState>(Allocator::Get(context.client), *this);
 }
 
 void PhysicalIEJoin::GetData(ExecutionContext &context, DataChunk &result, GlobalSourceState &gstate,
@@ -1002,31 +1009,33 @@ void PhysicalIEJoin::GetData(ExecutionContext &context, DataChunk &result, Globa
 //===--------------------------------------------------------------------===//
 // Pipeline Construction
 //===--------------------------------------------------------------------===//
-void PhysicalIEJoin::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) {
+void PhysicalIEJoin::BuildPipelines(Executor &executor, Pipeline &current, PipelineBuildState &state) {
 	D_ASSERT(children.size() == 2);
-	if (meta_pipeline.HasRecursiveCTE()) {
+	if (state.recursive_cte) {
 		throw NotImplementedException("IEJoins are not supported in recursive CTEs yet");
 	}
 
-	// becomes a source after both children fully sink their data
-	meta_pipeline.GetState().SetPipelineSource(current, this);
+	// Build the LHS
+	auto lhs_pipeline = make_shared<Pipeline>(executor);
+	state.SetPipelineSink(*lhs_pipeline, this);
+	D_ASSERT(children[0].get());
+	children[0]->BuildPipelines(executor, *lhs_pipeline, state);
 
-	// Create one child meta pipeline that will hold the LHS and RHS pipelines
-	auto child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, this);
-	auto lhs_pipeline = child_meta_pipeline->GetBasePipeline();
-	auto rhs_pipeline = child_meta_pipeline->CreatePipeline();
+	// Build the RHS
+	auto rhs_pipeline = make_shared<Pipeline>(executor);
+	state.SetPipelineSink(*rhs_pipeline, this);
+	D_ASSERT(children[1].get());
+	children[1]->BuildPipelines(executor, *rhs_pipeline, state);
 
-	// Build out LHS
-	children[0]->BuildPipelines(*lhs_pipeline, *child_meta_pipeline);
+	// RHS => LHS => current
+	current.AddDependency(rhs_pipeline);
+	rhs_pipeline->AddDependency(lhs_pipeline);
 
-	// RHS depends on everything in LHS
-	child_meta_pipeline->AddDependenciesFrom(rhs_pipeline, lhs_pipeline.get(), true);
+	state.AddPipeline(executor, move(lhs_pipeline));
+	state.AddPipeline(executor, move(rhs_pipeline));
 
-	// Build out RHS
-	children[1]->BuildPipelines(*rhs_pipeline, *child_meta_pipeline);
-
-	// Despite having the same sink, RHS needs its own PipelineFinishEvent
-	child_meta_pipeline->AddFinishEvent(rhs_pipeline);
+	// Now build both and scan
+	state.SetPipelineSource(current, this);
 }
 
 } // namespace duckdb

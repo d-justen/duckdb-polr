@@ -18,7 +18,7 @@ class PhysicalCreateFunction : public PhysicalOperator {
 public:
 	explicit PhysicalCreateFunction(unique_ptr<CreateMacroInfo> info, idx_t estimated_cardinality)
 	    : PhysicalOperator(PhysicalOperatorType::CREATE_MACRO, {LogicalType::BIGINT}, estimated_cardinality),
-	      info(std::move(info)) {
+	      info(move(info)) {
 	}
 
 	unique_ptr<CreateMacroInfo> info;

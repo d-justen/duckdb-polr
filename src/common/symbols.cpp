@@ -15,10 +15,9 @@
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/main/relation.hpp"
 #include "duckdb/main/stream_query_result.hpp"
-#include "duckdb/optimizer/join_order/join_order_optimizer.hpp"
+#include "duckdb/optimizer/join_order_optimizer.hpp"
 #include "duckdb/optimizer/rule.hpp"
 #include "duckdb/parallel/pipeline.hpp"
-#include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parser/constraint.hpp"
 #include "duckdb/parser/constraints/list.hpp"
 #include "duckdb/parser/expression/list.hpp"
@@ -36,8 +35,6 @@
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/write_ahead_log.hpp"
 #include "duckdb/transaction/transaction.hpp"
-#include "duckdb/common/types/column_data_collection.hpp"
-#include "duckdb/common/types/column_data_allocator.hpp"
 
 using namespace duckdb;
 
@@ -78,21 +75,15 @@ template class std::unique_ptr<UniqueConstraint>;
 template class std::unique_ptr<ForeignKeyConstraint>;
 // template class std::unique_ptr<TableRef>;
 template class std::unique_ptr<BaseTableRef>;
+template class std::unique_ptr<CrossProductRef>;
 template class std::unique_ptr<JoinRef>;
 template class std::unique_ptr<SubqueryRef>;
 template class std::unique_ptr<TableFunctionRef>;
-template class std::shared_ptr<Event>;
 template class std::unique_ptr<Pipeline>;
 template class std::shared_ptr<Pipeline>;
 template class std::weak_ptr<Pipeline>;
-template class std::shared_ptr<MetaPipeline>;
 template class std::unique_ptr<RowGroup>;
 template class std::shared_ptr<RowGroupCollection>;
-template class std::unique_ptr<RowDataBlock>;
-template class std::unique_ptr<RowDataCollection>;
-template class std::unique_ptr<ColumnDataCollection>;
-template class std::shared_ptr<ColumnDataAllocator>;
-template class std::unique_ptr<PartitionedColumnData>;
 template class std::shared_ptr<PreparedStatementData>;
 template class std::unique_ptr<VacuumInfo>;
 
@@ -136,7 +127,6 @@ template class std::unique_ptr<Vector[]>;
 template class std::unique_ptr<DataChunk>;
 template class std::unique_ptr<JoinHashTable>;
 template class std::unique_ptr<JoinHashTable::ScanStructure>;
-template class std::unique_ptr<JoinHashTable::ProbeSpill>;
 template class std::unique_ptr<data_ptr_t[]>;
 template class std::unique_ptr<Rule>;
 template class std::unique_ptr<LogicalFilter>;
@@ -148,7 +138,6 @@ template class std::unique_ptr<SingleJoinRelation>;
 template class std::shared_ptr<Relation>;
 template class std::unique_ptr<CatalogSet>;
 template class std::unique_ptr<Binder>;
-template class std::unique_ptr<PrivateAllocatorData>;
 
 #define INSTANTIATE_VECTOR(VECTOR_DEFINITION)                                                                          \
 	template VECTOR_DEFINITION::size_type VECTOR_DEFINITION::size() const;                                             \
@@ -178,17 +167,11 @@ template class std::vector<PhysicalType>;
 template class std::vector<Value>;
 template class std::vector<int>;
 INSTANTIATE_VECTOR(std::vector<std::unique_ptr<Rule>>)
-INSTANTIATE_VECTOR(std::vector<std::shared_ptr<Event>>)
 INSTANTIATE_VECTOR(std::vector<std::unique_ptr<Pipeline>>)
 INSTANTIATE_VECTOR(std::vector<std::shared_ptr<Pipeline>>)
-INSTANTIATE_VECTOR(std::vector<std::weak_ptr<Pipeline>>)
-INSTANTIATE_VECTOR(std::vector<std::shared_ptr<MetaPipeline>>)
 template class std::vector<std::vector<Expression *>>;
 template class std::vector<LogicalType>;
 INSTANTIATE_VECTOR(std::vector<std::unique_ptr<JoinHashTable>>)
-INSTANTIATE_VECTOR(std::vector<std::unique_ptr<ColumnDataCollection>>)
-INSTANTIATE_VECTOR(std::vector<std::shared_ptr<ColumnDataAllocator>>)
-INSTANTIATE_VECTOR(std::vector<std::unique_ptr<RowDataBlock>>)
 
 #if !defined(__clang__)
 template struct std::atomic<uint64_t>;

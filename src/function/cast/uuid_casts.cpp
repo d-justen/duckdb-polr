@@ -8,6 +8,7 @@ BoundCastInfo DefaultCasts::UUIDCastSwitch(BindCastInput &input, const LogicalTy
 	// now switch on the result type
 	switch (target.id()) {
 	case LogicalTypeId::VARCHAR:
+	case LogicalTypeId::JSON:
 		// uuid to varchar
 		return BoundCastInfo(&VectorCastHelpers::StringCast<hugeint_t, duckdb::CastFromUUID>);
 	default:

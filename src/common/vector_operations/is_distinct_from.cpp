@@ -564,8 +564,8 @@ static idx_t DistinctSelectList(Vector &left, Vector &right, idx_t count, const 
 	SelectionVector lcursor(count);
 	SelectionVector rcursor(count);
 
-	ListVector::GetEntry(left).Flatten(ListVector::GetListSize(left));
-	ListVector::GetEntry(right).Flatten(ListVector::GetListSize(right));
+	ListVector::GetEntry(left).Flatten(count);
+	ListVector::GetEntry(right).Flatten(count);
 	Vector lchild(ListVector::GetEntry(left), lcursor, count);
 	Vector rchild(ListVector::GetEntry(right), rcursor, count);
 
@@ -769,6 +769,7 @@ static void ExecuteDistinct(Vector &left, Vector &right, Vector &result, idx_t c
 		TemplatedDistinctExecute<string_t, OP>(left, right, result, count);
 		break;
 	case PhysicalType::LIST:
+	case PhysicalType::MAP:
 	case PhysicalType::STRUCT:
 		NestedDistinctExecute<OP>(left, right, result, count);
 		break;
@@ -809,6 +810,7 @@ static idx_t TemplatedDistinctSelectOperation(Vector &left, Vector &right, const
 		return DistinctSelect<interval_t, interval_t, OP>(left, right, sel, count, true_sel, false_sel);
 	case PhysicalType::VARCHAR:
 		return DistinctSelect<string_t, string_t, OP>(left, right, sel, count, true_sel, false_sel);
+	case PhysicalType::MAP:
 	case PhysicalType::STRUCT:
 	case PhysicalType::LIST:
 		return DistinctSelectNested<OP, OPNESTED>(left, right, sel, count, true_sel, false_sel);

@@ -15,7 +15,6 @@
 #include "duckdb/common/pair.hpp"
 #include "duckdb/common/thread.hpp"
 #include "duckdb/common/unordered_map.hpp"
-#include "duckdb/function/built_in_functions.hpp"
 
 namespace duckdb {
 //===--------------------------------------------------------------------===//
@@ -78,13 +77,12 @@ struct ArrowScanFunctionData : public PyTableFunctionData {
 };
 
 struct ArrowScanLocalState : public LocalTableFunctionState {
-	explicit ArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk) : chunk(std::move(current_chunk)) {
+	explicit ArrowScanLocalState(unique_ptr<ArrowArrayWrapper> current_chunk) : chunk(move(current_chunk)) {
 	}
 
 	unique_ptr<ArrowArrayStreamWrapper> stream;
 	shared_ptr<ArrowArrayWrapper> chunk;
 	idx_t chunk_offset = 0;
-	idx_t batch_index = 0;
 	vector<column_t> column_ids;
 	//! Store child vectors for Arrow Dictionary Vectors (col-idx,vector)
 	unordered_map<idx_t, unique_ptr<Vector>> arrow_dictionary_vectors;
@@ -97,7 +95,6 @@ struct ArrowScanGlobalState : public GlobalTableFunctionState {
 	unique_ptr<ArrowArrayStreamWrapper> stream;
 	mutex main_mutex;
 	idx_t max_threads = 1;
-	idx_t batch_index = 0;
 	bool done = false;
 
 	vector<idx_t> projection_ids;
@@ -116,18 +113,14 @@ struct ArrowTableFunction {
 public:
 	static void RegisterFunction(BuiltinFunctions &set);
 
-protected:
+private:
 	//! Binds an arrow table
 	static unique_ptr<FunctionData> ArrowScanBind(ClientContext &context, TableFunctionBindInput &input,
 	                                              vector<LogicalType> &return_types, vector<string> &names);
 	//! Actual conversion from Arrow to DuckDB
 	static void ArrowToDuckDB(ArrowScanLocalState &scan_state,
 	                          std::unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
-	                          DataChunk &output, idx_t start, bool arrow_scan_is_projected = true);
-
-	//! Get next scan state
-	static bool ArrowScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p,
-	                                       ArrowScanLocalState &state, ArrowScanGlobalState &parallel_state);
+	                          DataChunk &output, idx_t start);
 
 	//! Initialize Global State
 	static unique_ptr<GlobalTableFunctionState> ArrowScanInitGlobal(ClientContext &context,
@@ -144,22 +137,12 @@ protected:
 	//! Defines Maximum Number of Threads
 	static idx_t ArrowScanMaxThreads(ClientContext &context, const FunctionData *bind_data);
 
-	//! Allows parallel Create Table / Insertion
-	static idx_t ArrowGetBatchIndex(ClientContext &context, const FunctionData *bind_data_p,
-	                                LocalTableFunctionState *local_state, GlobalTableFunctionState *global_state);
-
 	//! -----Utility Functions:-----
 	//! Gets Arrow Table's Cardinality
 	static unique_ptr<NodeStatistics> ArrowScanCardinality(ClientContext &context, const FunctionData *bind_data);
 	//! Gets the progress on the table scan, used for Progress Bars
 	static double ArrowProgress(ClientContext &context, const FunctionData *bind_data,
 	                            const GlobalTableFunctionState *global_state);
-	//! Renames repeated columns and case sensitive columns
-	static void RenameArrowColumns(vector<string> &names);
-	//! Helper function to get the DuckDB logical type
-	static LogicalType GetArrowLogicalType(ArrowSchema &schema,
-	                                       std::unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
-	                                       idx_t col_idx);
 };
 
 } // namespace duckdb

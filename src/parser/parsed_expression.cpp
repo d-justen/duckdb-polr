@@ -52,40 +52,40 @@ bool ParsedExpression::Equals(const BaseExpression *other) const {
 	}
 	switch (expression_class) {
 	case ExpressionClass::BETWEEN:
-		return BetweenExpression::Equal((BetweenExpression *)this, (BetweenExpression *)other);
+		return BetweenExpression::Equals((BetweenExpression *)this, (BetweenExpression *)other);
 	case ExpressionClass::CASE:
-		return CaseExpression::Equal((CaseExpression *)this, (CaseExpression *)other);
+		return CaseExpression::Equals((CaseExpression *)this, (CaseExpression *)other);
 	case ExpressionClass::CAST:
-		return CastExpression::Equal((CastExpression *)this, (CastExpression *)other);
+		return CastExpression::Equals((CastExpression *)this, (CastExpression *)other);
 	case ExpressionClass::COLLATE:
-		return CollateExpression::Equal((CollateExpression *)this, (CollateExpression *)other);
+		return CollateExpression::Equals((CollateExpression *)this, (CollateExpression *)other);
 	case ExpressionClass::COLUMN_REF:
-		return ColumnRefExpression::Equal((ColumnRefExpression *)this, (ColumnRefExpression *)other);
+		return ColumnRefExpression::Equals((ColumnRefExpression *)this, (ColumnRefExpression *)other);
 	case ExpressionClass::COMPARISON:
-		return ComparisonExpression::Equal((ComparisonExpression *)this, (ComparisonExpression *)other);
+		return ComparisonExpression::Equals((ComparisonExpression *)this, (ComparisonExpression *)other);
 	case ExpressionClass::CONJUNCTION:
-		return ConjunctionExpression::Equal((ConjunctionExpression *)this, (ConjunctionExpression *)other);
+		return ConjunctionExpression::Equals((ConjunctionExpression *)this, (ConjunctionExpression *)other);
 	case ExpressionClass::CONSTANT:
-		return ConstantExpression::Equal((ConstantExpression *)this, (ConstantExpression *)other);
+		return ConstantExpression::Equals((ConstantExpression *)this, (ConstantExpression *)other);
 	case ExpressionClass::DEFAULT:
 		return true;
 	case ExpressionClass::FUNCTION:
-		return FunctionExpression::Equal((FunctionExpression *)this, (FunctionExpression *)other);
+		return FunctionExpression::Equals((FunctionExpression *)this, (FunctionExpression *)other);
 	case ExpressionClass::LAMBDA:
-		return LambdaExpression::Equal((LambdaExpression *)this, (LambdaExpression *)other);
+		return LambdaExpression::Equals((LambdaExpression *)this, (LambdaExpression *)other);
 	case ExpressionClass::OPERATOR:
-		return OperatorExpression::Equal((OperatorExpression *)this, (OperatorExpression *)other);
+		return OperatorExpression::Equals((OperatorExpression *)this, (OperatorExpression *)other);
 	case ExpressionClass::PARAMETER:
-		return ParameterExpression::Equal((ParameterExpression *)this, (ParameterExpression *)other);
+		return ParameterExpression::Equals((ParameterExpression *)this, (ParameterExpression *)other);
 	case ExpressionClass::POSITIONAL_REFERENCE:
-		return PositionalReferenceExpression::Equal((PositionalReferenceExpression *)this,
-		                                            (PositionalReferenceExpression *)other);
+		return PositionalReferenceExpression::Equals((PositionalReferenceExpression *)this,
+		                                             (PositionalReferenceExpression *)other);
 	case ExpressionClass::STAR:
-		return StarExpression::Equal((StarExpression *)this, (StarExpression *)other);
+		return StarExpression::Equals((StarExpression *)this, (StarExpression *)other);
 	case ExpressionClass::SUBQUERY:
-		return SubqueryExpression::Equal((SubqueryExpression *)this, (SubqueryExpression *)other);
+		return SubqueryExpression::Equals((SubqueryExpression *)this, (SubqueryExpression *)other);
 	case ExpressionClass::WINDOW:
-		return WindowExpression::Equal((WindowExpression *)this, (WindowExpression *)other);
+		return WindowExpression::Equals((WindowExpression *)this, (WindowExpression *)other);
 	default:
 		throw SerializationException("Unsupported type for expression comparison!");
 	}

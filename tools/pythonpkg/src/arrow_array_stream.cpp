@@ -20,7 +20,8 @@ PyArrowObjectType GetArrowType(const py::handle &obj) {
 	auto scanner_class = import_cache.arrow.dataset.Scanner();
 	auto table_class = import_cache.arrow.lib.Table();
 	auto record_batch_reader_class = import_cache.arrow.lib.RecordBatchReader();
-	auto dataset_class = import_cache.arrow.dataset.Dataset();
+	auto in_memory_dataset_class = import_cache.arrow.dataset.InMemoryDataset();
+	auto filesystem_dataset_class = import_cache.arrow.dataset.FileSystemDataset();
 
 	if (py::isinstance(obj, scanner_class)) {
 		return PyArrowObjectType::Scanner;
@@ -28,8 +29,10 @@ PyArrowObjectType GetArrowType(const py::handle &obj) {
 		return PyArrowObjectType::Table;
 	} else if (py::isinstance(obj, record_batch_reader_class)) {
 		return PyArrowObjectType::RecordBatchReader;
-	} else if (py::isinstance(obj, dataset_class)) {
-		return PyArrowObjectType::Dataset;
+	} else if (py::isinstance(obj, in_memory_dataset_class)) {
+		return PyArrowObjectType::InMemoryDataset;
+	} else if (py::isinstance(obj, filesystem_dataset_class)) {
+		return PyArrowObjectType::FileSystemDataset;
 	}
 	return PyArrowObjectType::Invalid;
 }
@@ -85,7 +88,8 @@ unique_ptr<ArrowArrayStreamWrapper> PythonTableArrowArrayStreamFactory::Produce(
 		scanner = ProduceScanner(arrow_batch_scanner, record_batches, parameters, factory->config);
 		break;
 	}
-	case PyArrowObjectType::Dataset: {
+	case PyArrowObjectType::InMemoryDataset:
+	case PyArrowObjectType::FileSystemDataset: {
 		scanner = ProduceScanner(arrow_scanner, arrow_obj_handle, parameters, factory->config);
 		break;
 	}

@@ -1,7 +1,5 @@
 #include "duckdb/execution/operator/helper/physical_execute.hpp"
 
-#include "duckdb/parallel/meta_pipeline.hpp"
-
 namespace duckdb {
 
 PhysicalExecute::PhysicalExecute(PhysicalOperator *plan)
@@ -12,14 +10,9 @@ vector<PhysicalOperator *> PhysicalExecute::GetChildren() const {
 	return {plan};
 }
 
-bool PhysicalExecute::AllOperatorsPreserveOrder() const {
-	D_ASSERT(plan);
-	return plan->AllOperatorsPreserveOrder();
-}
-
-void PhysicalExecute::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) {
+void PhysicalExecute::BuildPipelines(Executor &executor, Pipeline &current, PipelineBuildState &state) {
 	// EXECUTE statement: build pipeline on child
-	meta_pipeline.Build(plan);
+	plan->BuildPipelines(executor, current, state);
 }
 
 } // namespace duckdb

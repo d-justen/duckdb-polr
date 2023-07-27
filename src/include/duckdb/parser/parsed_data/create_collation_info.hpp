@@ -14,8 +14,11 @@
 namespace duckdb {
 
 struct CreateCollationInfo : public CreateInfo {
-	DUCKDB_API CreateCollationInfo(string name_p, ScalarFunction function_p, bool combinable_p,
-	                               bool not_required_for_equality_p);
+	CreateCollationInfo(string name_p, ScalarFunction function_p, bool combinable_p, bool not_required_for_equality_p)
+	    : CreateInfo(CatalogType::COLLATION_ENTRY), function(move(function_p)), combinable(combinable_p),
+	      not_required_for_equality(not_required_for_equality_p) {
+		this->name = move(name_p);
+	}
 
 	//! The name of the collation
 	string name;
@@ -29,10 +32,16 @@ struct CreateCollationInfo : public CreateInfo {
 	bool not_required_for_equality;
 
 protected:
-	void SerializeInternal(Serializer &) const override;
+	void SerializeInternal(Serializer &) const override {
+		throw NotImplementedException("Cannot serialize '%s'", CatalogTypeToString(type));
+	}
 
 public:
-	unique_ptr<CreateInfo> Copy() const override;
+	unique_ptr<CreateInfo> Copy() const override {
+		auto result = make_unique<CreateCollationInfo>(name, function, combinable, not_required_for_equality);
+		CopyProperties(*result);
+		return move(result);
+	}
 };
 
 } // namespace duckdb

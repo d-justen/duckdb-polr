@@ -92,11 +92,6 @@ public:
 		return GetString();
 	}
 
-	void SetPointer(char *new_ptr) {
-		D_ASSERT(!IsInlined());
-		value.pointer.ptr = new_ptr;
-	}
-
 	void Finalize() {
 		// set trailing NULL byte
 		if (GetSize() <= INLINE_LENGTH) {

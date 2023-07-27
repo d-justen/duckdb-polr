@@ -15,7 +15,7 @@
 #include "duckdb/function/table/arrow.hpp"
 #include "duckdb/main/client_config.hpp"
 #include "duckdb/main/config.hpp"
-#include "duckdb_python/pybind_wrapper.hpp"
+#include "pybind_wrapper.hpp"
 
 #include <string>
 #include <vector>
@@ -48,7 +48,7 @@ public:
 };
 } // namespace pyarrow
 
-enum class PyArrowObjectType { Invalid, Table, RecordBatchReader, Scanner, Dataset };
+enum class PyArrowObjectType { Invalid, Table, RecordBatchReader, Scanner, InMemoryDataset, FileSystemDataset };
 
 PyArrowObjectType GetArrowType(const py::handle &obj);
 

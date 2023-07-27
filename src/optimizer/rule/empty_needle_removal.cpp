@@ -18,7 +18,7 @@ EmptyNeedleRemovalRule::EmptyNeedleRemovalRule(ExpressionRewriter &rewriter) : R
 
 	unordered_set<string> functions = {"prefix", "contains", "suffix"};
 	func->function = make_unique<ManyFunctionMatcher>(functions);
-	root = std::move(func);
+	root = move(func);
 }
 
 unique_ptr<Expression> EmptyNeedleRemovalRule::Apply(LogicalOperator &op, vector<Expression *> &bindings,
@@ -34,7 +34,7 @@ unique_ptr<Expression> EmptyNeedleRemovalRule::Apply(LogicalOperator &op, vector
 	}
 	D_ASSERT(root->return_type.id() == LogicalTypeId::BOOLEAN);
 
-	auto prefix_value = ExpressionExecutor::EvaluateScalar(GetContext(), *prefix_expr);
+	auto prefix_value = ExpressionExecutor::EvaluateScalar(*prefix_expr);
 
 	if (prefix_value.IsNull()) {
 		return make_unique<BoundConstantExpression>(Value(LogicalType::BOOLEAN));
@@ -47,7 +47,7 @@ unique_ptr<Expression> EmptyNeedleRemovalRule::Apply(LogicalOperator &op, vector
 	// PREFIX(NULL, '') is NULL
 	// so rewrite PREFIX(x, '') to TRUE_OR_NULL(x)
 	if (needle_string.empty()) {
-		return ExpressionRewriter::ConstantOrNull(std::move(root->children[0]), Value::BOOLEAN(true));
+		return ExpressionRewriter::ConstantOrNull(move(root->children[0]), Value::BOOLEAN(true));
 	}
 	return nullptr;
 }

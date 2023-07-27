@@ -6,59 +6,33 @@
 
 namespace duckdb {
 
-ExpressionExecutor::ExpressionExecutor(ClientContext &context) : context(&context) {
+ExpressionExecutor::ExpressionExecutor(Allocator &allocator) : allocator(allocator) {
 }
 
-ExpressionExecutor::ExpressionExecutor(ClientContext &context, const Expression *expression)
-    : ExpressionExecutor(context) {
+ExpressionExecutor::ExpressionExecutor(Allocator &allocator, const Expression *expression)
+    : ExpressionExecutor(allocator) {
 	D_ASSERT(expression);
 	AddExpression(*expression);
 }
 
-ExpressionExecutor::ExpressionExecutor(ClientContext &context, const Expression &expression)
-    : ExpressionExecutor(context) {
+ExpressionExecutor::ExpressionExecutor(Allocator &allocator, const Expression &expression)
+    : ExpressionExecutor(allocator) {
 	AddExpression(expression);
 }
 
-ExpressionExecutor::ExpressionExecutor(ClientContext &context, const vector<unique_ptr<Expression>> &exprs)
-    : ExpressionExecutor(context) {
+ExpressionExecutor::ExpressionExecutor(Allocator &allocator, const vector<unique_ptr<Expression>> &exprs)
+    : ExpressionExecutor(allocator) {
 	D_ASSERT(exprs.size() > 0);
 	for (auto &expr : exprs) {
 		AddExpression(*expr);
 	}
-}
-
-ExpressionExecutor::ExpressionExecutor(const vector<unique_ptr<Expression>> &exprs) : context(nullptr) {
-	D_ASSERT(exprs.size() > 0);
-	for (auto &expr : exprs) {
-		AddExpression(*expr);
-	}
-}
-
-ExpressionExecutor::ExpressionExecutor() : context(nullptr) {
-}
-
-bool ExpressionExecutor::HasContext() {
-	return context;
-}
-
-ClientContext &ExpressionExecutor::GetContext() {
-	if (!context) {
-		throw InternalException("Calling ExpressionExecutor::GetContext on an expression executor without a context");
-	}
-	return *context;
-}
-
-Allocator &ExpressionExecutor::GetAllocator() {
-	return context ? Allocator::Get(*context) : Allocator::DefaultAllocator();
 }
 
 void ExpressionExecutor::AddExpression(const Expression &expr) {
 	expressions.push_back(&expr);
 	auto state = make_unique<ExpressionExecutorState>(expr.ToString());
 	Initialize(expr, *state);
-	state->Verify();
-	states.push_back(std::move(state));
+	states.push_back(move(state));
 }
 
 void ExpressionExecutor::Initialize(const Expression &expression, ExpressionExecutorState &state) {
@@ -68,6 +42,7 @@ void ExpressionExecutor::Initialize(const Expression &expression, ExpressionExec
 
 void ExpressionExecutor::Execute(DataChunk *input, DataChunk &result) {
 	SetChunk(input);
+
 	D_ASSERT(expressions.size() == result.ColumnCount());
 	D_ASSERT(!expressions.empty());
 
@@ -105,11 +80,11 @@ void ExpressionExecutor::ExecuteExpression(idx_t expr_idx, Vector &result) {
 	states[expr_idx]->profiler.EndSample(chunk ? chunk->size() : 0);
 }
 
-Value ExpressionExecutor::EvaluateScalar(ClientContext &context, const Expression &expr, bool allow_unfoldable) {
+Value ExpressionExecutor::EvaluateScalar(const Expression &expr, bool allow_unfoldable) {
 	D_ASSERT(allow_unfoldable || expr.IsFoldable());
 	D_ASSERT(expr.IsScalar());
 	// use an ExpressionExecutor to execute the expression
-	ExpressionExecutor executor(context, expr);
+	ExpressionExecutor executor(Allocator::DefaultAllocator(), expr);
 
 	Vector result(expr.return_type);
 	executor.ExecuteExpression(result);
@@ -120,9 +95,9 @@ Value ExpressionExecutor::EvaluateScalar(ClientContext &context, const Expressio
 	return result_value;
 }
 
-bool ExpressionExecutor::TryEvaluateScalar(ClientContext &context, const Expression &expr, Value &result) {
+bool ExpressionExecutor::TryEvaluateScalar(const Expression &expr, Value &result) {
 	try {
-		result = EvaluateScalar(context, expr);
+		result = EvaluateScalar(expr);
 		return true;
 	} catch (InternalException &ex) {
 		throw ex;
@@ -172,6 +147,9 @@ void ExpressionExecutor::Execute(const Expression &expr, ExpressionState *state,
 #ifdef DEBUG
 	//! The result Vector must be "clean"
 	if (result.GetVectorType() == VectorType::FLAT_VECTOR) {
+		if (!FlatVector::Validity(result).CheckAllValid(count)) {
+			void;
+		}
 		D_ASSERT(FlatVector::Validity(result).CheckAllValid(count));
 	}
 #endif

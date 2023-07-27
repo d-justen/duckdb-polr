@@ -39,7 +39,7 @@ struct BindResult {
 	}
 	explicit BindResult(string error) : error(error) {
 	}
-	explicit BindResult(unique_ptr<Expression> expr) : expression(std::move(expr)) {
+	explicit BindResult(unique_ptr<Expression> expr) : expression(move(expr)) {
 	}
 
 	bool HasError() {
@@ -126,9 +126,10 @@ protected:
 	BindResult BindExpression(SubqueryExpression &expr, idx_t depth);
 
 	void TransformCapturedLambdaColumn(unique_ptr<Expression> &original, unique_ptr<Expression> &replacement,
-	                                   vector<unique_ptr<Expression>> &captures, LogicalType &list_child_type);
+	                                   vector<unique_ptr<Expression>> &captures, LogicalType &list_child_type,
+	                                   string &alias);
 	void CaptureLambdaColumns(vector<unique_ptr<Expression>> &captures, LogicalType &list_child_type,
-	                          unique_ptr<Expression> &expr);
+	                          unique_ptr<Expression> &expr, string &alias);
 
 protected:
 	virtual BindResult BindGroupingFunction(OperatorExpression &op, idx_t depth);

@@ -25,7 +25,6 @@ public:
 	RadixPartitionedHashTable(GroupingSet &grouping_set, const GroupedAggregateData &op);
 
 	GroupingSet &grouping_set;
-	//! The indices specified in the groups_count that do not appear in the grouping_set
 	vector<idx_t> null_groups;
 	const GroupedAggregateData &op;
 
@@ -42,7 +41,7 @@ public:
 	unique_ptr<LocalSinkState> GetLocalSinkState(ExecutionContext &context) const;
 
 	void Sink(ExecutionContext &context, GlobalSinkState &state, LocalSinkState &lstate, DataChunk &input,
-	          DataChunk &aggregate_input_chunk, const vector<idx_t> &filter) const;
+	          DataChunk &aggregate_input_chunk) const;
 	void Combine(ExecutionContext &context, GlobalSinkState &state, LocalSinkState &lstate) const;
 	bool Finalize(ClientContext &context, GlobalSinkState &gstate_p) const;
 
@@ -61,7 +60,6 @@ public:
 
 private:
 	void SetGroupingValues();
-	void PopulateGroupChunk(DataChunk &group_chunk, DataChunk &input_chunk) const;
 };
 
 } // namespace duckdb

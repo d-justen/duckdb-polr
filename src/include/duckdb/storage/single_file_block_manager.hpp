@@ -25,7 +25,7 @@ class SingleFileBlockManager : public BlockManager {
 	static constexpr uint64_t BLOCK_START = Storage::FILE_HEADER_SIZE * 3;
 
 public:
-	SingleFileBlockManager(AttachedDatabase &db, string path, bool read_only, bool create_new, bool use_direct_io);
+	SingleFileBlockManager(DatabaseInstance &db, string path, bool read_only, bool create_new, bool use_direct_io);
 
 	//! Creates a new Block using the specified block_id and returns a pointer
 	unique_ptr<Block> CreateBlock(block_id_t block_id, FileBuffer *source_buffer) override;
@@ -33,9 +33,7 @@ public:
 	block_id_t GetFreeBlockId() override;
 	//! Returns whether or not a specified block is the root block
 	bool IsRootBlock(block_id_t root) override;
-	//! Mark a block as free (immediately re-writeable)
-	void MarkBlockAsFree(block_id_t block_id) override;
-	//! Mark a block as modified (re-writeable after a checkpoint)
+	//! Mark a block as modified
 	void MarkBlockAsModified(block_id_t block_id) override;
 	//! Increase the reference count of a block. The block should hold at least one reference
 	void IncreaseBlockReferenceCount(block_id_t block_id) override;
@@ -63,7 +61,7 @@ private:
 	vector<block_id_t> GetFreeListBlocks();
 
 private:
-	AttachedDatabase &db;
+	DatabaseInstance &db;
 	//! The active DatabaseHeader, either 0 (h1) or 1 (h2)
 	uint8_t active_header;
 	//! The path where the file is stored

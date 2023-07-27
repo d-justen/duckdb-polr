@@ -216,7 +216,7 @@ public:
 		auto &db = checkpointer.GetDatabase();
 		auto &type = checkpointer.GetType();
 		auto compressed_segment = ColumnSegment::CreateTransientSegment(db, type, row_start);
-		current_segment = std::move(compressed_segment);
+		current_segment = move(compressed_segment);
 
 		current_segment->function = function;
 
@@ -256,16 +256,13 @@ public:
 	}
 
 	void AddNull() {
-		if (!HasEnoughSpace(0)) {
-			Flush();
-			D_ASSERT(HasEnoughSpace(0));
-		}
 		index_buffer.push_back(0);
 		current_segment->count++;
 	}
 
 	void AddEmptyString() {
-		AddNull();
+		index_buffer.push_back(0);
+		current_segment->count++;
 		UncompressedStringStorage::UpdateStringStats(current_segment->stats, "");
 	}
 
@@ -295,7 +292,7 @@ public:
 
 		auto segment_size = Finalize();
 		auto &state = checkpointer.GetCheckpointState();
-		state.FlushSegment(std::move(current_segment), segment_size);
+		state.FlushSegment(move(current_segment), segment_size);
 
 		if (!final) {
 			CreateEmptySegment(next_start);
@@ -333,11 +330,6 @@ public:
 
 		Store<uint32_t>(symbol_table_offset, (data_ptr_t)&header_ptr->fsst_symbol_table_offset);
 		Store<uint32_t>((uint32_t)current_width, (data_ptr_t)&header_ptr->bitpacking_width);
-
-		if (symbol_table_offset + fsst_serialized_symbol_table_size >
-		    current_dictionary.end - current_dictionary.size) {
-			throw InternalException("FSST string compression failed due to incorrect size calculation");
-		}
 
 		if (total_size >= FSSTStorage::COMPACTION_FLUSH_LIMIT) {
 			// the block is full enough, don't bother moving around the dictionary
@@ -515,7 +507,7 @@ unique_ptr<SegmentScanState> FSSTStorage::StringInitScan(ColumnSegment &segment)
 		state->duckdb_fsst_decoder = nullptr;
 	}
 
-	return std::move(state);
+	return move(state);
 }
 
 void DeltaDecodeIndices(uint32_t *buffer_in, uint32_t *buffer_out, idx_t decode_count, uint32_t last_known_value) {

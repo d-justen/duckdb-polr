@@ -10,7 +10,6 @@
 
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/function/function_set.hpp"
-#include "duckdb/function/built_in_functions.hpp"
 
 namespace duckdb {
 
@@ -59,10 +58,6 @@ struct StrfTimeFun {
 };
 
 struct StrpTimeFun {
-	static void RegisterFunction(BuiltinFunctions &set);
-};
-
-struct TimeBucketFun {
 	static void RegisterFunction(BuiltinFunctions &set);
 };
 

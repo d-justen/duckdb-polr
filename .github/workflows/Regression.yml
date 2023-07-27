@@ -18,11 +18,23 @@ concurrency:
 
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
+  AWS_ACCESS_KEY_ID: AKIAVBLKPL2ZW2T7TYFQ
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.NODE_PRE_GYP_SECRETACCESSKEY }}
+  NODE_AUTH_TOKEN: ${{secrets.NODE_AUTH_TOKEN}}
 
 jobs:
  regression-test-benchmark-runner:
-  name: Regression Tests
+  name: Regression Test (${{ matrix.benchmark }})
   runs-on: ubuntu-20.04
+  strategy:
+    fail-fast: false
+    matrix:
+      benchmark:
+        - 'micro'
+        - 'tpch'
+        - 'tpcds'
+        - 'h2oai'
   env:
     CC: gcc-10
     CXX: g++-10
@@ -31,7 +43,6 @@ jobs:
     BUILD_TPCH: 1
     BUILD_TPCDS: 1
     BUILD_HTTPFS: 1
-    BUILD_JEMALLOC: 1
 
   steps:
     - uses: actions/checkout@v3
@@ -60,40 +71,11 @@ jobs:
         make
         cd ..
 
-    - name: Set up benchmarks
+    - name: Regression Test
       shell: bash
       run: |
         cp -r benchmark duckdb/
-
-    - name: Regression Test Micro
-      continue-on-error: true
-      shell: bash
-      run: |
-        python scripts/regression_test_runner.py --old=duckdb/build/release/benchmark/benchmark_runner --new=build/release/benchmark/benchmark_runner --benchmarks=.github/regression/micro.csv --verbose --threads=2
-
-    - name: Regression Test TPCH
-      continue-on-error: true
-      shell: bash
-      run: |
-        python scripts/regression_test_runner.py --old=duckdb/build/release/benchmark/benchmark_runner --new=build/release/benchmark/benchmark_runner --benchmarks=.github/regression/tpch.csv --verbose --threads=2
-
-    - name: Regression Test TPCDS
-      continue-on-error: true
-      shell: bash
-      run: |
-        python scripts/regression_test_runner.py --old=duckdb/build/release/benchmark/benchmark_runner --new=build/release/benchmark/benchmark_runner --benchmarks=.github/regression/tpcds.csv --verbose --threads=2
-
-    - name: Regression Test H2OAI
-      continue-on-error: true
-      shell: bash
-      run: |
-        python scripts/regression_test_runner.py --old=duckdb/build/release/benchmark/benchmark_runner --new=build/release/benchmark/benchmark_runner --benchmarks=.github/regression/h2oai.csv --verbose --threads=2
-
-    - name: Regression Test IMDB
-      continue-on-error: true
-      shell: bash
-      run: |
-        python scripts/regression_test_runner.py --old=duckdb/build/release/benchmark/benchmark_runner --new=build/release/benchmark/benchmark_runner --benchmarks=.github/regression/imdb.csv --verbose --threads=2
+        python scripts/regression_test_runner.py --old=duckdb/build/release/benchmark/benchmark_runner --new=build/release/benchmark/benchmark_runner --benchmarks=.github/regression/${{ matrix.benchmark }}.csv --verbose --threads=2
 
  regression-test-storage:
   name: Storage Size Regression Test
@@ -195,12 +177,17 @@ jobs:
     - name: Regression Test
       shell: bash
       run: |
-        cp -r benchmark duckdb/
         python scripts/regression_check.py --old=current.csv --new=new.csv
 
  regression-test-plan-cost:
   name: Regression Test Join Order Plan Cost
   runs-on: ubuntu-20.04
+  strategy:
+    fail-fast: false
+    matrix:
+      benchmark:
+        - 'imdb'
+        - 'tpch'
   env:
     CC: gcc-10
     CXX: g++-10
@@ -235,19 +222,8 @@ jobs:
         make
         cd ..
 
-    - name: Set up benchmarks
+    - name: Regression Test
       shell: bash
       run: |
         cp -r benchmark duckdb/
-
-    - name: Regression Test IMDB
-      continue-on-error: true
-      shell: bash
-      run: |
-        python scripts/plan_cost_runner.py --old=duckdb/build/release/duckdb --new=build/release/duckdb --dir=benchmark/imdb_plan_cost
-
-    - name: Regression Test TPCH
-      continue-on-error: true
-      shell: bash
-      run: |
-        python scripts/plan_cost_runner.py --old=duckdb/build/release/duckdb --new=build/release/duckdb --dir=benchmark/tpch_plan_cost
+        python scripts/plan_cost_runner.py --old=duckdb/build/release/duckdb --new=build/release/duckdb --dir=benchmark/${{ matrix.benchmark }}_plan_cost

@@ -63,6 +63,8 @@ SELECT approx_count_distinct(a) from t group by a %2;
 993
 986
 
+require vector_size 512
+
 query I
 SELECT count(*) from t where a < 10;
 ----
@@ -107,13 +109,3 @@ query T
 select approx_count_distinct(cname) from customers
 ----
 4
-
-# ORDER BY STRUCT
-statement ok
-create table issue5259(c0 int);
-
-statement ok
-insert into issue5259 values (1),(2),(3);
-
-statement ok
-SELECT approx_count_distinct(c0 ORDER BY (c0, 1)) FROM issue5259;

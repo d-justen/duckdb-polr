@@ -20,9 +20,9 @@ class TableCatalogEntry;
 class LogicalPrepare : public LogicalOperator {
 public:
 	LogicalPrepare(string name, shared_ptr<PreparedStatementData> prepared, unique_ptr<LogicalOperator> logical_plan)
-	    : LogicalOperator(LogicalOperatorType::LOGICAL_PREPARE), name(name), prepared(std::move(prepared)) {
+	    : LogicalOperator(LogicalOperatorType::LOGICAL_PREPARE), name(name), prepared(move(prepared)) {
 		if (logical_plan) {
-			children.push_back(std::move(logical_plan));
+			children.push_back(move(logical_plan));
 		}
 	}
 
@@ -32,7 +32,6 @@ public:
 public:
 	void Serialize(FieldWriter &writer) const override;
 	static unique_ptr<LogicalOperator> Deserialize(LogicalDeserializationState &state, FieldReader &reader);
-	idx_t EstimateCardinality(ClientContext &context) override;
 
 protected:
 	void ResolveTypes() override {

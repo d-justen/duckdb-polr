@@ -7,8 +7,8 @@
 namespace duckdb {
 
 ForeignKeyConstraint::ForeignKeyConstraint(vector<string> pk_columns, vector<string> fk_columns, ForeignKeyInfo info)
-    : Constraint(ConstraintType::FOREIGN_KEY), pk_columns(std::move(pk_columns)), fk_columns(std::move(fk_columns)),
-      info(std::move(info)) {
+    : Constraint(ConstraintType::FOREIGN_KEY), pk_columns(move(pk_columns)), fk_columns(move(fk_columns)),
+      info(move(info)) {
 }
 
 string ForeignKeyConstraint::ToString() const {
@@ -55,8 +55,8 @@ void ForeignKeyConstraint::Serialize(FieldWriter &writer) const {
 	writer.WriteField<ForeignKeyType>(info.type);
 	writer.WriteString(info.schema);
 	writer.WriteString(info.table);
-	writer.WriteIndexList<PhysicalIndex>(info.pk_keys);
-	writer.WriteIndexList<PhysicalIndex>(info.fk_keys);
+	writer.WriteList<idx_t>(info.pk_keys);
+	writer.WriteList<idx_t>(info.fk_keys);
 }
 
 unique_ptr<Constraint> ForeignKeyConstraint::Deserialize(FieldReader &source) {
@@ -66,11 +66,11 @@ unique_ptr<Constraint> ForeignKeyConstraint::Deserialize(FieldReader &source) {
 	read_info.type = source.ReadRequired<ForeignKeyType>();
 	read_info.schema = source.ReadRequired<string>();
 	read_info.table = source.ReadRequired<string>();
-	read_info.pk_keys = source.ReadRequiredIndexList<PhysicalIndex>();
-	read_info.fk_keys = source.ReadRequiredIndexList<PhysicalIndex>();
+	read_info.pk_keys = source.ReadRequiredList<idx_t>();
+	read_info.fk_keys = source.ReadRequiredList<idx_t>();
 
 	// column list parsed constraint
-	return make_unique<ForeignKeyConstraint>(pk_columns, fk_columns, std::move(read_info));
+	return make_unique<ForeignKeyConstraint>(pk_columns, fk_columns, move(read_info));
 }
 
 } // namespace duckdb

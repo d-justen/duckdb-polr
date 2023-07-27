@@ -2,7 +2,6 @@
 
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/row_operations/row_operations.hpp"
-#include "duckdb/common/types/column_data_collection_segment.hpp"
 #include "duckdb/common/types/row_data_collection.hpp"
 #include "duckdb/common/types/row_data_collection_scanner.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
@@ -13,14 +12,12 @@ namespace duckdb {
 
 using ValidityBytes = JoinHashTable::ValidityBytes;
 using ScanStructure = JoinHashTable::ScanStructure;
-using ProbeSpill = JoinHashTable::ProbeSpill;
-using ProbeSpillLocalState = JoinHashTable::ProbeSpillLocalAppendState;
 
 JoinHashTable::JoinHashTable(BufferManager &buffer_manager, const vector<JoinCondition> &conditions,
                              vector<LogicalType> btypes, JoinType type)
-    : buffer_manager(buffer_manager), conditions(conditions), build_types(std::move(btypes)), entry_size(0),
-      tuple_size(0), vfound(Value::BOOLEAN(false)), join_type(type), finalized(false), has_null(false), external(false),
-      radix_bits(4), tuples_per_round(0), partition_start(0), partition_end(0) {
+    : buffer_manager(buffer_manager), conditions(conditions), build_types(move(btypes)), entry_size(0), tuple_size(0),
+      vfound(Value::BOOLEAN(false)), join_type(type), finalized(false), has_null(false), external(false), radix_bits(4),
+      tuples_per_round(0), partition_start(0), partition_end(0) {
 	for (auto &condition : conditions) {
 		D_ASSERT(condition.left->return_type == condition.right->return_type);
 		auto type = condition.left->return_type;
@@ -60,7 +57,7 @@ JoinHashTable::JoinHashTable(BufferManager &buffer_manager, const vector<JoinCon
 	entry_size = layout.GetRowWidth();
 
 	// compute the per-block capacity of this HT
-	idx_t block_capacity = Storage::BLOCK_SIZE / entry_size;
+	idx_t block_capacity = MaxValue<idx_t>(STANDARD_VECTOR_SIZE, (Storage::BLOCK_SIZE / entry_size) + 1);
 	block_collection = make_unique<RowDataCollection>(buffer_manager, block_capacity, entry_size);
 	string_heap = make_unique<RowDataCollection>(buffer_manager, (idx_t)Storage::BLOCK_SIZE, 1, true);
 	swizzled_block_collection = block_collection->CloneEmpty();
@@ -88,14 +85,14 @@ void JoinHashTable::Merge(JoinHashTable &other) {
 		}
 	}
 
-	lock_guard<mutex> lock(partitioned_data_lock);
+	lock_guard<mutex> lock(partition_lock);
 	if (partition_block_collections.empty()) {
 		D_ASSERT(partition_string_heaps.empty());
 		// Move partitions to this HT
 		for (idx_t p = 0; p < other.partition_block_collections.size(); p++) {
-			partition_block_collections.push_back(std::move(other.partition_block_collections[p]));
+			partition_block_collections.push_back(move(other.partition_block_collections[p]));
 			if (!layout.AllConstant()) {
-				partition_string_heaps.push_back(std::move(other.partition_string_heaps[p]));
+				partition_string_heaps.push_back(move(other.partition_string_heaps[p]));
 			}
 		}
 		return;
@@ -132,7 +129,7 @@ void JoinHashTable::ApplyBitmask(Vector &hashes, const SelectionVector &sel, idx
 
 	auto hash_data = (hash_t *)hdata.data;
 	auto result_data = FlatVector::GetData<data_ptr_t *>(pointers);
-	auto main_ht = (data_ptr_t *)hash_map.get();
+	auto main_ht = (data_ptr_t *)hash_map.Ptr();
 	for (idx_t i = 0; i < count; i++) {
 		auto rindex = sel.get_index(i);
 		auto hindex = hdata.sel->get_index(rindex);
@@ -219,7 +216,7 @@ void JoinHashTable::Build(DataChunk &keys, DataChunk &payload) {
 		}
 		info.correlated_payload.SetCardinality(keys);
 		info.correlated_payload.data[0].Reference(keys.data[info.correlated_types.size()]);
-		info.correlated_counts->AddChunk(info.group_chunk, info.correlated_payload, AggregateType::NON_DISTINCT);
+		info.correlated_counts->AddChunk(info.group_chunk, info.correlated_payload);
 	}
 
 	// prepare the keys for processing
@@ -254,7 +251,7 @@ void JoinHashTable::Build(DataChunk &keys, DataChunk &payload) {
 	// serialize the keys to the key locations
 	for (idx_t i = 0; i < keys.ColumnCount(); i++) {
 		source_chunk.data[i].Reference(keys.data[i]);
-		source_data.emplace_back(std::move(key_data[i]));
+		source_data.emplace_back(move(key_data[i]));
 	}
 	// now serialize the payload
 	D_ASSERT(build_types.size() == payload.ColumnCount());
@@ -262,21 +259,21 @@ void JoinHashTable::Build(DataChunk &keys, DataChunk &payload) {
 		source_chunk.data[source_data.size()].Reference(payload.data[i]);
 		UnifiedVectorFormat pdata;
 		payload.data[i].ToUnifiedFormat(payload.size(), pdata);
-		source_data.emplace_back(std::move(pdata));
+		source_data.emplace_back(move(pdata));
 	}
 	if (IsRightOuterJoin(join_type)) {
 		// for FULL/RIGHT OUTER joins initialize the "found" boolean to false
 		source_chunk.data[source_data.size()].Reference(vfound);
 		UnifiedVectorFormat fdata;
 		vfound.ToUnifiedFormat(keys.size(), fdata);
-		source_data.emplace_back(std::move(fdata));
+		source_data.emplace_back(move(fdata));
 	}
 
 	// serialise the hashes at the end
 	source_chunk.data[source_data.size()].Reference(hash_values);
 	UnifiedVectorFormat hdata;
 	hash_values.ToUnifiedFormat(keys.size(), hdata);
-	source_data.emplace_back(std::move(hdata));
+	source_data.emplace_back(move(hdata));
 
 	source_chunk.SetCardinality(keys);
 
@@ -314,7 +311,7 @@ void JoinHashTable::InsertHashes(Vector &hashes, idx_t count, data_ptr_t key_loc
 	hashes.Flatten(count);
 	D_ASSERT(hashes.GetVectorType() == VectorType::FLAT_VECTOR);
 
-	auto pointers = (atomic<data_ptr_t> *)hash_map.get();
+	auto pointers = (atomic<data_ptr_t> *)hash_map.Ptr();
 	auto indices = FlatVector::GetData<hash_t>(hashes);
 
 	if (parallel) {
@@ -331,51 +328,35 @@ void JoinHashTable::InitializePointerTable() {
 	D_ASSERT((capacity & (capacity - 1)) == 0);
 	bitmask = capacity - 1;
 
-	if (!hash_map.get()) {
+	if (!hash_map.IsValid()) {
 		// allocate the HT if not yet done
-		hash_map = buffer_manager.GetBufferAllocator().Allocate(capacity * sizeof(data_ptr_t));
+		hash_map = buffer_manager.Allocate(capacity * sizeof(data_ptr_t));
 	}
-	D_ASSERT(hash_map.GetSize() == capacity * sizeof(data_ptr_t));
 
 	// initialize HT with all-zero entries
-	memset(hash_map.get(), 0, capacity * sizeof(data_ptr_t));
+	memset(hash_map.Ptr(), 0, capacity * sizeof(data_ptr_t));
 }
 
 void JoinHashTable::Finalize(idx_t block_idx_start, idx_t block_idx_end, bool parallel) {
 	// Pointer table should be allocated
-	D_ASSERT(hash_map.get());
+	D_ASSERT(hash_map.IsValid());
 
-	const auto unswizzle = external && !layout.AllConstant();
 	vector<BufferHandle> local_pinned_handles;
 
 	Vector hashes(LogicalType::HASH);
 	auto hash_data = FlatVector::GetData<hash_t>(hashes);
 	data_ptr_t key_locations[STANDARD_VECTOR_SIZE];
 	// now construct the actual hash table; scan the nodes
-	// as we scan the nodes we pin all the blocks of the HT and keep them pinned until the HT is destroyed
+	// as we can the nodes we pin all the blocks of the HT and keep them pinned until the HT is destroyed
 	// this is so that we can keep pointers around to the blocks
 	for (idx_t block_idx = block_idx_start; block_idx < block_idx_end; block_idx++) {
 		auto &block = block_collection->blocks[block_idx];
 		auto handle = buffer_manager.Pin(block->block);
 		data_ptr_t dataptr = handle.Ptr();
-
-		data_ptr_t heap_ptr = nullptr;
-		if (unswizzle) {
-			auto &heap_block = string_heap->blocks[block_idx];
-			auto heap_handle = buffer_manager.Pin(heap_block->block);
-			heap_ptr = heap_handle.Ptr();
-			local_pinned_handles.push_back(std::move(heap_handle));
-		}
-
 		idx_t entry = 0;
 		while (entry < block->count) {
-			idx_t next = MinValue<idx_t>(STANDARD_VECTOR_SIZE, block->count - entry);
-
-			if (unswizzle) {
-				RowOperations::UnswizzlePointers(layout, dataptr, heap_ptr, next);
-			}
-
 			// fetch the next vector of entries from the blocks
+			idx_t next = MinValue<idx_t>(STANDARD_VECTOR_SIZE, block->count - entry);
 			for (idx_t i = 0; i < next; i++) {
 				hash_data[i] = Load<hash_t>((data_ptr_t)(dataptr + pointer_offset));
 				key_locations[i] = dataptr;
@@ -386,12 +367,12 @@ void JoinHashTable::Finalize(idx_t block_idx_start, idx_t block_idx_end, bool pa
 
 			entry += next;
 		}
-		local_pinned_handles.push_back(std::move(handle));
+		local_pinned_handles.push_back(move(handle));
 	}
 
 	lock_guard<mutex> lock(pinned_handles_lock);
 	for (auto &local_pinned_handle : local_pinned_handles) {
-		pinned_handles.push_back(std::move(local_pinned_handle));
+		pinned_handles.push_back(move(local_pinned_handle));
 	}
 }
 
@@ -906,12 +887,6 @@ idx_t JoinHashTable::FillWithHTOffsets(data_ptr_t *key_locations, JoinHTScanStat
 	return key_count;
 }
 
-void JoinHashTable::PinAllBlocks() {
-	for (auto &block : block_collection->blocks) {
-		pinned_handles.push_back(buffer_manager.Pin(block->block));
-	}
-}
-
 void JoinHashTable::SwizzleBlocks() {
 	if (block_collection->count == 0) {
 		return;
@@ -1001,6 +976,45 @@ void JoinHashTable::SwizzleBlocks() {
 	string_heap->Clear();
 }
 
+void JoinHashTable::UnswizzleBlocks() {
+	auto &blocks = swizzled_block_collection->blocks;
+	auto &heap_blocks = swizzled_string_heap->blocks;
+#ifdef DEBUG
+	if (!layout.AllConstant()) {
+		D_ASSERT(blocks.size() == heap_blocks.size());
+		D_ASSERT(swizzled_block_collection->count == swizzled_string_heap->count);
+	}
+#endif
+
+	for (idx_t block_idx = 0; block_idx < blocks.size(); block_idx++) {
+		auto &data_block = blocks[block_idx];
+
+		if (!layout.AllConstant()) {
+			auto block_handle = buffer_manager.Pin(data_block->block);
+
+			auto &heap_block = heap_blocks[block_idx];
+			D_ASSERT(data_block->count == heap_block->count);
+			auto heap_handle = buffer_manager.Pin(heap_block->block);
+
+			// Unswizzle and move
+			RowOperations::UnswizzlePointers(layout, block_handle.Ptr(), heap_handle.Ptr(), data_block->count);
+			string_heap->blocks.push_back(move(heap_block));
+			string_heap->pinned_blocks.push_back(move(heap_handle));
+		}
+
+		// Fixed size stuff can just be moved
+		block_collection->blocks.push_back(move(data_block));
+	}
+
+	// Update counts and clean up
+	block_collection->count = swizzled_block_collection->count;
+	string_heap->count = swizzled_string_heap->count;
+	swizzled_block_collection->Clear();
+	swizzled_string_heap->Clear();
+
+	D_ASSERT(SwizzledCount() == 0);
+}
+
 void JoinHashTable::ComputePartitionSizes(ClientConfig &config, vector<unique_ptr<JoinHashTable>> &local_hts,
                                           idx_t max_ht_size) {
 	external = true;
@@ -1020,12 +1034,12 @@ void JoinHashTable::ComputePartitionSizes(ClientConfig &config, vector<unique_pt
 	}
 
 	total_size += PointerTableCapacity(total_count) * sizeof(data_ptr_t);
-	double avg_tuple_size = double(total_size) / double(total_count);
-	tuples_per_round = double(max_ht_size) / avg_tuple_size;
+	idx_t avg_tuple_size = total_size / total_count;
+	tuples_per_round = max_ht_size / avg_tuple_size;
 
 	if (config.force_external) {
-		// For force_external we do at least three rounds to test all code paths
-		tuples_per_round = MinValue<idx_t>((total_count + 2) / 3, tuples_per_round);
+		// For force_external we do three rounds to test all code paths
+		tuples_per_round = (total_count + 2) / 3;
 	}
 
 	// Set the number of radix bits (minimum 4, maximum 8)
@@ -1050,9 +1064,9 @@ void JoinHashTable::Partition(JoinHashTable &global_ht) {
 
 	// Swizzle and Partition
 	SwizzleBlocks();
-	RadixPartitioning::PartitionRowData(global_ht.buffer_manager, global_ht.layout, global_ht.pointer_offset,
-	                                    *swizzled_block_collection, *swizzled_string_heap, partition_block_collections,
-	                                    partition_string_heaps, global_ht.radix_bits);
+	RadixPartitioning::Partition(global_ht.buffer_manager, global_ht.layout, global_ht.pointer_offset,
+	                             *swizzled_block_collection, *swizzled_string_heap, partition_block_collections,
+	                             partition_string_heaps, global_ht.radix_bits);
 
 	// Add to global HT
 	global_ht.Merge(*this);
@@ -1110,9 +1124,7 @@ bool JoinHashTable::PrepareExternalFinalize() {
 
 	// Unswizzle them
 	D_ASSERT(Count() == 0);
-	// Move swizzled data to regular data (will be unswizzled in 'Finalize()')
-	block_collection->Merge(*swizzled_block_collection);
-	string_heap->Merge(*swizzled_string_heap);
+	UnswizzleBlocks();
 	D_ASSERT(count == Count());
 
 	return true;
@@ -1132,8 +1144,9 @@ static void CreateSpillChunk(DataChunk &spill_chunk, DataChunk &keys, DataChunk 
 	spill_chunk.data[spill_col_idx].Reference(hashes);
 }
 
-unique_ptr<ScanStructure> JoinHashTable::ProbeAndSpill(DataChunk &keys, DataChunk &payload, ProbeSpill &probe_spill,
-                                                       ProbeSpillLocalAppendState &spill_state,
+unique_ptr<ScanStructure> JoinHashTable::ProbeAndSpill(DataChunk &keys, DataChunk &payload,
+                                                       ColumnDataCollection &spill_collection,
+                                                       ColumnDataAppendState &spill_append_state,
                                                        DataChunk &spill_chunk) {
 	// hash all the keys
 	Vector hashes(LogicalType::HASH);
@@ -1148,12 +1161,11 @@ unique_ptr<ScanStructure> JoinHashTable::ProbeAndSpill(DataChunk &keys, DataChun
 	                                            radix_bits, partition_end, &true_sel, &false_sel);
 	auto false_count = keys.size() - true_count;
 
+	// slice the stuff we CAN'T probe right now and append to spill collection
 	CreateSpillChunk(spill_chunk, keys, payload, hashes);
-
-	// can't probe these values right now, append to spill
 	spill_chunk.Slice(false_sel, false_count);
 	spill_chunk.Verify();
-	probe_spill.Append(spill_chunk, spill_state);
+	spill_collection.Append(spill_append_state, spill_chunk);
 
 	// slice the stuff we CAN probe right now
 	hashes.Slice(true_sel, true_count);
@@ -1173,98 +1185,6 @@ unique_ptr<ScanStructure> JoinHashTable::ProbeAndSpill(DataChunk &keys, DataChun
 	ss->InitializeSelectionVector(current_sel);
 
 	return ss;
-}
-
-ProbeSpill::ProbeSpill(JoinHashTable &ht, ClientContext &context, const vector<LogicalType> &probe_types)
-    : ht(ht), context(context), probe_types(probe_types) {
-	if (ht.total_count - ht.Count() <= ht.tuples_per_round) {
-		// No need to partition as we will only have one more probe round
-		partitioned = false;
-	} else {
-		// More than one probe round to go, so we need to partition
-		partitioned = true;
-		global_partitions =
-		    make_unique<RadixPartitionedColumnData>(context, probe_types, ht.radix_bits, probe_types.size() - 1);
-	}
-	column_ids.reserve(probe_types.size());
-	for (column_t column_id = 0; column_id < probe_types.size(); column_id++) {
-		column_ids.emplace_back(column_id);
-	}
-}
-
-ProbeSpillLocalState ProbeSpill::RegisterThread() {
-	ProbeSpillLocalAppendState result;
-	lock_guard<mutex> guard(lock);
-	if (partitioned) {
-		local_partitions.emplace_back(global_partitions->CreateShared());
-		local_partition_append_states.emplace_back(make_unique<PartitionedColumnDataAppendState>());
-		local_partitions.back()->InitializeAppendState(*local_partition_append_states.back());
-
-		result.local_partition = local_partitions.back().get();
-		result.local_partition_append_state = local_partition_append_states.back().get();
-	} else {
-		local_spill_collections.emplace_back(
-		    make_unique<ColumnDataCollection>(BufferManager::GetBufferManager(context), probe_types));
-		local_spill_append_states.emplace_back(make_unique<ColumnDataAppendState>());
-		local_spill_collections.back()->InitializeAppend(*local_spill_append_states.back());
-
-		result.local_spill_collection = local_spill_collections.back().get();
-		result.local_spill_append_state = local_spill_append_states.back().get();
-	}
-	return result;
-}
-
-void ProbeSpill::Append(DataChunk &chunk, ProbeSpillLocalAppendState &local_state) {
-	if (partitioned) {
-		local_state.local_partition->Append(*local_state.local_partition_append_state, chunk);
-	} else {
-		local_state.local_spill_collection->Append(*local_state.local_spill_append_state, chunk);
-	}
-}
-
-void ProbeSpill::Finalize() {
-	if (partitioned) {
-		D_ASSERT(local_partitions.size() == local_partition_append_states.size());
-		for (idx_t i = 0; i < local_partition_append_states.size(); i++) {
-			local_partitions[i]->FlushAppendState(*local_partition_append_states[i]);
-		}
-		for (auto &local_partition : local_partitions) {
-			global_partitions->Combine(*local_partition);
-		}
-		local_partitions.clear();
-		local_partition_append_states.clear();
-	} else {
-		if (local_spill_collections.empty()) {
-			global_spill_collection =
-			    make_unique<ColumnDataCollection>(BufferManager::GetBufferManager(context), probe_types);
-		} else {
-			global_spill_collection = std::move(local_spill_collections[0]);
-			for (idx_t i = 1; i < local_spill_collections.size(); i++) {
-				global_spill_collection->Combine(*local_spill_collections[i]);
-			}
-		}
-		local_spill_collections.clear();
-		local_spill_append_states.clear();
-	}
-}
-
-void ProbeSpill::PrepareNextProbe() {
-	if (partitioned) {
-		auto &partitions = global_partitions->GetPartitions();
-		if (partitions.empty() || ht.partition_start == partitions.size()) {
-			// Can't probe, just make an empty one
-			global_spill_collection =
-			    make_unique<ColumnDataCollection>(BufferManager::GetBufferManager(context), probe_types);
-		} else {
-			// Move specific partitions to the global spill collection
-			global_spill_collection = std::move(partitions[ht.partition_start]);
-			for (idx_t i = ht.partition_start + 1; i < ht.partition_end; i++) {
-				global_spill_collection->Combine(*partitions[i]);
-			}
-		}
-	}
-	consumer = make_unique<ColumnDataConsumer>(*global_spill_collection, column_ids);
-	consumer->InitializeScan();
 }
 
 } // namespace duckdb

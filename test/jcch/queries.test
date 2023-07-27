@@ -1,0 +1,113 @@
+# name: test/jcch/queries.test
+# description: Run JCC-H suite
+# group: [jcch]
+
+statement ok
+CREATE TABLE customer AS SELECT * FROM 'test/jcch/data/customer.csv'
+
+statement ok
+CREATE TABLE lineitem AS SELECT * FROM 'test/jcch/data/lineitem.csv'
+
+statement ok
+CREATE TABLE nation AS SELECT * FROM 'test/jcch/data/nation.csv'
+
+statement ok
+CREATE TABLE orders AS SELECT * FROM 'test/jcch/data/orders.csv'
+
+statement ok
+CREATE TABLE part AS SELECT * FROM 'test/jcch/data/part.csv'
+
+statement ok
+CREATE TABLE partsupp AS SELECT * FROM 'test/jcch/data/partsupp.csv'
+
+statement ok
+CREATE TABLE region AS SELECT * FROM 'test/jcch/data/region.csv'
+
+statement ok
+CREATE TABLE supplier AS SELECT * FROM 'test/jcch/data/supplier.csv'
+
+statement ok
+PRAGMA enable_polr_bushy
+
+statement ok
+SET threads TO 1
+
+query III
+SELECT
+    nation,
+    o_year,
+    sum(amount) AS sum_profit
+FROM (
+    SELECT
+        n_name AS nation,
+        extract(year FROM o_orderdate) AS o_year,
+        l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity AS amount
+    FROM
+        part,
+        supplier,
+        lineitem,
+        partsupp,
+        orders,
+        nation
+    WHERE
+        s_suppkey = l_suppkey
+        AND ps_suppkey = l_suppkey
+        AND ps_partkey = l_partkey
+        AND p_partkey = l_partkey
+        AND o_orderkey = l_orderkey
+        AND s_nationkey = n_nationkey
+        AND p_name LIKE '%ined gold') AS profit
+GROUP BY
+    nation,
+    o_year
+ORDER BY
+    nation,
+    o_year DESC
+----
+MOROCCO	1998	1978500812.8791738
+MOROCCO	1997	3362625434.3709025
+MOROCCO	1994	3358740024.428138
+MOROCCO	1993	3327448467.2899933
+MOROCCO	1992	3364431638.5981946
+
+query IIII
+SELECT
+    supp_nation,
+    cust_nation,
+    l_year,
+    sum(volume) AS revenue
+FROM (
+    SELECT
+        n1.n_name AS supp_nation,
+        n2.n_name AS cust_nation,
+        extract(year FROM l_shipdate) AS l_year,
+        l_extendedprice * (1 - l_discount) AS volume
+    FROM
+        supplier,
+        lineitem,
+        orders,
+        customer,
+        nation n1,
+        nation n2
+    WHERE
+        s_suppkey = l_suppkey
+        AND o_orderkey = l_orderkey
+        AND c_custkey = o_custkey
+        AND s_nationkey = n1.n_nationkey
+        AND c_nationkey = n2.n_nationkey
+        AND ((n1.n_name = 'EGYPT'
+                AND n2.n_name = 'CHINA')
+            OR (n1.n_name = 'CHINA'
+                AND n2.n_name = 'EGYPT'))
+        AND l_shipdate BETWEEN CAST('1993-01-01' AS date)
+        AND CAST('1994-12-31' AS date)) AS shipping
+GROUP BY
+    supp_nation,
+    cust_nation,
+    l_year
+ORDER BY
+    supp_nation,
+    cust_nation,
+    l_year
+----
+EGYPT	CHINA	1994	5218462484.792456

@@ -18,7 +18,7 @@ class PhysicalLoad : public PhysicalOperator {
 public:
 	explicit PhysicalLoad(unique_ptr<LoadInfo> info, idx_t estimated_cardinality)
 	    : PhysicalOperator(PhysicalOperatorType::LOAD, {LogicalType::BOOLEAN}, estimated_cardinality),
-	      info(std::move(info)) {
+	      info(move(info)) {
 	}
 
 	unique_ptr<LoadInfo> info;

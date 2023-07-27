@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "duckdb/common/allocator.hpp"
 #include "duckdb/common/atomic.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/mutex.hpp"
@@ -16,6 +15,7 @@
 #include "duckdb/storage/block_manager.hpp"
 #include "duckdb/storage/buffer/block_handle.hpp"
 #include "duckdb/storage/buffer/buffer_handle.hpp"
+#include "duckdb/common/allocator.hpp"
 
 namespace duckdb {
 class BlockManager;
@@ -35,17 +35,16 @@ class BufferManager {
 
 public:
 	BufferManager(DatabaseInstance &db, string temp_directory, idx_t maximum_memory);
-	virtual ~BufferManager();
+	~BufferManager();
 
-	//! Registers an in-memory buffer that cannot be unloaded until it is destroyed
-	//! This buffer can be small (smaller than BLOCK_SIZE)
-	//! Unpin and pin are nops on this block of memory
-	shared_ptr<BlockHandle> RegisterSmallMemory(idx_t block_size);
+	//! Register an in-memory buffer of arbitrary size, as long as it is >= BLOCK_SIZE. can_destroy signifies whether or
+	//! not the buffer can be destroyed when unpinned, or whether or not it needs to be written to a temporary file so
+	//! it can be reloaded. The resulting buffer will already be allocated, but needs to be pinned in order to be used.
+	shared_ptr<BlockHandle> RegisterMemory(idx_t block_size, bool can_destroy);
 
 	//! Allocate an in-memory buffer with a single pin.
 	//! The allocated memory is released when the buffer handle is destroyed.
-	DUCKDB_API BufferHandle Allocate(idx_t block_size, bool can_destroy = true,
-	                                 shared_ptr<BlockHandle> *block = nullptr);
+	DUCKDB_API BufferHandle Allocate(idx_t block_size);
 
 	//! Reallocate an in-memory buffer that is pinned.
 	void ReAllocate(shared_ptr<BlockHandle> &handle, idx_t block_size);
@@ -57,9 +56,8 @@ public:
 	//! blocks can be evicted
 	void SetLimit(idx_t limit = (idx_t)-1);
 
-	DUCKDB_API static BufferManager &GetBufferManager(ClientContext &context);
+	static BufferManager &GetBufferManager(ClientContext &context);
 	DUCKDB_API static BufferManager &GetBufferManager(DatabaseInstance &db);
-	DUCKDB_API static BufferManager &GetBufferManager(AttachedDatabase &db);
 
 	idx_t GetUsedMemory() {
 		return current_memory;
@@ -80,42 +78,12 @@ public:
 		return db;
 	}
 
-	static idx_t GetAllocSize(idx_t block_size) {
-		return AlignValue<idx_t, Storage::SECTOR_SIZE>(block_size + Storage::BLOCK_HEADER_SIZE);
-	}
-
-	//! Construct a managed buffer.
-	//! The block_id is just used for internal tracking. It doesn't map to any actual
-	//! BlockManager.
-	virtual unique_ptr<FileBuffer> ConstructManagedBuffer(idx_t size, unique_ptr<FileBuffer> &&source,
-	                                                      FileBufferType type = FileBufferType::MANAGED_BUFFER);
-
-	DUCKDB_API void ReserveMemory(idx_t size);
-	DUCKDB_API void FreeReservedMemory(idx_t size);
-
 private:
-	//! Register an in-memory buffer of arbitrary size, as long as it is >= BLOCK_SIZE. can_destroy signifies whether or
-	//! not the buffer can be destroyed when unpinned, or whether or not it needs to be written to a temporary file so
-	//! it can be reloaded. The resulting buffer will already be allocated, but needs to be pinned in order to be used.
-	//! This needs to be private to prevent creating blocks without ever pinning them:
-	//! blocks that are never pinned are never added to the eviction queue
-	shared_ptr<BlockHandle> RegisterMemory(idx_t block_size, bool can_destroy);
 	//! Evict blocks until the currently used memory + extra_memory fit, returns false if this was not possible
 	//! (i.e. not enough blocks could be evicted)
 	//! If the "buffer" argument is specified AND the system can find a buffer to re-use for the given allocation size
 	//! "buffer" will be made to point to the re-usable memory. Note that this is not guaranteed.
-	//! Returns a pair. result.first indicates if eviction was successful. result.second contains the
-	//! reservation handle, which can be moved to the BlockHandle that will own the reservation.
-	struct EvictionResult {
-		bool success;
-		TempBufferPoolReservation reservation;
-	};
-	EvictionResult EvictBlocks(idx_t extra_memory, idx_t memory_limit, unique_ptr<FileBuffer> *buffer = nullptr);
-
-	//! Helper
-	template <typename... ARGS>
-	TempBufferPoolReservation EvictBlocksOrThrow(idx_t extra_memory, idx_t limit, unique_ptr<FileBuffer> *buffer,
-	                                             ARGS...);
+	bool EvictBlocks(idx_t extra_memory, idx_t memory_limit, unique_ptr<FileBuffer> *buffer = nullptr);
 
 	//! Garbage collect eviction queue
 	void PurgeQueue();
@@ -140,10 +108,6 @@ private:
 	static data_ptr_t BufferAllocatorRealloc(PrivateAllocatorData *private_data, data_ptr_t pointer, idx_t old_size,
 	                                         idx_t size);
 
-	//! When the BlockHandle reaches 0 readers, this creates a new FileBuffer for this BlockHandle and
-	//! overwrites the data within with garbage. Any readers that do not hold the pin will notice
-	void VerifyZeroReaders(shared_ptr<BlockHandle> &handle);
-
 private:
 	//! The database instance
 	DatabaseInstance &db;
@@ -163,8 +127,6 @@ private:
 	unique_ptr<EvictionQueue> queue;
 	//! The temporary id used for managed buffers
 	atomic<block_id_t> temporary_id;
-	//! Total number of insertions into the eviction queue. This guides the schedule for calling PurgeQueue.
-	atomic<uint32_t> queue_insertions;
 	//! Allocator associated with the buffer manager, that passes all allocations through this buffer manager
 	Allocator buffer_allocator;
 	//! Block manager for temp data

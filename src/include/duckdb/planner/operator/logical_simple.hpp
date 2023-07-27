@@ -17,7 +17,7 @@ namespace duckdb {
 //! LogicalSimple represents a simple logical operator that only passes on the parse info
 class LogicalSimple : public LogicalOperator {
 public:
-	LogicalSimple(LogicalOperatorType type, unique_ptr<ParseInfo> info) : LogicalOperator(type), info(std::move(info)) {
+	LogicalSimple(LogicalOperatorType type, unique_ptr<ParseInfo> info) : LogicalOperator(type), info(move(info)) {
 	}
 
 	unique_ptr<ParseInfo> info;
@@ -25,7 +25,6 @@ public:
 public:
 	void Serialize(FieldWriter &writer) const override;
 	static unique_ptr<LogicalOperator> Deserialize(LogicalDeserializationState &state, FieldReader &reader);
-	idx_t EstimateCardinality(ClientContext &context) override;
 
 protected:
 	void ResolveTypes() override {

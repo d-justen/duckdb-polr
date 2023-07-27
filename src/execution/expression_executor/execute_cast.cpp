@@ -1,25 +1,19 @@
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
-#include "duckdb/function/scalar_function.hpp"
 #include "duckdb/planner/expression/bound_cast_expression.hpp"
 
 namespace duckdb {
 
 unique_ptr<ExpressionState> ExpressionExecutor::InitializeState(const BoundCastExpression &expr,
                                                                 ExpressionExecutorState &root) {
-	auto result = make_unique<ExecuteFunctionState>(expr, root);
+	auto result = make_unique<ExpressionState>(expr, root);
 	result->AddChild(expr.child.get());
 	result->Finalize();
-	if (expr.bound_cast.init_local_state) {
-		result->local_state = expr.bound_cast.init_local_state(root.executor->GetContext());
-	}
-	return std::move(result);
+	return result;
 }
 
 void ExpressionExecutor::Execute(const BoundCastExpression &expr, ExpressionState *state, const SelectionVector *sel,
                                  idx_t count, Vector &result) {
-	auto lstate = ExecuteFunctionState::GetFunctionState(*state);
-
 	// resolve the child
 	state->intermediate_chunk.Reset();
 
@@ -29,12 +23,12 @@ void ExpressionExecutor::Execute(const BoundCastExpression &expr, ExpressionStat
 	Execute(*expr.child, child_state, sel, count, child);
 	if (expr.try_cast) {
 		string error_message;
-		CastParameters parameters(expr.bound_cast.cast_data.get(), false, &error_message, lstate);
+		CastParameters parameters(expr.bound_cast.cast_data.get(), false, &error_message);
 		expr.bound_cast.function(child, result, count, parameters);
 	} else {
 		// cast it to the type specified by the cast expression
 		D_ASSERT(result.GetType() == expr.return_type);
-		CastParameters parameters(expr.bound_cast.cast_data.get(), false, nullptr, lstate);
+		CastParameters parameters(expr.bound_cast.cast_data.get(), false, nullptr);
 		expr.bound_cast.function(child, result, count, parameters);
 	}
 }

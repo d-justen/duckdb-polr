@@ -15,7 +15,7 @@ class Executor;
 
 class PipelineFinishEvent : public BasePipelineEvent {
 public:
-	explicit PipelineFinishEvent(shared_ptr<Pipeline> pipeline);
+	PipelineFinishEvent(shared_ptr<Pipeline> pipeline);
 
 public:
 	void Schedule() override;

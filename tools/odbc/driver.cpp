@@ -6,7 +6,6 @@
 #include "odbc_utils.hpp"
 
 #include "duckdb/main/config.hpp"
-#include "duckdb/main/db_instance_cache.hpp"
 
 #include <odbcinst.h>
 #include <locale>
@@ -184,9 +183,6 @@ static void GetDatabaseNameFromDSN(duckdb::OdbcHandleDbc *dbc, SQLCHAR *conn_str
 #endif
 }
 
-//! The database instance cache, used so that multiple connections to the same file point to the same database object
-duckdb::DBInstanceCache instance_cache;
-
 static SQLRETURN SetConnection(SQLHDBC connection_handle, SQLCHAR *conn_str) {
 	// TODO actually interpret Database in in_connection_string
 	if (!connection_handle) {
@@ -210,8 +206,7 @@ static SQLRETURN SetConnection(SQLHDBC connection_handle, SQLCHAR *conn_str) {
 		if (dbc->sql_attr_access_mode == SQL_MODE_READ_ONLY) {
 			config.options.access_mode = duckdb::AccessMode::READ_ONLY;
 		}
-		bool cache_instance = db_name != ":memory:" && !db_name.empty();
-		dbc->env->db = instance_cache.GetOrCreateInstance(db_name, config, cache_instance);
+		dbc->env->db = duckdb::make_unique<duckdb::DuckDB>(db_name, &config);
 	}
 
 	if (!dbc->conn) {

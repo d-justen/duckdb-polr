@@ -1,6 +1,6 @@
 #pragma once
 
-#if defined(_WIN32)
+#ifdef _WIN32
 
 #ifndef NOMINMAX
 #define NOMINMAX

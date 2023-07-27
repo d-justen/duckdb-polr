@@ -28,7 +28,7 @@ public:
 	};
 
 public:
-	UndoBuffer(ClientContext &context);
+	UndoBuffer(const shared_ptr<ClientContext> &context);
 
 	//! Reserve space for an entry of the specified type and length in the undo
 	//! buffer

@@ -27,9 +27,9 @@ public:
 	idx_t query_location;
 
 public:
-	DUCKDB_API static string Format(const string &query, const string &error_message, int error_location);
+	static string Format(const string &query, const string &error_message, int error_location);
 
-	DUCKDB_API string FormatErrorRecursive(const string &msg, vector<ExceptionFormatValue> &values);
+	string FormatErrorRecursive(const string &msg, vector<ExceptionFormatValue> &values);
 	template <class T, typename... Args>
 	string FormatErrorRecursive(const string &msg, vector<ExceptionFormatValue> &values, T param, Args... params) {
 		values.push_back(ExceptionFormatValue::CreateFormatValue<T>(param));

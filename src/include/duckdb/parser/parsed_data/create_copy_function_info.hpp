@@ -14,7 +14,10 @@
 namespace duckdb {
 
 struct CreateCopyFunctionInfo : public CreateInfo {
-	DUCKDB_API explicit CreateCopyFunctionInfo(CopyFunction function);
+	explicit CreateCopyFunctionInfo(CopyFunction function)
+	    : CreateInfo(CatalogType::COPY_FUNCTION_ENTRY), function(function) {
+		this->name = function.name;
+	}
 
 	//! Function name
 	string name;
@@ -22,10 +25,16 @@ struct CreateCopyFunctionInfo : public CreateInfo {
 	CopyFunction function;
 
 protected:
-	void SerializeInternal(Serializer &) const override;
+	void SerializeInternal(Serializer &) const override {
+		throw NotImplementedException("Cannot serialize '%s'", CatalogTypeToString(type));
+	}
 
 public:
-	unique_ptr<CreateInfo> Copy() const override;
+	unique_ptr<CreateInfo> Copy() const override {
+		auto result = make_unique<CreateCopyFunctionInfo>(function);
+		CopyProperties(*result);
+		return move(result);
+	}
 };
 
 } // namespace duckdb

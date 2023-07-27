@@ -5,20 +5,16 @@
 namespace duckdb {
 
 ParsedStatementVerifier::ParsedStatementVerifier(unique_ptr<SQLStatement> statement_p)
-    : StatementVerifier(VerificationType::PARSED, "Parsed", std::move(statement_p)) {
+    : StatementVerifier(VerificationType::PARSED, "Parsed", move(statement_p)) {
 }
 
 unique_ptr<StatementVerifier> ParsedStatementVerifier::Create(const SQLStatement &statement) {
 	auto query_str = statement.ToString();
 	Parser parser;
-	try {
-		parser.ParseQuery(query_str);
-	} catch (std::exception &ex) {
-		throw InternalException("Parsed statement verification failed. Query:\n%s\n\nError: %s", query_str, ex.what());
-	}
+	parser.ParseQuery(query_str);
 	D_ASSERT(parser.statements.size() == 1);
 	D_ASSERT(parser.statements[0]->type == StatementType::SELECT_STATEMENT);
-	return make_unique<ParsedStatementVerifier>(std::move(parser.statements[0]));
+	return make_unique<ParsedStatementVerifier>(move(parser.statements[0]));
 }
 
 } // namespace duckdb

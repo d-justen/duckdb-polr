@@ -67,30 +67,23 @@ SELECT levenshtein(NULL, NULL)
 ----
 NULL
 
-query I
-SELECT levenshtein('', NULL)
-----
-NULL
+statement ok
+SELECT mismatches('', NULL) 
 
-query I
-SELECT levenshtein(NULL, '')
-----
-NULL
+statement ok
+SELECT mismatches(NULL, '') 
 
-query I
-SELECT levenshtein('', 'hi')
-----
-2
 
-query I
-SELECT levenshtein('hi', '')
-----
-2
+# incorrect usage
+statement error
+SELECT mismatches('', 'hi') 
 
-query I
-SELECT levenshtein('', '')
-----
-0
+statement error
+SELECT mismatches('hi', '') 
+
+statement error
+SELECT mismatches('', '') 
+
 
 
 statement ok
@@ -120,7 +113,7 @@ SELECT levenshtein('hallo', s) FROM strings ORDER BY s
 1
 
 query I
-SELECT levenshtein(NULL, s) FROM strings
+SELECT levenshtein(NULL, s) FROM strings 
 ----
 NULL
 NULL
@@ -130,7 +123,7 @@ NULL
 NULL
 
 query I
-SELECT levenshtein(NULL, s) FROM strings
+SELECT levenshtein(NULL, s) FROM strings 
 ----
 NULL
 NULL
@@ -139,25 +132,11 @@ NULL
 NULL
 NULL
 
-query I
-SELECT levenshtein('', s) FROM strings ORDER BY s
-----
-5
-5
-5
-6
-5
-5
+statement error
+SELECT mismatches('', s) FROM strings
 
-query I
-SELECT levenshtein(s, '') FROM strings ORDER BY s
-----
-5
-5
-5
-6
-5
-5
+statement error
+SELECT mismatches(s, '')  FROM strings
 
 
 statement ok
@@ -190,12 +169,12 @@ SELECT levenshtein(s, 'hi') from strings
 NULL
 
 query I
-SELECT levenshtein('', s)  FROM strings
+SELECT mismatches('', s)  FROM strings
 ----
 NULL
 
 query I
-SELECT levenshtein(s, '')  FROM strings
+SELECT mismatches(s, '')  FROM strings
 ----
 NULL
 
@@ -210,34 +189,27 @@ statement ok
 INSERT INTO strings VALUES ('')
 
 query I
-SELECT levenshtein(NULL, s)  FROM strings
+SELECT mismatches(NULL, s)  FROM strings
 ----
 NULL
 
 query I
-SELECT levenshtein(s, NULL)  FROM strings
+SELECT mismatches(s, NULL)  FROM strings
 ----
 NULL
 
-query I
-SELECT levenshtein(s, '')  FROM strings
-----
-0
+statement error
+SELECT mismatches(s, '')  FROM strings
 
-query I
-SELECT levenshtein('', s)  FROM strings
-----
-0
+statement error
+SELECT mismatches('', s)  FROM strings
 
-query I
-SELECT levenshtein(s, 'hi')  FROM strings
-----
-2
+statement error
+SELECT mismatches(s, 'hi')  FROM strings
 
-query I
-SELECT levenshtein('hi', s)  FROM strings
-----
-2
+statement error
+SELECT mismatches('hi', s)  FROM strings
+
 
 
 # editdist3
@@ -246,10 +218,9 @@ SELECT editdist3('hallo', 'hello')
 ----
 1
 
-query I
+statement error
 SELECT editdist3(s, 'hello') FROM strings
-----
-5
+
 
 # Comparing fields from two columns row wise
 
@@ -261,15 +232,15 @@ CREATE TABLE strings(s VARCHAR, t VARCHAR)
 
 statement ok
 INSERT INTO strings VALUES 	('hello', 'hello'), ('hello', 'hallo'), ('flaw', 'lawn'),
-							('sitting', 'kitten'), ('hallo', 'aloha'), ('hello', 'aloha'),
-							(NULL, NULL), ('', ''),
-							(NULL, 'bora'), ('bora', NULL),
-							('hi', ''), ('', 'hi'),
+							('sitting', 'kitten'), ('hallo', 'aloha'), ('hello', 'aloha'), 
+							(NULL, NULL), ('', ''), 
+							(NULL, 'bora'), ('bora', NULL), 
+							('hi', ''), ('', 'hi'), 
 							(NULL, ''), ('', NULL)
 
 
 query I
-SELECT levenshtein(s, t) ld FROM strings
+SELECT levenshtein(s, t) ld FROM strings WHERE length(s) > 1 AND length(t) > 0 AND s is not NULL and t is not NULL
 ----
 0
 1
@@ -277,11 +248,26 @@ SELECT levenshtein(s, t) ld FROM strings
 3
 4
 5
-NULL
-0
-NULL
-NULL
-2
-2
-NULL
-NULL
+
+# NULL inserts result in empty string
+
+statement error
+SELECT levenshtein(s, t)  FROM strings
+
+statement error
+SELECT s, t, levenshtein(s, t) ld FROM strings WHERE length(s) > 1 AND s is not NULL and t is not NULL
+
+statement error
+SELECT levenshtein(s, t)  FROM strings WHERE length(s) < 1
+
+statement error
+SELECT levenshtein(t, s)  FROM strings WHERE length(s) < 1
+
+statement error
+SELECT levenshtein(s, t)  FROM strings WHERE length(t) < 1
+
+statement error
+SELECT levenshtein(t, s)  FROM strings WHERE length(t) < 1
+
+statement error
+SELECT levenshtein(s, t)  FROM strings WHERE rowid > 5

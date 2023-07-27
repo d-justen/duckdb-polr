@@ -14,8 +14,6 @@
 #include "duckdb/transaction/local_storage.hpp"
 #include "duckdb/main/config.hpp"
 #include "duckdb/storage/table/column_data.hpp"
-#include "duckdb/main/client_data.hpp"
-#include "duckdb/main/attached_database.hpp"
 
 #include <cstring>
 
@@ -28,14 +26,19 @@ TransactionData::TransactionData(transaction_t transaction_id_p, transaction_t s
     : transaction(nullptr), transaction_id(transaction_id_p), start_time(start_time_p) {
 }
 
-Transaction::Transaction(TransactionManager &manager_p, ClientContext &context_p, transaction_t start_time,
-                         transaction_t transaction_id)
-    : manager(manager_p), context(context_p.shared_from_this()), start_time(start_time), transaction_id(transaction_id),
-      commit_id(0), active_query(MAXIMUM_QUERY_ID), highest_active_query(0), undo_buffer(context_p),
-      storage(make_unique<LocalStorage>(context_p, *this)) {
+Transaction::Transaction(weak_ptr<ClientContext> context_p, transaction_t start_time, transaction_t transaction_id,
+                         timestamp_t start_timestamp, idx_t catalog_version)
+    : context(move(context_p)), start_time(start_time), transaction_id(transaction_id), commit_id(0),
+      highest_active_query(0), active_query(MAXIMUM_QUERY_ID), start_timestamp(start_timestamp),
+      catalog_version(catalog_version), is_invalidated(false), undo_buffer(context.lock()),
+      storage(make_unique<LocalStorage>(*this)) {
 }
 
 Transaction::~Transaction() {
+}
+
+Transaction &Transaction::GetTransaction(ClientContext &context) {
+	return context.ActiveTransaction();
 }
 
 LocalStorage &Transaction::GetLocalStorage() {
@@ -92,29 +95,23 @@ bool Transaction::ChangesMade() {
 	return undo_buffer.ChangesMade() || storage->ChangesMade();
 }
 
-bool Transaction::AutomaticCheckpoint(AttachedDatabase &db) {
-	auto &storage_manager = db.GetStorageManager();
+bool Transaction::AutomaticCheckpoint(DatabaseInstance &db) {
+	auto &storage_manager = StorageManager::GetStorageManager(db);
 	return storage_manager.AutomaticCheckpoint(storage->EstimatedSize() + undo_buffer.EstimatedSize());
 }
 
-string Transaction::Commit(AttachedDatabase &db, transaction_t commit_id, bool checkpoint) noexcept {
+string Transaction::Commit(DatabaseInstance &db, transaction_t commit_id, bool checkpoint) noexcept {
 	// "checkpoint" parameter indicates if the caller will checkpoint. If checkpoint ==
 	//    true: Then this function will NOT write to the WAL or flush/persist.
 	//          This method only makes commit in memory, expecting caller to checkpoint/flush.
 	//    false: Then this function WILL write to the WAL and Flush/Persist it.
 	this->commit_id = commit_id;
+	auto &storage_manager = StorageManager::GetStorageManager(db);
+	auto log = storage_manager.GetWriteAheadLog();
 
 	UndoBuffer::IteratorState iterator_state;
 	LocalStorage::CommitState commit_state;
-	unique_ptr<StorageCommitState> storage_commit_state;
-	WriteAheadLog *log;
-	if (!db.IsSystem()) {
-		auto &storage_manager = db.GetStorageManager();
-		log = storage_manager.GetWriteAheadLog();
-		storage_commit_state = storage_manager.GenStorageCommitState(*this, checkpoint);
-	} else {
-		log = nullptr;
-	}
+	auto storage_commit_state = storage_manager.GenStorageCommitState(*this, checkpoint);
 	try {
 		storage->Commit(commit_state, *this);
 		undo_buffer.Commit(iterator_state, log, commit_id);
@@ -124,9 +121,7 @@ string Transaction::Commit(AttachedDatabase &db, transaction_t commit_id, bool c
 				log->WriteSequenceValue(entry.first, entry.second);
 			}
 		}
-		if (storage_commit_state) {
-			storage_commit_state->FlushCommit();
-		}
+		storage_commit_state->FlushCommit();
 		return string();
 	} catch (std::exception &ex) {
 		undo_buffer.RevertCommit(iterator_state, transaction_id);
@@ -141,6 +136,13 @@ void Transaction::Rollback() noexcept {
 
 void Transaction::Cleanup() {
 	undo_buffer.Cleanup();
+}
+
+void Transaction::Invalidate() {
+	is_invalidated = true;
+}
+bool Transaction::IsInvalidated() {
+	return is_invalidated;
 }
 
 } // namespace duckdb

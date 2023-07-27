@@ -23,11 +23,7 @@ unique_ptr<LogicalOperator> LogicalExpressionGet::Deserialize(LogicalDeserializa
 		expressions.push_back(reader.ReadRequiredSerializableList<Expression>(state.gstate));
 	}
 
-	return make_unique<LogicalExpressionGet>(table_index, expr_types, std::move(expressions));
-}
-
-vector<idx_t> LogicalExpressionGet::GetTableIndex() const {
-	return vector<idx_t> {table_index};
+	return make_unique<LogicalExpressionGet>(table_index, expr_types, move(expressions));
 }
 
 } // namespace duckdb

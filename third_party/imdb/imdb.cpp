@@ -14,7 +14,7 @@ void dbgen(DuckDB &db) {
 	for (int t = 0; t < IMDB_TABLE_COUNT; t++) {
 		con.Query(IMDB_TABLE_DDL[t]);
 		string table_name = string(IMDB_TABLE_NAMES[t]);
-		string data_file_name = "third_party/imdb/data/"+table_name+".csv.gz";
+		string data_file_name = "third_party/imdb/data/"+table_name+".csv";
 		auto file_system = FileSystem::CreateLocal();
 		if (!file_system->FileExists(data_file_name)) {
 			throw Exception("IMDB data file missing, try `make imdb` to download.");

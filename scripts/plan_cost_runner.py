@@ -41,8 +41,8 @@ def parse_args():
 
 def init_db(cli, dbname, benchmark_dir):
     print(f"INITIALIZING {dbname} ...")
-    subprocess.run(f"{cli} {dbname} < {benchmark_dir}/init/schema.sql", shell=True, check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(f"{cli} {dbname} < {benchmark_dir}/init/load.sql", shell=True, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(f"{cli} {dbname} < {benchmark_dir}/init/schema.sql", shell=True, check=True, capture_output=True)
+    subprocess.run(f"{cli} {dbname} < {benchmark_dir}/init/load.sql", shell=True, check=True, capture_output=True)
     print("INITIALIZATION DONE")
 
 
@@ -58,19 +58,7 @@ def op_inspect(op):
 
 
 def query_plan_cost(cli, dbname, query):
-    try:
-        subprocess.run(f"{cli} --readonly {dbname} -c \"{ENABLE_PROFILING};{PROFILE_OUTPUT};{query}\"", shell=True, check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        print("-------------------------")
-        print("--------Failure----------")
-        print("-------------------------")
-        print(e.stderr.decode('utf8'))
-        print("-------------------------")
-        print("--------Output----------")
-        print("-------------------------")
-        print(e.output.decode('utf8'))
-        print("-------------------------")
-        raise e
+    subprocess.run(f"{cli} --readonly {dbname} -c \"{ENABLE_PROFILING};{PROFILE_OUTPUT};{query}\"", shell=True, check=True, capture_output=True)
     with open(PROFILE_FILENAME, 'r') as file:
         return op_inspect(json.load(file))
 
@@ -98,7 +86,7 @@ def print_diffs(diffs):
 def cardinality_is_higher(card_a, card_b):
     # card_a > card_b?
     # add 20% threshold before we start caring
-    return card_a > (card_b + card_b / 5 + 5000)
+    return card_a > (card_b + card_b / 5)
 
 def main():
     old, new, benchmark_dir = parse_args()
@@ -115,7 +103,6 @@ def main():
     print("RUNNING BENCHMARK QUERIES")
     for f in tqdm(files):
         query_name = f.split("/")[-1].replace(".sql", "")
-
         with open(f, "r") as file:
             query = file.read()
 

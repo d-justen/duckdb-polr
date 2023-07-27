@@ -66,13 +66,13 @@ void UncompressedCompressState::CreateEmptySegment(idx_t row_start) {
 		auto &state = (UncompressedStringSegmentState &)*compressed_segment->GetSegmentState();
 		state.overflow_writer = make_unique<WriteOverflowStringsToDisk>(checkpointer.GetColumnData().block_manager);
 	}
-	current_segment = std::move(compressed_segment);
+	current_segment = move(compressed_segment);
 	current_segment->InitializeAppend(append_state);
 }
 
 void UncompressedCompressState::FlushSegment(idx_t segment_size) {
 	auto &state = checkpointer.GetCheckpointState();
-	state.FlushSegment(std::move(current_segment), segment_size);
+	state.FlushSegment(move(current_segment), segment_size);
 }
 
 void UncompressedCompressState::Finalize(idx_t segment_size) {
@@ -124,7 +124,7 @@ unique_ptr<SegmentScanState> FixedSizeInitScan(ColumnSegment &segment) {
 	auto result = make_unique<FixedSizeScanState>();
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	result->handle = buffer_manager.Pin(segment.block);
-	return std::move(result);
+	return move(result);
 }
 
 //===--------------------------------------------------------------------===//
@@ -183,7 +183,7 @@ void FixedSizeFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t ro
 static unique_ptr<CompressionAppendState> FixedSizeInitAppend(ColumnSegment &segment) {
 	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
 	auto handle = buffer_manager.Pin(segment.block);
-	return make_unique<CompressionAppendState>(std::move(handle));
+	return make_unique<CompressionAppendState>(move(handle));
 }
 
 template <class T>
@@ -233,7 +233,7 @@ idx_t FixedSizeAppend(CompressionAppendState &append_state, ColumnSegment &segme
 	D_ASSERT(segment.GetBlockOffset() == 0);
 
 	auto target_ptr = append_state.handle.Ptr();
-	idx_t max_tuple_count = segment.SegmentSize() / sizeof(T);
+	idx_t max_tuple_count = Storage::BLOCK_SIZE / sizeof(T);
 	idx_t copy_count = MinValue<idx_t>(count, max_tuple_count - segment.count);
 
 	AppendLoop<T>(stats, target_ptr, segment.count, data, offset, copy_count);

@@ -19,21 +19,15 @@ class BooleanColumnReader : public TemplatedColumnReader<bool, BooleanParquetVal
 public:
 	BooleanColumnReader(ParquetReader &reader, LogicalType type_p, const SchemaElement &schema_p, idx_t schema_idx_p,
 	                    idx_t max_define_p, idx_t max_repeat_p)
-	    : TemplatedColumnReader<bool, BooleanParquetValueConversion>(reader, std::move(type_p), schema_p, schema_idx_p,
+	    : TemplatedColumnReader<bool, BooleanParquetValueConversion>(reader, move(type_p), schema_p, schema_idx_p,
 	                                                                 max_define_p, max_repeat_p),
 	      byte_pos(0) {};
 
 	uint8_t byte_pos;
 
-	void InitializeRead(idx_t row_group_idx_p, const std::vector<ColumnChunk> &columns,
-	                    TProtocol &protocol_p) override {
+	void InitializeRead(const std::vector<ColumnChunk> &columns, TProtocol &protocol_p) override {
 		byte_pos = 0;
-		TemplatedColumnReader<bool, BooleanParquetValueConversion>::InitializeRead(row_group_idx_p, columns,
-		                                                                           protocol_p);
-	}
-
-	void ResetPage() override {
-		byte_pos = 0;
+		TemplatedColumnReader<bool, BooleanParquetValueConversion>::InitializeRead(columns, protocol_p);
 	}
 };
 

@@ -1,8 +1,6 @@
 package org.duckdb;
 
-import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -48,7 +46,7 @@ public class DuckDBConnection implements java.sql.Connection {
 		if (resultSetConcurrency == ResultSet.CONCUR_READ_ONLY && resultSetType == ResultSet.TYPE_FORWARD_ONLY) {
 			return new DuckDBPreparedStatement(this);
 		}
-		throw new SQLFeatureNotSupportedException("createStatement");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency,
@@ -59,7 +57,7 @@ public class DuckDBConnection implements java.sql.Connection {
 		if (resultSetConcurrency == ResultSet.CONCUR_READ_ONLY && resultSetType == ResultSet.TYPE_FORWARD_ONLY) {
 			return new DuckDBPreparedStatement(this, sql);
 		}
-		throw new SQLFeatureNotSupportedException("prepareStatement");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Statement createStatement() throws SQLException {
@@ -138,7 +136,7 @@ public class DuckDBConnection implements java.sql.Connection {
 
 	public void setTransactionIsolation(int level) throws SQLException {
 		if (level > TRANSACTION_REPEATABLE_READ) {
-			throw new SQLFeatureNotSupportedException("setTransactionIsolation");
+			throw new SQLFeatureNotSupportedException();
 		}
 	}
 
@@ -198,11 +196,11 @@ public class DuckDBConnection implements java.sql.Connection {
 	}
 
 	public String getCatalog() throws SQLException {
-		return DuckDBNative.duckdb_jdbc_get_catalog(conn_ref);
+		return null;
 	}
 
 	public void setSchema(String schema) throws SQLException {
-		throw new SQLFeatureNotSupportedException("setSchema");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public String getSchema() throws SQLException {
@@ -210,33 +208,33 @@ public class DuckDBConnection implements java.sql.Connection {
 	}
 
 	public void abort(Executor executor) throws SQLException {
-		throw new SQLFeatureNotSupportedException("abort");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Clob createClob() throws SQLException {
-		throw new SQLFeatureNotSupportedException("createClob");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Blob createBlob() throws SQLException {
-		throw new SQLFeatureNotSupportedException("createBlob");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	// less likely to implement this stuff
 
 	public <T> T unwrap(Class<T> iface) throws SQLException {
-		throw new SQLFeatureNotSupportedException("unwrap");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public boolean isWrapperFor(Class<?> iface) throws SQLException {
-		throw new SQLFeatureNotSupportedException("isWrapperFor");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public CallableStatement prepareCall(String sql) throws SQLException {
-		throw new SQLFeatureNotSupportedException("prepareCall");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public String nativeSQL(String sql) throws SQLException {
-		throw new SQLFeatureNotSupportedException("nativeSQL");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
@@ -249,64 +247,64 @@ public class DuckDBConnection implements java.sql.Connection {
 	}
 
 	public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
-		throw new SQLFeatureNotSupportedException("prepareCall");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Map<String, Class<?>> getTypeMap() throws SQLException {
-		throw new SQLFeatureNotSupportedException("getTypeMap");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public void setTypeMap(Map<String, Class<?>> map) throws SQLException {
-		throw new SQLFeatureNotSupportedException("setTypeMap");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public void setHoldability(int holdability) throws SQLException {
-		throw new SQLFeatureNotSupportedException("setHoldability");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public int getHoldability() throws SQLException {
-		throw new SQLFeatureNotSupportedException("getHoldability");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Savepoint setSavepoint() throws SQLException {
-		throw new SQLFeatureNotSupportedException("setSavepoint");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Savepoint setSavepoint(String name) throws SQLException {
-		throw new SQLFeatureNotSupportedException("setSavepoint");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public void rollback(Savepoint savepoint) throws SQLException {
-		throw new SQLFeatureNotSupportedException("rollback");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public void releaseSavepoint(Savepoint savepoint) throws SQLException {
-		throw new SQLFeatureNotSupportedException("releaseSavepoint");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency,
 			int resultSetHoldability) throws SQLException {
-		throw new SQLFeatureNotSupportedException("prepareCall");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
-		throw new SQLFeatureNotSupportedException("prepareStatement");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
-		throw new SQLFeatureNotSupportedException("prepareStatement");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
-		throw new SQLFeatureNotSupportedException("prepareStatement");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public NClob createNClob() throws SQLException {
-		throw new SQLFeatureNotSupportedException("createNClob");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public SQLXML createSQLXML() throws SQLException {
-		throw new SQLFeatureNotSupportedException("createSQLXML"); // hell no
+		throw new SQLFeatureNotSupportedException(); // hell no
 	}
 
 	public void setClientInfo(String name, String value) throws SQLClientInfoException {
@@ -318,50 +316,30 @@ public class DuckDBConnection implements java.sql.Connection {
 	}
 
 	public String getClientInfo(String name) throws SQLException {
-		throw new SQLFeatureNotSupportedException("getClientInfo");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Properties getClientInfo() throws SQLException {
-		throw new SQLFeatureNotSupportedException("getClientInfo");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Array createArrayOf(String typeName, Object[] elements) throws SQLException {
-		throw new SQLFeatureNotSupportedException("createArrayOf");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public Struct createStruct(String typeName, Object[] attributes) throws SQLException {
-		throw new SQLFeatureNotSupportedException("createStruct");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public void setNetworkTimeout(Executor executor, int milliseconds) throws SQLException {
-		throw new SQLFeatureNotSupportedException("setNetworkTimeout");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public int getNetworkTimeout() throws SQLException {
-		throw new SQLFeatureNotSupportedException("getNetworkTimeout");
+		throw new SQLFeatureNotSupportedException();
 	}
 
 	public DuckDBAppender createAppender(String schemaName, String tableName) throws SQLException {
 		return new DuckDBAppender(this, schemaName, tableName);
-	}
-	
-	private static long getArrowStreamAddress(Object arrow_array_stream) {
-		try {
-			Class<?> arrow_array_stream_class = Class.forName("org.apache.arrow.c.ArrowArrayStream");
-			if (!arrow_array_stream_class.isInstance(arrow_array_stream)) {
-				throw new RuntimeException("Need to pass an ArrowArrayStream");
-
-			}
-			return (Long) arrow_array_stream_class.getMethod("memoryAddress").invoke(arrow_array_stream);
-
-		} catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException | SecurityException
-				| ClassNotFoundException e) {
-			throw new RuntimeException(e);
-		}
-	}
-	
-	public void registerArrowStream(String name, Object arrow_array_stream) {
-		long array_stream_address = getArrowStreamAddress(arrow_array_stream);
-		DuckDBNative.duckdb_jdbc_arrow_register(conn_ref, array_stream_address, name.getBytes(StandardCharsets.UTF_8));
 	}
 }

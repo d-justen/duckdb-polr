@@ -10,7 +10,7 @@ namespace duckdb {
 PhysicalCreateTable::PhysicalCreateTable(LogicalOperator &op, SchemaCatalogEntry *schema,
                                          unique_ptr<BoundCreateTableInfo> info, idx_t estimated_cardinality)
     : PhysicalOperator(PhysicalOperatorType::CREATE_TABLE, op.types, estimated_cardinality), schema(schema),
-      info(std::move(info)) {
+      info(move(info)) {
 }
 
 //===--------------------------------------------------------------------===//
@@ -34,8 +34,8 @@ void PhysicalCreateTable::GetData(ExecutionContext &context, DataChunk &chunk, G
 	if (state.finished) {
 		return;
 	}
-	auto &catalog = *schema->catalog;
-	catalog.CreateTable(catalog.GetCatalogTransaction(context.client), schema, info.get());
+	auto &catalog = Catalog::GetCatalog(context.client);
+	catalog.CreateTable(context.client, schema, info.get());
 	state.finished = true;
 }
 

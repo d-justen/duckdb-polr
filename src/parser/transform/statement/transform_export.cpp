@@ -12,11 +12,7 @@ unique_ptr<ExportStatement> Transformer::TransformExport(duckdb_libpgquery::PGNo
 	// handle export options
 	TransformCopyOptions(*info, stmt->options);
 
-	auto result = make_unique<ExportStatement>(std::move(info));
-	if (stmt->database) {
-		result->database = stmt->database;
-	}
-	return result;
+	return make_unique<ExportStatement>(move(info));
 }
 
 } // namespace duckdb

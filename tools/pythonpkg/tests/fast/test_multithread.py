@@ -304,9 +304,9 @@ def description(duckdb_conn, queue):
     duckdb_conn.execute('CREATE TABLE test (i bool, j TIME, k VARCHAR)')
     duckdb_conn.execute("INSERT INTO test VALUES (TRUE, '01:01:01', 'bla' )")
     rel = duckdb_conn.table("test")
-    rel.execute()
+    res = rel.execute()
     try:
-        rel.description
+        res.description()
         queue.put(True)
     except:
         queue.put(False)          

@@ -26,6 +26,8 @@ public:
 	//! Used for duplicate-eliminated joins
 	vector<LogicalType> delim_types;
 
+	bool is_polr_root_join = false;
+
 public:
 	string ParamsToString() const override;
 	void Serialize(FieldWriter &writer) const override;
@@ -36,26 +38,9 @@ public:
 public:
 	static unique_ptr<LogicalOperator> CreateJoin(JoinType type, unique_ptr<LogicalOperator> left_child,
 	                                              unique_ptr<LogicalOperator> right_child,
-	                                              unique_ptr<Expression> condition);
-	static unique_ptr<LogicalOperator> CreateJoin(JoinType type, unique_ptr<LogicalOperator> left_child,
-	                                              unique_ptr<LogicalOperator> right_child,
-	                                              vector<JoinCondition> conditions,
-	                                              vector<unique_ptr<Expression>> arbitrary_expressions);
-
-	static void ExtractJoinConditions(JoinType type, unique_ptr<LogicalOperator> &left_child,
-	                                  unique_ptr<LogicalOperator> &right_child, unique_ptr<Expression> condition,
-	                                  vector<JoinCondition> &conditions,
-	                                  vector<unique_ptr<Expression>> &arbitrary_expressions);
-	static void ExtractJoinConditions(JoinType type, unique_ptr<LogicalOperator> &left_child,
-	                                  unique_ptr<LogicalOperator> &right_child,
-	                                  vector<unique_ptr<Expression>> &expressions, vector<JoinCondition> &conditions,
-	                                  vector<unique_ptr<Expression>> &arbitrary_expressions);
-	static void ExtractJoinConditions(JoinType type, unique_ptr<LogicalOperator> &left_child,
-	                                  unique_ptr<LogicalOperator> &right_child,
-	                                  const unordered_set<idx_t> &left_bindings,
-	                                  const unordered_set<idx_t> &right_bindings,
-	                                  vector<unique_ptr<Expression>> &expressions, vector<JoinCondition> &conditions,
-	                                  vector<unique_ptr<Expression>> &arbitrary_expressions);
+	                                              unordered_set<idx_t> &left_bindings,
+	                                              unordered_set<idx_t> &right_bindings,
+	                                              vector<unique_ptr<Expression>> &expressions);
 };
 
 } // namespace duckdb

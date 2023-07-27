@@ -9,19 +9,16 @@
 #pragma once
 
 #include "duckdb/common/enums/join_type.hpp"
-#include "duckdb/common/enums/joinref_type.hpp"
 #include "duckdb/common/unordered_set.hpp"
 #include "duckdb/parser/parsed_expression.hpp"
 #include "duckdb/parser/tableref.hpp"
 #include "duckdb/common/vector.hpp"
 
 namespace duckdb {
-
 //! Represents a JOIN between two expressions
 class JoinRef : public TableRef {
 public:
-	explicit JoinRef(JoinRefType ref_type)
-	    : TableRef(TableReferenceType::JOIN), type(JoinType::INNER), ref_type(ref_type) {
+	JoinRef() : TableRef(TableReferenceType::JOIN), is_natural(false) {
 	}
 
 	//! The left hand side of the join
@@ -32,8 +29,8 @@ public:
 	unique_ptr<ParsedExpression> condition;
 	//! The join type
 	JoinType type;
-	//! Join condition type
-	JoinRefType ref_type;
+	//! Natural join
+	bool is_natural;
 	//! The set of USING columns (if any)
 	vector<string> using_columns;
 

@@ -43,7 +43,7 @@ static unique_ptr<FunctionData> DbgenBind(ClientContext &context, TableFunctionB
 	}
 	return_types.emplace_back(LogicalType::BOOLEAN);
 	names.emplace_back("Success");
-	return std::move(result);
+	return move(result);
 }
 
 static void DbgenFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
@@ -65,7 +65,7 @@ struct TPCHData : public GlobalTableFunctionState {
 
 unique_ptr<GlobalTableFunctionState> TPCHInit(ClientContext &context, TableFunctionInitInput &input) {
 	auto result = make_unique<TPCHData>();
-	return std::move(result);
+	return move(result);
 }
 
 static unique_ptr<FunctionData> TPCHQueryBind(ClientContext &context, TableFunctionBindInput &input,
@@ -147,7 +147,7 @@ static string PragmaTpchQuery(ClientContext &context, const FunctionParameters &
 void TPCHExtension::Load(DuckDB &db) {
 	Connection con(db);
 	con.BeginTransaction();
-	auto &catalog = Catalog::GetSystemCatalog(*con.context);
+	auto &catalog = Catalog::GetCatalog(*con.context);
 
 	TableFunction dbgen_func("dbgen", {}, DbgenFunction, DbgenBind);
 	dbgen_func.named_parameters["sf"] = LogicalType::DOUBLE;

@@ -45,6 +45,70 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		auto &instance = BenchmarkRunner::GetInstance();
 		auto res = con.Query("PRAGMA threads=" + to_string(instance.threads));
 		D_ASSERT(!res->HasError());
+
+		res = con.Query("SET regret_budget TO " + to_string(instance.regret_budget));
+		D_ASSERT(!res->HasError());
+
+		res = con.Query("SET max_join_orders TO " + to_string(instance.max_join_orders));
+		D_ASSERT(!res->HasError());
+
+		if (instance.enable_polr) {
+			res = con.Query("PRAGMA enable_polr");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_polr_bushy) {
+			res = con.Query("PRAGMA enable_polr_bushy");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_random_cardinalities) {
+			res = con.Query("PRAGMA enable_random_cardinalities");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.log_tuples_routed) {
+			res = con.Query("PRAGMA enable_log_tuples_routed");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.measure_pipeline) {
+			res = con.Query("PRAGMA enable_measure_pipeline");
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.multiplexer_routing.empty()) {
+			res = con.Query("SET multiplexer_routing TO " + instance.multiplexer_routing);
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.enumerator.empty()) {
+			res = con.Query("SET join_enumerator TO " + instance.enumerator);
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.caching) {
+			res = con.Query("PRAGMA disable_caching");
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.optimizer_mode.empty()) {
+			if (instance.optimizer_mode == "dphyp-constant") {
+				res = con.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-equisets") {
+				res = con.Query("PRAGMA enable_greedy_ordering");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-constant") {
+				res = con.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+				res = con.Query("PRAGMA enable_greedy_ordering");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-equisets-ldt") {
+				res = con.Query("PRAGMA enable_greedy_ordering_ldt");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-constant-ldt") {
+				res = con.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+				res = con.Query("PRAGMA enable_greedy_ordering_ldt");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "nostats") {
+				res = con.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+			}
+		}
 	}
 
 	unique_ptr<DBConfig> GetBenchmarkConfig() {
@@ -472,7 +536,7 @@ string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
 	}
 	auto &state = (InterpretedBenchmarkState &)*state_p;
 	if (state.result->HasError()) {
-		return state.result->GetError();
+		return "Result has error: " + state.result->GetError();
 	}
 	if (!result_query.empty()) {
 		// we are running a result query
@@ -505,7 +569,7 @@ string InterpretedBenchmark::Verify(BenchmarkState *state_p) {
 		// finally run the result query and verify the result of that query
 		new_result = state.con.Query(result_query);
 		if (new_result->HasError()) {
-			return new_result->GetError();
+			return "Result query: " + new_result->GetError();
 		}
 		return VerifyInternal(state_p, *new_result);
 	} else {

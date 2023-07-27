@@ -20,7 +20,7 @@ class LogicalExplain : public LogicalOperator {
 public:
 	LogicalExplain(unique_ptr<LogicalOperator> plan, ExplainType explain_type)
 	    : LogicalOperator(LogicalOperatorType::LOGICAL_EXPLAIN), explain_type(explain_type) {
-		children.push_back(std::move(plan));
+		children.push_back(move(plan));
 	}
 
 	ExplainType explain_type;
@@ -31,9 +31,6 @@ public:
 public:
 	void Serialize(FieldWriter &writer) const override;
 	static unique_ptr<LogicalOperator> Deserialize(LogicalDeserializationState &state, FieldReader &reader);
-	idx_t EstimateCardinality(ClientContext &context) override {
-		return 3;
-	}
 
 protected:
 	void ResolveTypes() override {

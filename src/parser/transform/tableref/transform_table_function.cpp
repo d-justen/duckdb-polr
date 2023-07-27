@@ -5,6 +5,9 @@
 namespace duckdb {
 
 unique_ptr<TableRef> Transformer::TransformRangeFunction(duckdb_libpgquery::PGRangeFunction *root) {
+	if (root->lateral) {
+		throw NotImplementedException("LATERAL not implemented");
+	}
 	if (root->ordinality) {
 		throw NotImplementedException("WITH ORDINALITY not implemented");
 	}
@@ -41,7 +44,7 @@ unique_ptr<TableRef> Transformer::TransformRangeFunction(duckdb_libpgquery::PGRa
 	if (root->sample) {
 		result->sample = TransformSampleOptions(root->sample);
 	}
-	return std::move(result);
+	return move(result);
 }
 
 } // namespace duckdb

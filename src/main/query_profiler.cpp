@@ -6,7 +6,6 @@
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/execution/operator/join/physical_delim_join.hpp"
 #include "duckdb/execution/operator/helper/physical_execute.hpp"
-#include "duckdb/common/http_stats.hpp"
 #include "duckdb/common/tree_renderer.hpp"
 #include "duckdb/common/limits.hpp"
 #include "duckdb/execution/expression_executor.hpp"
@@ -64,7 +63,7 @@ void QueryProfiler::StartQuery(string query, bool is_explain_analyze, bool start
 		return;
 	}
 	this->running = true;
-	this->query = std::move(query);
+	this->query = move(query);
 	tree_map.clear();
 	root = nullptr;
 	phase_timings.clear();
@@ -212,6 +211,17 @@ void QueryProfiler::Initialize(PhysicalOperator *root_op) {
 	}
 	this->query_requires_profiling = false;
 	this->root = CreateTree(root_op);
+
+	if (context.config.enable_polr) {
+		multiplexer_node = make_unique<TreeNode>();
+		multiplexer_node->type = PhysicalOperatorType::MULTIPLEXER;
+		multiplexer_node->name = "Multiplexer";
+
+		adaptive_union_node = make_unique<TreeNode>();
+		adaptive_union_node->type = PhysicalOperatorType::ADAPTIVE_UNION;
+		adaptive_union_node->name = "AdaptiveUnion";
+	}
+
 	if (!query_requires_profiling) {
 		// query does not require profiling: disable profiling for this query
 		this->running = false;
@@ -294,6 +304,18 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 	}
 	for (auto &node : profiler.timings) {
 		auto entry = tree_map.find(node.first);
+
+		if (entry == tree_map.end()) {
+			if (context.config.enable_polr) {
+				auto &polr_node =
+				    node.first->type == PhysicalOperatorType::MULTIPLEXER ? multiplexer_node : adaptive_union_node;
+				polr_node->info.time += node.second.time;
+				polr_node->info.elements += node.second.elements;
+
+				continue;
+			}
+		}
+
 		D_ASSERT(entry != tree_map.end());
 
 		entry->second->info.time += node.second.time;
@@ -309,7 +331,7 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 			if (int(entry->second->info.executors_info.size()) <= info_id) {
 				entry->second->info.executors_info.resize(info_id + 1);
 			}
-			entry->second->info.executors_info[info_id] = std::move(info);
+			entry->second->info.executors_info[info_id] = move(info);
 		}
 	}
 	profiler.timings.clear();
@@ -370,36 +392,8 @@ void QueryProfiler::QueryTreeToStream(std::ostream &ss) const {
 	ss << "│└───────────────────────────────────┘│\n";
 	ss << "└─────────────────────────────────────┘\n";
 	ss << StringUtil::Replace(query, "\n", " ") + "\n";
-
-	// checking the tree to ensure the query is really empty
-	// the query string is empty when a logical plan is deserialized
-	if (query.empty() && !root) {
+	if (query.empty()) {
 		return;
-	}
-
-	if (context.client_data->http_stats && !context.client_data->http_stats->IsEmpty()) {
-		string read =
-		    "in: " + StringUtil::BytesToHumanReadableString(context.client_data->http_stats->total_bytes_received);
-		string written =
-		    "out: " + StringUtil::BytesToHumanReadableString(context.client_data->http_stats->total_bytes_sent);
-		string head = "#HEAD: " + to_string(context.client_data->http_stats->head_count);
-		string get = "#GET: " + to_string(context.client_data->http_stats->get_count);
-		string put = "#PUT: " + to_string(context.client_data->http_stats->put_count);
-		string post = "#POST: " + to_string(context.client_data->http_stats->post_count);
-
-		constexpr idx_t TOTAL_BOX_WIDTH = 39;
-		ss << "┌─────────────────────────────────────┐\n";
-		ss << "│┌───────────────────────────────────┐│\n";
-		ss << "││            HTTP Stats:            ││\n";
-		ss << "││                                   ││\n";
-		ss << "││" + DrawPadded(read, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(written, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(head, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(get, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(put, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "││" + DrawPadded(post, TOTAL_BOX_WIDTH - 4) + "││\n";
-		ss << "│└───────────────────────────────────┘│\n";
-		ss << "└─────────────────────────────────────┘\n";
 	}
 
 	constexpr idx_t TOTAL_BOX_WIDTH = 39;
@@ -409,6 +403,23 @@ void QueryProfiler::QueryTreeToStream(std::ostream &ss) const {
 	ss << "││" + DrawPadded(total_time, TOTAL_BOX_WIDTH - 4) + "││\n";
 	ss << "│└───────────────────────────────────┘│\n";
 	ss << "└─────────────────────────────────────┘\n";
+
+	if (context.config.enable_polr && multiplexer_node && adaptive_union_node) {
+		ss << "┌─────────────────────────────────────┐\n";
+		ss << "│┌───────────────────────────────────┐│\n";
+		string mpx_time = "Multiplexer: " + RenderTiming(multiplexer_node->info.time);
+		ss << "││" + DrawPadded(mpx_time, TOTAL_BOX_WIDTH - 4) + "││\n";
+		ss << "│└───────────────────────────────────┘│\n";
+		ss << "└─────────────────────────────────────┘\n";
+
+		ss << "┌─────────────────────────────────────┐\n";
+		ss << "│┌───────────────────────────────────┐│\n";
+		string au_time = "Adpt. Union: " + RenderTiming(adaptive_union_node->info.time);
+		ss << "││" + DrawPadded(au_time, TOTAL_BOX_WIDTH - 4) + "││\n";
+		ss << "│└───────────────────────────────────┘│\n";
+		ss << "└─────────────────────────────────────┘\n";
+	}
+
 	// print phase timings
 	if (PrintOptimizerOutput()) {
 		bool has_previous_phase = false;
@@ -501,9 +512,10 @@ static void PrintRow(std::ostream &ss, const string &annotation, int id, const s
 
 static void ExtractFunctions(std::ostream &ss, ExpressionInfo &info, int &fun_id, int depth) {
 	if (info.hasfunction) {
-		double time = info.sample_tuples_count == 0 ? 0 : int(info.function_time) / double(info.sample_tuples_count);
-		PrintRow(ss, "Function", fun_id++, info.function_name, time, info.sample_tuples_count, info.tuples_count, "",
-		         depth);
+		D_ASSERT(info.sample_tuples_count != 0);
+		PrintRow(ss, "Function", fun_id++, info.function_name,
+		         int(info.function_time) / double(info.sample_tuples_count), info.sample_tuples_count,
+		         info.tuples_count, "", depth);
 	}
 	if (info.children.empty()) {
 		return;
@@ -530,11 +542,10 @@ static void ToJSONRecursive(QueryProfiler::TreeNode &node, std::ostream &ss, int
 			continue;
 		}
 		for (auto &expr_timer : expr_executor->roots) {
-			double time = expr_timer->sample_tuples_count == 0
-			                  ? 0
-			                  : double(expr_timer->time) / double(expr_timer->sample_tuples_count);
-			PrintRow(ss, "ExpressionRoot", expression_counter++, expr_timer->name, time,
-			         expr_timer->sample_tuples_count, expr_timer->tuples_count, expr_timer->extra_info, depth + 1);
+			D_ASSERT(expr_timer->sample_tuples_count != 0);
+			PrintRow(ss, "ExpressionRoot", expression_counter++, expr_timer->name,
+			         int(expr_timer->time) / double(expr_timer->sample_tuples_count), expr_timer->sample_tuples_count,
+			         expr_timer->tuples_count, expr_timer->extra_info, depth + 1);
 			// Extract all functions inside the tree
 			ExtractFunctions(ss, *expr_timer->root, function_counter, depth + 1);
 		}
@@ -561,7 +572,7 @@ string QueryProfiler::ToJSON() const {
 	if (!IsEnabled()) {
 		return "{ \"result\": \"disabled\" }\n";
 	}
-	if (query.empty() && !root) {
+	if (query.empty()) {
 		return "{ \"result\": \"empty\" }\n";
 	}
 	if (!root) {
@@ -621,7 +632,7 @@ unique_ptr<QueryProfiler::TreeNode> QueryProfiler::CreateTree(PhysicalOperator *
 	auto children = root->GetChildren();
 	for (auto &child : children) {
 		auto child_node = CreateTree(child, depth + 1);
-		node->children.push_back(std::move(child_node));
+		node->children.push_back(move(child_node));
 	}
 	return node;
 }
@@ -673,7 +684,7 @@ void ExpressionInfo::ExtractExpressionsRecursive(unique_ptr<ExpressionState> &st
 			expr_info->tuples_count = child->profiler.tuples_count;
 		}
 		expr_info->ExtractExpressionsRecursive(child);
-		children.push_back(std::move(expr_info));
+		children.push_back(move(expr_info));
 	}
 	return;
 }
@@ -690,7 +701,7 @@ ExpressionRootInfo::ExpressionRootInfo(ExpressionExecutorState &state, string na
       sample_tuples_count(state.profiler.sample_tuples_count), tuples_count(state.profiler.tuples_count),
       name(state.name), time(state.profiler.time) {
 	// Use the name of expression-tree as extra-info
-	extra_info = std::move(name);
+	extra_info = move(name);
 	auto expression_info_p = make_unique<ExpressionInfo>();
 	// Maybe root has a function
 	if (state.root_state->expr.expression_class == ExpressionClass::BOUND_FUNCTION) {
@@ -701,6 +712,6 @@ ExpressionRootInfo::ExpressionRootInfo(ExpressionExecutorState &state, string na
 		expression_info_p->tuples_count = state.root_state->profiler.tuples_count;
 	}
 	expression_info_p->ExtractExpressionsRecursive(state.root_state);
-	root = std::move(expression_info_p);
+	root = move(expression_info_p);
 }
 } // namespace duckdb

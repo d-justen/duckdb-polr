@@ -1,7 +1,7 @@
 
 #include "duckdb.hpp"
 #ifndef DUCKDB_AMALGAMATION
-#include "duckdb/execution/operator/persistent/parallel_csv_reader.hpp"
+#include "duckdb/execution/operator/persistent/buffered_csv_reader.hpp"
 #endif
 
 #include <algorithm>
@@ -26,19 +26,19 @@ int main(int argc, const char **argv) {
 	auto filename = std::string(argv[1]);
 
 	BufferedCSVReaderOptions options;
-	options.file_path = std::move(filename);
+	options.file_path = move(filename);
 	options.compression = "none";
 	options.auto_detect = true;
 
 	unique_ptr<FileSystem> fs = FileSystem::CreateLocal();
-	BufferedCSVReader reader(*fs, std::move(options));
+	BufferedCSVReader reader(*fs, move(options));
 
-	if (reader.return_types.empty()) {
+	if (reader.sql_types.empty()) {
 		throw std::runtime_error("Failed to auto-detect types for CSV file");
 	}
 
 	DataChunk result;
-	result.Initialize(reader.return_types);
+	result.Initialize(reader.sql_types);
 
 	while (true) {
 		result.Reset();

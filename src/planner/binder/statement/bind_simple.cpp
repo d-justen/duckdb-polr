@@ -2,7 +2,6 @@
 #include "duckdb/parser/statement/transaction_statement.hpp"
 #include "duckdb/planner/operator/logical_simple.hpp"
 #include "duckdb/catalog/catalog.hpp"
-#include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/table_catalog_entry.hpp"
 #include "duckdb/catalog/catalog_entry/view_catalog_entry.hpp"
 #include "duckdb/planner/binder.hpp"
@@ -16,30 +15,26 @@ BoundStatement Binder::Bind(AlterStatement &stmt) {
 	BoundStatement result;
 	result.names = {"Success"};
 	result.types = {LogicalType::BOOLEAN};
-	BindSchemaOrCatalog(stmt.info->catalog, stmt.info->schema);
-	auto entry = Catalog::GetEntry(context, stmt.info->GetCatalogType(), stmt.info->catalog, stmt.info->schema,
-	                               stmt.info->name, stmt.info->if_exists);
-	if (entry) {
-		if (!entry->temporary) {
-			// we can only alter temporary tables/views in read-only mode
-			properties.modified_databases.insert(entry->catalog->GetName());
-		}
-		stmt.info->catalog = entry->catalog->GetName();
-		stmt.info->schema = ((StandardEntry *)entry)->schema->name;
+	Catalog &catalog = Catalog::GetCatalog(context);
+	auto entry = catalog.GetEntry(context, stmt.info->GetCatalogType(), stmt.info->schema, stmt.info->name,
+	                              stmt.info->if_exists);
+	if (entry && !entry->temporary) {
+		// we can only alter temporary tables/views in read-only mode
+		properties.read_only = false;
 	}
-	result.plan = make_unique<LogicalSimple>(LogicalOperatorType::LOGICAL_ALTER, std::move(stmt.info));
+	result.plan = make_unique<LogicalSimple>(LogicalOperatorType::LOGICAL_ALTER, move(stmt.info));
 	properties.return_type = StatementReturnType::NOTHING;
 	return result;
 }
 
 BoundStatement Binder::Bind(TransactionStatement &stmt) {
 	// transaction statements do not require a valid transaction
-	properties.requires_valid_transaction = stmt.info->type == TransactionType::BEGIN_TRANSACTION;
+	properties.requires_valid_transaction = false;
 
 	BoundStatement result;
 	result.names = {"Success"};
 	result.types = {LogicalType::BOOLEAN};
-	result.plan = make_unique<LogicalSimple>(LogicalOperatorType::LOGICAL_TRANSACTION, std::move(stmt.info));
+	result.plan = make_unique<LogicalSimple>(LogicalOperatorType::LOGICAL_TRANSACTION, move(stmt.info));
 	properties.return_type = StatementReturnType::NOTHING;
 	return result;
 }

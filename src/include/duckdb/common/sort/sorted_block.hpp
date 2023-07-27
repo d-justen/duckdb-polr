@@ -7,10 +7,9 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include "duckdb/common/types/row_layout.hpp"
 #include "duckdb/common/fast_mem.hpp"
 #include "duckdb/common/sort/comparators.hpp"
-#include "duckdb/common/types/row_data_collection_scanner.hpp"
-#include "duckdb/common/types/row_layout.hpp"
 #include "duckdb/storage/buffer/buffer_handle.hpp"
 
 namespace duckdb {
@@ -134,21 +133,21 @@ public:
 	explicit PayloadScanner(GlobalSortState &global_sort_state, bool flush = true);
 
 	//! Scan a single block
-	PayloadScanner(GlobalSortState &global_sort_state, idx_t block_idx, bool flush = false);
+	PayloadScanner(GlobalSortState &global_sort_state, idx_t block_idx);
 
 	//! The type layout of the payload
 	inline const vector<LogicalType> &GetPayloadTypes() const {
-		return scanner->GetTypes();
+		return sorted_data.layout.GetTypes();
 	}
 
 	//! The number of rows scanned so far
 	inline idx_t Scanned() const {
-		return scanner->Scanned();
+		return total_scanned;
 	}
 
 	//! The number of remaining rows
 	inline idx_t Remaining() const {
-		return scanner->Remaining();
+		return total_count - total_scanned;
 	}
 
 	//! Scans the next data chunk from the sorted data
@@ -156,10 +155,22 @@ public:
 
 private:
 	//! The sorted data being scanned
-	unique_ptr<RowDataCollection> rows;
-	unique_ptr<RowDataCollection> heap;
-	//! The actual scanner
-	unique_ptr<RowDataCollectionScanner> scanner;
+	SortedData &sorted_data;
+	//! Read state
+	SBScanState read_state;
+	//! The total count of sorted_data
+	const idx_t total_count;
+	//! Addresses used to gather from the sorted data
+	Vector addresses = Vector(LogicalType::POINTER);
+	//! The number of rows scanned so far
+	idx_t total_scanned;
+	//! Whether to flush the blocks after scanning
+	const bool flush;
+	//! Whether we are unswizzling the blocks
+	const bool unswizzling;
+
+	//! Checks that the newest block is valid
+	void ValidateUnscannedBlock() const;
 };
 
 struct SBIterator {

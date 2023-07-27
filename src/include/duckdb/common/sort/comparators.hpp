@@ -38,17 +38,17 @@ private:
 	static int TemplatedCompareVal(const data_ptr_t &left_ptr, const data_ptr_t &right_ptr);
 
 	//! Compare two values at the pointers (can be recursive if nested type)
-	static int CompareValAndAdvance(data_ptr_t &l_ptr, data_ptr_t &r_ptr, const LogicalType &type, bool valid);
+	static int CompareValAndAdvance(data_ptr_t &l_ptr, data_ptr_t &r_ptr, const LogicalType &type);
 	//! Compares two fixed-size values at the given pointers
 	template <class T>
 	static int TemplatedCompareAndAdvance(data_ptr_t &left_ptr, data_ptr_t &right_ptr);
 	//! Compares two string values at the given pointers
-	static int CompareStringAndAdvance(data_ptr_t &left_ptr, data_ptr_t &right_ptr, bool valid);
+	static int CompareStringAndAdvance(data_ptr_t &left_ptr, data_ptr_t &right_ptr);
 	//! Compares two struct values at the given pointers (recursive)
 	static int CompareStructAndAdvance(data_ptr_t &left_ptr, data_ptr_t &right_ptr,
-	                                   const child_list_t<LogicalType> &types, bool valid);
+	                                   const child_list_t<LogicalType> &types);
 	//! Compare two list values at the pointers (can be recursive if nested type)
-	static int CompareListAndAdvance(data_ptr_t &left_ptr, data_ptr_t &right_ptr, const LogicalType &type, bool valid);
+	static int CompareListAndAdvance(data_ptr_t &left_ptr, data_ptr_t &right_ptr, const LogicalType &type);
 	//! Compares a list of fixed-size values
 	template <class T>
 	static int TemplatedCompareListLoop(data_ptr_t &left_ptr, data_ptr_t &right_ptr, const ValidityBytes &left_validity,

@@ -47,7 +47,8 @@ autoconf/autom4te.cache
 projects/*
 !projects/*.*
 !projects/Makefile
-
+test/ssb/data/*
+test/jcch/data/*
 
 #==============================================================================#
 # Autotools artifacts
@@ -342,3 +343,5 @@ zig-cache/*
 
 # .db files
 *.db
+
+experiments/experiment-results

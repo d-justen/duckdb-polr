@@ -18,7 +18,7 @@ public:
 	LogicalExpressionGet(idx_t table_index, vector<LogicalType> types,
 	                     vector<vector<unique_ptr<Expression>>> expressions)
 	    : LogicalOperator(LogicalOperatorType::LOGICAL_EXPRESSION_GET), table_index(table_index), expr_types(types),
-	      expressions(std::move(expressions)) {
+	      expressions(move(expressions)) {
 	}
 
 	//! The table index in the current bind context
@@ -34,10 +34,6 @@ public:
 	}
 	void Serialize(FieldWriter &writer) const override;
 	static unique_ptr<LogicalOperator> Deserialize(LogicalDeserializationState &state, FieldReader &reader);
-	idx_t EstimateCardinality(ClientContext &context) override {
-		return expressions.size();
-	}
-	vector<idx_t> GetTableIndex() const override;
 
 protected:
 	void ResolveTypes() override {

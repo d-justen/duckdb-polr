@@ -50,6 +50,19 @@ public:
 	ofstream out_file;
 	ofstream log_file;
 	uint32_t threads = std::thread::hardware_concurrency();
+
+	bool enable_polr = false;
+	bool enable_polr_bushy = false;
+	bool enable_random_cardinalities = false;
+	string multiplexer_routing = "";
+	double regret_budget = 0.01;
+	bool log_tuples_routed = false;
+	string optimizer_mode = "";
+	bool measure_pipeline = false;
+	uint32_t nruns = 5;
+	bool caching = true;
+	string enumerator = "";
+	uint32_t max_join_orders = 24;
 };
 
 } // namespace duckdb

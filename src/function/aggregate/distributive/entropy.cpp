@@ -112,11 +112,8 @@ struct EntropyFunctionString : EntropyFunctionBase {
 
 template <typename INPUT_TYPE, typename RESULT_TYPE>
 AggregateFunction GetEntropyFunction(const LogicalType &input_type, const LogicalType &result_type) {
-	auto fun =
-	    AggregateFunction::UnaryAggregateDestructor<EntropyState<INPUT_TYPE>, INPUT_TYPE, RESULT_TYPE, EntropyFunction>(
-	        input_type, result_type);
-	fun.null_handling = FunctionNullHandling::SPECIAL_HANDLING;
-	return fun;
+	return AggregateFunction::UnaryAggregateDestructor<EntropyState<INPUT_TYPE>, INPUT_TYPE, RESULT_TYPE,
+	                                                   EntropyFunction>(input_type, result_type);
 }
 
 AggregateFunction GetEntropyFunctionInternal(PhysicalType type) {

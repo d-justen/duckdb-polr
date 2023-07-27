@@ -35,9 +35,7 @@ namespace duckdb {
 #endif
 
 //! inline std directives that we use frequently
-#ifndef DUCKDB_DEBUG_MOVE
 using std::move;
-#endif
 using std::shared_ptr;
 using std::unique_ptr;
 using std::weak_ptr;
@@ -45,14 +43,9 @@ using data_ptr = unique_ptr<char[]>;
 using std::make_shared;
 
 // NOTE: there is a copy of this in the Postgres' parser grammar (gram.y)
-#define DEFAULT_SCHEMA  "main"
-#define INVALID_SCHEMA  ""
-#define INVALID_CATALOG ""
-#define SYSTEM_CATALOG  "system"
-#define TEMP_CATALOG    "temp"
-
-DUCKDB_API bool IsInvalidSchema(const string &str);
-DUCKDB_API bool IsInvalidCatalog(const string &str);
+#define DEFAULT_SCHEMA "main"
+#define TEMP_SCHEMA    "temp"
+#define INVALID_SCHEMA ""
 
 //! a saner size_t for loop indices etc
 typedef uint64_t idx_t;
@@ -111,46 +104,6 @@ struct Storage {
 	constexpr static int FILE_HEADER_SIZE = 4096;
 };
 
-struct LogicalIndex {
-	explicit LogicalIndex(idx_t index) : index(index) {
-	}
-
-	idx_t index;
-
-	inline bool operator==(const LogicalIndex &rhs) const {
-		return index == rhs.index;
-	};
-	inline bool operator!=(const LogicalIndex &rhs) const {
-		return index != rhs.index;
-	};
-	inline bool operator<(const LogicalIndex &rhs) const {
-		return index < rhs.index;
-	};
-	bool IsValid() {
-		return index != DConstants::INVALID_INDEX;
-	}
-};
-
-struct PhysicalIndex {
-	explicit PhysicalIndex(idx_t index) : index(index) {
-	}
-
-	idx_t index;
-
-	inline bool operator==(const PhysicalIndex &rhs) const {
-		return index == rhs.index;
-	};
-	inline bool operator!=(const PhysicalIndex &rhs) const {
-		return index != rhs.index;
-	};
-	inline bool operator<(const PhysicalIndex &rhs) const {
-		return index < rhs.index;
-	};
-	bool IsValid() {
-		return index != DConstants::INVALID_INDEX;
-	}
-};
-
-DUCKDB_API uint64_t NextPowerOfTwo(uint64_t v);
+uint64_t NextPowerOfTwo(uint64_t v);
 
 } // namespace duckdb

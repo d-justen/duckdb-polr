@@ -1,0 +1,16 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [imdb]
+
+name Q${QUERY_NUMBER_PADDED}
+group imdb
+
+require httpfs
+
+require parquet
+
+cache imdb.duckdb
+
+load benchmark/job-light/init/load.sql
+
+run benchmark/job-light/queries/${QUERY_NUMBER_PADDED}.sql

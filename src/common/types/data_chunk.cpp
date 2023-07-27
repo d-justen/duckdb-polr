@@ -22,48 +22,34 @@
 
 namespace duckdb {
 
-DataChunk::DataChunk() : count(0), capacity(STANDARD_VECTOR_SIZE) {
+DataChunk::DataChunk() : capacity(STANDARD_VECTOR_SIZE), count(0) {
 }
 
 DataChunk::~DataChunk() {
 }
 
 void DataChunk::InitializeEmpty(const vector<LogicalType> &types) {
-	InitializeEmpty(types.begin(), types.end());
-}
-
-void DataChunk::Initialize(Allocator &allocator, const vector<LogicalType> &types, idx_t capacity_p) {
-	Initialize(allocator, types.begin(), types.end(), capacity_p);
-}
-
-void DataChunk::Initialize(ClientContext &context, const vector<LogicalType> &types, idx_t capacity_p) {
-	Initialize(Allocator::Get(context), types, capacity_p);
-}
-
-void DataChunk::Initialize(Allocator &allocator, vector<LogicalType>::const_iterator begin,
-                           vector<LogicalType>::const_iterator end, idx_t capacity_p) {
-	D_ASSERT(data.empty());                   // can only be initialized once
-	D_ASSERT(std::distance(begin, end) != 0); // empty chunk not allowed
-	capacity = capacity_p;
-	for (; begin != end; begin++) {
-		VectorCache cache(allocator, *begin, capacity);
-		data.emplace_back(cache);
-		vector_caches.push_back(std::move(cache));
-	}
-}
-
-void DataChunk::Initialize(ClientContext &context, vector<LogicalType>::const_iterator begin,
-                           vector<LogicalType>::const_iterator end, idx_t capacity_p) {
-	Initialize(Allocator::Get(context), begin, end, capacity_p);
-}
-
-void DataChunk::InitializeEmpty(vector<LogicalType>::const_iterator begin, vector<LogicalType>::const_iterator end) {
 	capacity = STANDARD_VECTOR_SIZE;
-	D_ASSERT(data.empty());                   // can only be initialized once
-	D_ASSERT(std::distance(begin, end) != 0); // empty chunk not allowed
-	for (; begin != end; begin++) {
-		data.emplace_back(Vector(*begin, nullptr));
+	D_ASSERT(data.empty());   // can only be initialized once
+	D_ASSERT(!types.empty()); // empty chunk not allowed
+	for (idx_t i = 0; i < types.size(); i++) {
+		data.emplace_back(Vector(types[i], nullptr));
 	}
+}
+
+void DataChunk::Initialize(Allocator &allocator, const vector<LogicalType> &types) {
+	D_ASSERT(data.empty());   // can only be initialized once
+	D_ASSERT(!types.empty()); // empty chunk not allowed
+	capacity = STANDARD_VECTOR_SIZE;
+	for (idx_t i = 0; i < types.size(); i++) {
+		VectorCache cache(allocator, types[i]);
+		data.emplace_back(cache);
+		vector_caches.push_back(move(cache));
+	}
+}
+
+void DataChunk::Initialize(ClientContext &context, const vector<LogicalType> &types) {
+	Initialize(Allocator::Get(context), types);
 }
 
 void DataChunk::Reset() {
@@ -107,8 +93,8 @@ bool DataChunk::AllConstant() const {
 
 void DataChunk::Reference(DataChunk &chunk) {
 	D_ASSERT(chunk.ColumnCount() <= ColumnCount());
-	SetCapacity(chunk);
 	SetCardinality(chunk);
+	SetCapacity(chunk);
 	for (idx_t i = 0; i < chunk.ColumnCount(); i++) {
 		data[i].Reference(chunk.data[i]);
 	}
@@ -117,8 +103,8 @@ void DataChunk::Reference(DataChunk &chunk) {
 void DataChunk::Move(DataChunk &chunk) {
 	SetCardinality(chunk);
 	SetCapacity(chunk);
-	data = std::move(chunk.data);
-	vector_caches = std::move(chunk.vector_caches);
+	data = move(chunk.data);
+	vector_caches = move(chunk.vector_caches);
 
 	chunk.Destroy();
 }
@@ -152,23 +138,23 @@ void DataChunk::Split(DataChunk &other, idx_t split_idx) {
 	D_ASSERT(split_idx < data.size());
 	const idx_t num_cols = data.size();
 	for (idx_t col_idx = split_idx; col_idx < num_cols; col_idx++) {
-		other.data.push_back(std::move(data[col_idx]));
-		other.vector_caches.push_back(std::move(vector_caches[col_idx]));
+		other.data.push_back(move(data[col_idx]));
+		other.vector_caches.push_back(move(vector_caches[col_idx]));
 	}
 	for (idx_t col_idx = split_idx; col_idx < num_cols; col_idx++) {
 		data.pop_back();
 		vector_caches.pop_back();
 	}
-	other.SetCapacity(*this);
 	other.SetCardinality(*this);
+	other.SetCapacity(*this);
 }
 
 void DataChunk::Fuse(DataChunk &other) {
 	D_ASSERT(other.size() == size());
 	const idx_t num_cols = other.data.size();
 	for (idx_t col_idx = 0; col_idx < num_cols; ++col_idx) {
-		data.emplace_back(std::move(other.data[col_idx]));
-		vector_caches.emplace_back(std::move(other.vector_caches[col_idx]));
+		data.emplace_back(move(other.data[col_idx]));
+		vector_caches.emplace_back(move(other.vector_caches[col_idx]));
 	}
 	other.Destroy();
 }

@@ -14,11 +14,11 @@ namespace duckdb {
 
 class NotNullConstraint : public Constraint {
 public:
-	DUCKDB_API explicit NotNullConstraint(LogicalIndex index);
+	DUCKDB_API explicit NotNullConstraint(column_t index);
 	DUCKDB_API ~NotNullConstraint() override;
 
 	//! Column index this constraint pertains to
-	LogicalIndex index;
+	column_t index;
 
 public:
 	DUCKDB_API string ToString() const override;

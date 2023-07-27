@@ -41,16 +41,16 @@ public:
 	template <class OP = EmptyRLEWriter>
 	void Update(T *data, ValidityMask &validity, idx_t idx) {
 		if (validity.RowIsValid(idx)) {
-			if (all_null) {
+			all_null = false;
+			if (seen_count == 0) {
 				// no value seen yet
-				// assign the current value, and increment the seen_count
+				// assign the current value, and set the seen_count to 1
 				// note that we increment last_seen_count rather than setting it to 1
 				// this is intentional: this is the first VALID value we see
 				// but it might not be the first value in case of nulls!
 				last_value = data[idx];
-				seen_count++;
+				seen_count = 1;
 				last_seen_count++;
-				all_null = false;
 			} else if (last_value == data[idx]) {
 				// the last value is identical to this value: increment the last_seen_count
 				last_seen_count++;
@@ -151,7 +151,7 @@ struct RLECompressState : public CompressionState {
 		auto &type = checkpointer.GetType();
 		auto column_segment = ColumnSegment::CreateTransientSegment(db, type, row_start);
 		column_segment->function = function;
-		current_segment = std::move(column_segment);
+		current_segment = move(column_segment);
 		auto &buffer_manager = BufferManager::GetBufferManager(db);
 		handle = buffer_manager.Pin(current_segment->block);
 	}
@@ -202,7 +202,7 @@ struct RLECompressState : public CompressionState {
 		handle.Destroy();
 
 		auto &state = checkpointer.GetCheckpointState();
-		state.FlushSegment(std::move(current_segment), total_segment_size);
+		state.FlushSegment(move(current_segment), total_segment_size);
 	}
 
 	void Finalize() {
@@ -282,7 +282,7 @@ struct RLEScanState : public SegmentScanState {
 template <class T>
 unique_ptr<SegmentScanState> RLEInitScan(ColumnSegment &segment) {
 	auto result = make_unique<RLEScanState<T>>(segment);
-	return std::move(result);
+	return move(result);
 }
 
 //===--------------------------------------------------------------------===//

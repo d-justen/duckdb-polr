@@ -9,7 +9,6 @@
 #pragma once
 
 #include "duckdb/common/string.hpp"
-#include "duckdb/common/winapi.hpp"
 
 namespace duckdb {
 
@@ -22,9 +21,8 @@ public:
 	virtual ~FileOpener() {};
 
 	virtual bool TryGetCurrentSetting(const string &key, Value &result) = 0;
-	virtual ClientContext *TryGetClientContext() = 0;
 
-	DUCKDB_API static FileOpener *Get(ClientContext &context);
+	static FileOpener *Get(ClientContext &context);
 };
 
 } // namespace duckdb

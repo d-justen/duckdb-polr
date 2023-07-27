@@ -43,13 +43,11 @@ public:
 	bool ParallelSink() const override {
 		return true;
 	}
-	bool IsOrderPreserving() const override {
-		return false;
-	}
+
 	string ParamsToString() const override;
 
 public:
-	void BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) override;
+	void BuildPipelines(Executor &executor, Pipeline &current, PipelineBuildState &state) override;
 };
 
 } // namespace duckdb

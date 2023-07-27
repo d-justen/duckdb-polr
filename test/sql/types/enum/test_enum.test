@@ -30,9 +30,6 @@ CREATE TYPE bla AS ENUM ();
 statement error
 CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');
 
-statement ok
-DROP TYPE bla;
-
 # We should only accept strings
 statement error
 CREATE TYPE bla AS ENUM (1,2,3);

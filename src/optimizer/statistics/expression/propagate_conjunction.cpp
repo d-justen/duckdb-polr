@@ -20,7 +20,7 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateExpression(BoundConjun
 		// we have a constant in a conjunction
 		// we (1) either prune the child
 		// or (2) replace the entire conjunction with a constant
-		auto constant = ExpressionExecutor::EvaluateScalar(context, *child);
+		auto constant = ExpressionExecutor::EvaluateScalar(*child);
 		if (constant.IsNull()) {
 			continue;
 		}
@@ -60,7 +60,7 @@ unique_ptr<BaseStatistics> StatisticsPropagator::PropagateExpression(BoundConjun
 		return PropagateExpression(*expr_ptr);
 	} else if (expr.children.size() == 1) {
 		// if there is one child left, replace the conjunction with that one child
-		*expr_ptr = std::move(expr.children[0]);
+		*expr_ptr = move(expr.children[0]);
 	}
 	return nullptr;
 }

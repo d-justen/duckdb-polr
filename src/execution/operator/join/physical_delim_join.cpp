@@ -1,30 +1,29 @@
 #include "duckdb/execution/operator/join/physical_delim_join.hpp"
 
-#include "duckdb/common/types/column_data_collection.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/operator/aggregate/physical_hash_aggregate.hpp"
-#include "duckdb/execution/operator/scan/physical_column_data_scan.hpp"
 #include "duckdb/execution/operator/set/physical_recursive_cte.hpp"
-#include "duckdb/parallel/meta_pipeline.hpp"
-#include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
+#include "duckdb/parallel/pipeline.hpp"
+#include "duckdb/common/types/column_data_collection.hpp"
+#include "duckdb/execution/operator/scan/physical_column_data_scan.hpp"
 
 namespace duckdb {
 
 PhysicalDelimJoin::PhysicalDelimJoin(vector<LogicalType> types, unique_ptr<PhysicalOperator> original_join,
                                      vector<PhysicalOperator *> delim_scans, idx_t estimated_cardinality)
-    : PhysicalOperator(PhysicalOperatorType::DELIM_JOIN, std::move(types), estimated_cardinality),
-      join(std::move(original_join)), delim_scans(std::move(delim_scans)) {
+    : PhysicalOperator(PhysicalOperatorType::DELIM_JOIN, move(types), estimated_cardinality), join(move(original_join)),
+      delim_scans(move(delim_scans)) {
 	D_ASSERT(join->children.size() == 2);
 	// now for the original join
 	// we take its left child, this is the side that we will duplicate eliminate
-	children.push_back(std::move(join->children[0]));
+	children.push_back(move(join->children[0]));
 
 	// we replace it with a PhysicalColumnDataScan, that scans the ColumnDataCollection that we keep cached
 	// the actual chunk collection to scan will be created in the DelimJoinGlobalState
 	auto cached_chunk_scan = make_unique<PhysicalColumnDataScan>(
 	    children[0]->GetTypes(), PhysicalOperatorType::COLUMN_DATA_SCAN, estimated_cardinality);
-	join->children[0] = std::move(cached_chunk_scan);
+	join->children[0] = move(cached_chunk_scan);
 }
 
 vector<PhysicalOperator *> PhysicalDelimJoin::GetChildren() const {
@@ -81,13 +80,13 @@ unique_ptr<GlobalSinkState> PhysicalDelimJoin::GetGlobalSinkState(ClientContext 
 	if (delim_scans.size() > 1) {
 		PhysicalHashAggregate::SetMultiScan(*distinct->sink_state);
 	}
-	return std::move(state);
+	return move(state);
 }
 
 unique_ptr<LocalSinkState> PhysicalDelimJoin::GetLocalSinkState(ExecutionContext &context) const {
 	auto state = make_unique<DelimJoinLocalState>(context.client, *this);
 	state->distinct_state = distinct->GetLocalSinkState(context);
-	return std::move(state);
+	return move(state);
 }
 
 SinkResultType PhysicalDelimJoin::Sink(ExecutionContext &context, GlobalSinkState &state_p, LocalSinkState &lstate_p,
@@ -120,23 +119,34 @@ string PhysicalDelimJoin::ParamsToString() const {
 //===--------------------------------------------------------------------===//
 // Pipeline Construction
 //===--------------------------------------------------------------------===//
-void PhysicalDelimJoin::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) {
+void PhysicalDelimJoin::BuildPipelines(Executor &executor, Pipeline &current, PipelineBuildState &state) {
 	op_state.reset();
 	sink_state.reset();
 
-	auto child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, this);
-	child_meta_pipeline->Build(children[0].get());
+	// duplicate eliminated join
+	auto pipeline = make_shared<Pipeline>(executor);
+	state.SetPipelineSink(*pipeline, this);
+	current.AddDependency(pipeline);
 
+	// recurse into the pipeline child
+	children[0]->BuildPipelines(executor, *pipeline, state);
 	if (type == PhysicalOperatorType::DELIM_JOIN) {
 		// recurse into the actual join
 		// any pipelines in there depend on the main pipeline
 		// any scan of the duplicate eliminated data on the RHS depends on this pipeline
 		// we add an entry to the mapping of (PhysicalOperator*) -> (Pipeline*)
-		auto &state = meta_pipeline.GetState();
 		for (auto &delim_scan : delim_scans) {
-			state.delim_join_dependencies[delim_scan] = child_meta_pipeline->GetBasePipeline().get();
+			state.delim_join_dependencies[delim_scan] = pipeline.get();
 		}
-		join->BuildPipelines(current, meta_pipeline);
+		join->BuildPipelines(executor, current, state);
+	}
+	if (!state.recursive_cte) {
+		// regular pipeline: schedule it
+		state.AddPipeline(executor, move(pipeline));
+	} else {
+		// CTE pipeline! add it to the CTE pipelines
+		auto &cte = (PhysicalRecursiveCTE &)*state.recursive_cte;
+		cte.pipelines.push_back(move(pipeline));
 	}
 }
 

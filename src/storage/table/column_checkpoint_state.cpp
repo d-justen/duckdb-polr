@@ -24,7 +24,7 @@ ColumnCheckpointState::~ColumnCheckpointState() {
 
 unique_ptr<BaseStatistics> ColumnCheckpointState::GetStatistics() {
 	D_ASSERT(global_stats);
-	return std::move(global_stats);
+	return move(global_stats);
 }
 
 struct PartialBlockForCheckpoint : PartialBlock {
@@ -123,18 +123,12 @@ void ColumnCheckpointState::FlushSegment(unique_ptr<ColumnSegment> segment, idx_
 			pstate->AddSegmentToTail(&column_data, segment.get(), offset_in_block);
 		} else {
 			// Create a new block for future reuse.
-			if (segment->SegmentSize() != Storage::BLOCK_SIZE) {
-				// the segment is smaller than the block size
-				// allocate a new block and copy the data over
-				D_ASSERT(segment->SegmentSize() < Storage::BLOCK_SIZE);
-				segment->Resize(Storage::BLOCK_SIZE);
-			}
 			D_ASSERT(offset_in_block == 0);
 			allocation.partial_block = make_unique<PartialBlockForCheckpoint>(
 			    &column_data, segment.get(), *allocation.block_manager, allocation.state);
 		}
 		// Writer will decide whether to reuse this block.
-		partial_block_manager.RegisterPartialBlock(std::move(allocation));
+		partial_block_manager.RegisterPartialBlock(move(allocation));
 	} else {
 		// constant block: no need to write anything to disk besides the stats
 		// set up the compression function to constant
@@ -158,8 +152,8 @@ void ColumnCheckpointState::FlushSegment(unique_ptr<ColumnSegment> segment, idx_
 	data_pointer.statistics = segment->stats.statistics->Copy();
 
 	// append the segment to the new segment tree
-	new_tree.AppendSegment(std::move(segment));
-	data_pointers.push_back(std::move(data_pointer));
+	new_tree.AppendSegment(move(segment));
+	data_pointers.push_back(move(data_pointer));
 }
 
 void ColumnCheckpointState::WriteDataPointers(RowGroupWriter &writer) {

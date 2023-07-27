@@ -18,9 +18,7 @@ public:
 	//! Not initialized, default constructor
 	DUCKDB_API PreservedError();
 	//! From std::exception
-	PreservedError(const std::exception &ex)
-	    : initialized(true), type(ExceptionType::INVALID), raw_message(SanitizeErrorMessage(ex.what())) {
-	}
+	DUCKDB_API explicit PreservedError(const std::exception &exception);
 	//! From a raw string
 	DUCKDB_API explicit PreservedError(const string &raw_message);
 	//! From an Exception
@@ -36,8 +34,8 @@ public:
 	//! Used in clients like C-API, creates the final message and returns a reference to it
 	DUCKDB_API const string &Message();
 	//! Let's us do things like 'if (error)'
-	DUCKDB_API operator bool() const;
-	DUCKDB_API bool operator==(const PreservedError &other) const;
+	operator bool() const;
+	bool operator==(const PreservedError &other) const;
 
 private:
 	//! Whether this PreservedError contains an exception or not
@@ -48,9 +46,6 @@ private:
 	string raw_message;
 	//! The final message (stored in the preserved error for compatibility reasons with C-API)
 	string final_message;
-
-private:
-	DUCKDB_API static string SanitizeErrorMessage(string error);
 };
 
 } // namespace duckdb

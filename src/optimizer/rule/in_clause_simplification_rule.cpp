@@ -9,7 +9,7 @@ InClauseSimplificationRule::InClauseSimplificationRule(ExpressionRewriter &rewri
 	// match on InClauseExpression that has a ConstantExpression as a check
 	auto op = make_unique<InClauseExpressionMatcher>();
 	op->policy = SetMatcher::Policy::SOME;
-	root = std::move(op);
+	root = move(op);
 }
 
 unique_ptr<Expression> InClauseSimplificationRule::Apply(LogicalOperator &op, vector<Expression *> &bindings,
@@ -35,23 +35,23 @@ unique_ptr<Expression> InClauseSimplificationRule::Apply(LogicalOperator &op, ve
 			return nullptr;
 		}
 		D_ASSERT(expr->children[i]->IsFoldable());
-		auto constant_value = ExpressionExecutor::EvaluateScalar(GetContext(), *expr->children[i]);
+		auto constant_value = ExpressionExecutor::EvaluateScalar(*expr->children[i]);
 		auto new_constant = constant_value.DefaultTryCastAs(target_type);
 		if (!new_constant) {
 			return nullptr;
 		} else {
 			auto new_constant_expr = make_unique<BoundConstantExpression>(constant_value);
-			cast_list.push_back(std::move(new_constant_expr));
+			cast_list.push_back(move(new_constant_expr));
 		}
 	}
 	//! We can cast, so we move the new constant
 	for (size_t i = 1; i < expr->children.size(); i++) {
-		expr->children[i] = std::move(cast_list[i - 1]);
+		expr->children[i] = move(cast_list[i - 1]);
 
-		//		expr->children[i] = std::move(new_constant_expr);
+		//		expr->children[i] = move(new_constant_expr);
 	}
 	//! We can cast the full list, so we move the column
-	expr->children[0] = std::move(cast_expression->child);
+	expr->children[0] = move(cast_expression->child);
 	return nullptr;
 }
 

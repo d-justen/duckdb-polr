@@ -47,16 +47,6 @@ idx_t Node256::GetNextPos(idx_t pos) {
 	return Node::GetNextPos(pos);
 }
 
-idx_t Node256::GetNextPosAndByte(idx_t pos, uint8_t &byte) {
-	for (pos == DConstants::INVALID_INDEX ? pos = 0 : pos++; pos < 256; pos++) {
-		if (children[pos]) {
-			byte = uint8_t(pos);
-			return pos;
-		}
-	}
-	return Node::GetNextPos(pos);
-}
-
 Node *Node256::GetChild(ART &art, idx_t pos) {
 	return children[pos].Unswizzle(art);
 }
@@ -77,8 +67,8 @@ void Node256::EraseChild(Node *&node, int pos, ART &art) {
 	n->children[pos].Reset();
 	n->count--;
 	if (node->count <= 36) {
-		auto new_node = Node48::New();
-		new_node->prefix = std::move(n->prefix);
+		auto new_node = new Node48();
+		new_node->prefix = move(n->prefix);
 		for (idx_t i = 0; i < 256; i++) {
 			if (n->children[i]) {
 				new_node->child_index[i] = new_node->count;
@@ -87,9 +77,24 @@ void Node256::EraseChild(Node *&node, int pos, ART &art) {
 				new_node->count++;
 			}
 		}
-		Node::Delete(node);
+		delete node;
 		node = new_node;
 	}
+}
+
+bool Node256::Merge(MergeInfo &info, idx_t depth, Node *&l_parent, idx_t l_pos) {
+
+	for (idx_t i = 0; i < 256; i++) {
+		if (info.r_node->GetChildPos(i) != DConstants::INVALID_INDEX) {
+
+			auto l_child_pos = info.l_node->GetChildPos(i);
+			auto key_byte = (uint8_t)i;
+			if (!Node::MergeAtByte(info, depth, l_child_pos, i, key_byte, l_parent, l_pos)) {
+				return false;
+			}
+		}
+	}
+	return true;
 }
 
 idx_t Node256::GetSize() {

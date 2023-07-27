@@ -13,8 +13,9 @@
 
 namespace duckdb {
 
-LogicalType ArrowTableFunction::GetArrowLogicalType(
-    ArrowSchema &schema, std::unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data, idx_t col_idx) {
+LogicalType GetArrowLogicalType(ArrowSchema &schema,
+                                std::unordered_map<idx_t, unique_ptr<ArrowConvertData>> &arrow_convert_data,
+                                idx_t col_idx) {
 	auto format = string(schema.format);
 	if (arrow_convert_data.find(col_idx) == arrow_convert_data.end()) {
 		arrow_convert_data[col_idx] = make_unique<ArrowConvertData>();
@@ -114,23 +115,27 @@ LogicalType ArrowTableFunction::GetArrowLogicalType(
 		idx_t fixed_size = std::stoi(parameters);
 		arrow_convert_data[col_idx]->variable_sz_type.emplace_back(ArrowVariableSizeType::FIXED_SIZE, fixed_size);
 		auto child_type = GetArrowLogicalType(*schema.children[0], arrow_convert_data, col_idx);
-		return LogicalType::LIST(std::move(child_type));
+		return LogicalType::LIST(move(child_type));
 	} else if (format == "+s") {
 		child_list_t<LogicalType> child_types;
 		for (idx_t type_idx = 0; type_idx < (idx_t)schema.n_children; type_idx++) {
 			auto child_type = GetArrowLogicalType(*schema.children[type_idx], arrow_convert_data, col_idx);
 			child_types.push_back({schema.children[type_idx]->name, child_type});
 		}
-		return LogicalType::STRUCT(std::move(child_types));
+		return LogicalType::STRUCT(move(child_types));
 
 	} else if (format == "+m") {
-		arrow_convert_data[col_idx]->variable_sz_type.emplace_back(ArrowVariableSizeType::NORMAL, 0);
+		child_list_t<LogicalType> child_types;
+		//! First type will be struct, so we skip it
+		auto &struct_schema = *schema.children[0];
+		for (idx_t type_idx = 0; type_idx < (idx_t)struct_schema.n_children; type_idx++) {
+			//! The other types must be added on lists
+			auto child_type = GetArrowLogicalType(*struct_schema.children[type_idx], arrow_convert_data, col_idx);
 
-		auto &arrow_struct_type = *schema.children[0];
-		D_ASSERT(arrow_struct_type.n_children == 2);
-		auto key_type = GetArrowLogicalType(*arrow_struct_type.children[0], arrow_convert_data, col_idx);
-		auto value_type = GetArrowLogicalType(*arrow_struct_type.children[1], arrow_convert_data, col_idx);
-		return LogicalType::MAP(key_type, value_type);
+			auto list_type = LogicalType::LIST(child_type);
+			child_types.push_back({struct_schema.children[type_idx]->name, list_type});
+		}
+		return LogicalType::MAP(move(child_types));
 	} else if (format == "z") {
 		arrow_convert_data[col_idx]->variable_sz_type.emplace_back(ArrowVariableSizeType::NORMAL, 0);
 		return LogicalType::BLOB;
@@ -162,7 +167,8 @@ LogicalType ArrowTableFunction::GetArrowLogicalType(
 	}
 }
 
-void ArrowTableFunction::RenameArrowColumns(vector<string> &names) {
+// Renames repeated columns and case sensitive columns
+void RenameArrowColumns(vector<string> &names) {
 	unordered_map<string, idx_t> name_map;
 	for (auto &column_name : names) {
 		// put it all lower_case
@@ -217,7 +223,7 @@ unique_ptr<FunctionData> ArrowTableFunction::ArrowScanBind(ClientContext &contex
 	}
 	RenameArrowColumns(names);
 	res->all_types = return_types;
-	return std::move(res);
+	return move(res);
 }
 
 unique_ptr<ArrowArrayStreamWrapper> ProduceArrowScan(const ArrowScanFunctionData &function,
@@ -241,20 +247,19 @@ idx_t ArrowTableFunction::ArrowScanMaxThreads(ClientContext &context, const Func
 	return context.db->NumberOfThreads();
 }
 
-bool ArrowTableFunction::ArrowScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p,
-                                                    ArrowScanLocalState &state, ArrowScanGlobalState &parallel_state) {
+bool ArrowScanParallelStateNext(ClientContext &context, const FunctionData *bind_data_p, ArrowScanLocalState &state,
+                                ArrowScanGlobalState &parallel_state) {
 	lock_guard<mutex> parallel_lock(parallel_state.main_mutex);
 	if (parallel_state.done) {
 		return false;
 	}
 	state.chunk_offset = 0;
-	state.batch_index = ++parallel_state.batch_index;
 
 	auto current_chunk = parallel_state.stream->GetNextChunk();
 	while (current_chunk->arrow_array.length == 0 && current_chunk->arrow_array.release) {
 		current_chunk = parallel_state.stream->GetNextChunk();
 	}
-	state.chunk = std::move(current_chunk);
+	state.chunk = move(current_chunk);
 	//! have we run out of chunks? we are done
 	if (!state.chunk->arrow_array.release) {
 		parallel_state.done = true;
@@ -279,7 +284,7 @@ unique_ptr<GlobalTableFunctionState> ArrowTableFunction::ArrowScanInitGlobal(Cli
 			}
 		}
 	}
-	return std::move(result);
+	return move(result);
 }
 
 unique_ptr<LocalTableFunctionState> ArrowTableFunction::ArrowScanInitLocal(ExecutionContext &context,
@@ -287,7 +292,7 @@ unique_ptr<LocalTableFunctionState> ArrowTableFunction::ArrowScanInitLocal(Execu
                                                                            GlobalTableFunctionState *global_state_p) {
 	auto &global_state = (ArrowScanGlobalState &)*global_state_p;
 	auto current_chunk = make_unique<ArrowArrayWrapper>();
-	auto result = make_unique<ArrowScanLocalState>(std::move(current_chunk));
+	auto result = make_unique<ArrowScanLocalState>(move(current_chunk));
 	result->column_ids = input.column_ids;
 	result->filters = input.filters;
 	if (input.CanRemoveFilterColumns()) {
@@ -297,7 +302,7 @@ unique_ptr<LocalTableFunctionState> ArrowTableFunction::ArrowScanInitLocal(Execu
 	if (!ArrowScanParallelStateNext(context.client, input.bind_data, *result, global_state)) {
 		return nullptr;
 	}
-	return std::move(result);
+	return move(result);
 }
 
 void ArrowTableFunction::ArrowScanFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
@@ -334,31 +339,14 @@ unique_ptr<NodeStatistics> ArrowTableFunction::ArrowScanCardinality(ClientContex
 	return make_unique<NodeStatistics>();
 }
 
-idx_t ArrowTableFunction::ArrowGetBatchIndex(ClientContext &context, const FunctionData *bind_data_p,
-                                             LocalTableFunctionState *local_state,
-                                             GlobalTableFunctionState *global_state) {
-	auto &state = (ArrowScanLocalState &)*local_state;
-	return state.batch_index;
-}
-
 void ArrowTableFunction::RegisterFunction(BuiltinFunctions &set) {
 	TableFunction arrow("arrow_scan", {LogicalType::POINTER, LogicalType::POINTER, LogicalType::POINTER},
 	                    ArrowScanFunction, ArrowScanBind, ArrowScanInitGlobal, ArrowScanInitLocal);
 	arrow.cardinality = ArrowScanCardinality;
-	arrow.get_batch_index = ArrowGetBatchIndex;
 	arrow.projection_pushdown = true;
 	arrow.filter_pushdown = true;
 	arrow.filter_prune = true;
 	set.AddFunction(arrow);
-
-	TableFunction arrow_dumb("arrow_scan_dumb", {LogicalType::POINTER, LogicalType::POINTER, LogicalType::POINTER},
-	                         ArrowScanFunction, ArrowScanBind, ArrowScanInitGlobal, ArrowScanInitLocal);
-	arrow_dumb.cardinality = ArrowScanCardinality;
-	arrow_dumb.get_batch_index = ArrowGetBatchIndex;
-	arrow_dumb.projection_pushdown = false;
-	arrow_dumb.filter_pushdown = false;
-	arrow_dumb.filter_prune = false;
-	set.AddFunction(arrow_dumb);
 }
 
 void BuiltinFunctions::RegisterArrowFunctions() {

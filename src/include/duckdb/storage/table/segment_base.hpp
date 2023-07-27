@@ -15,16 +15,13 @@ namespace duckdb {
 
 class SegmentBase {
 public:
-	SegmentBase(idx_t start, idx_t count) : start(start), count(count), next(nullptr) {
+	SegmentBase(idx_t start, idx_t count) : start(start), count(count) {
 	}
 	virtual ~SegmentBase() {
-	}
-	SegmentBase *Next() {
-#ifndef DUCKDB_R_BUILD
-		return next.load();
-#else
-		return next;
-#endif
+		// destroy the chain of segments iteratively (rather than recursively)
+		while (next && next->next) {
+			next = move(next->next);
+		}
 	}
 
 	//! The start row id of this chunk
@@ -32,12 +29,7 @@ public:
 	//! The amount of entries in this storage chunk
 	atomic<idx_t> count;
 	//! The next segment after this one
-
-#ifndef DUCKDB_R_BUILD
-	atomic<SegmentBase *> next;
-#else
-	SegmentBase *next;
-#endif
+	unique_ptr<SegmentBase> next;
 };
 
 } // namespace duckdb

@@ -11,7 +11,7 @@ ConjunctionSimplificationRule::ConjunctionSimplificationRule(ExpressionRewriter 
 	auto op = make_unique<ConjunctionExpressionMatcher>();
 	op->matchers.push_back(make_unique<FoldableConstantMatcher>());
 	op->policy = SetMatcher::Policy::SOME;
-	root = std::move(op);
+	root = move(op);
 }
 
 unique_ptr<Expression> ConjunctionSimplificationRule::RemoveExpression(BoundConjunctionExpression &conj,
@@ -25,7 +25,7 @@ unique_ptr<Expression> ConjunctionSimplificationRule::RemoveExpression(BoundConj
 	}
 	if (conj.children.size() == 1) {
 		// one expression remaining: simply return that expression and erase the conjunction
-		return std::move(conj.children[0]);
+		return move(conj.children[0]);
 	}
 	return nullptr;
 }
@@ -38,7 +38,7 @@ unique_ptr<Expression> ConjunctionSimplificationRule::Apply(LogicalOperator &op,
 	// use an ExpressionExecutor to execute the expression
 	D_ASSERT(constant_expr->IsFoldable());
 	Value constant_value;
-	if (!ExpressionExecutor::TryEvaluateScalar(GetContext(), *constant_expr, constant_value)) {
+	if (!ExpressionExecutor::TryEvaluateScalar(*constant_expr, constant_value)) {
 		return nullptr;
 	}
 	constant_value = constant_value.DefaultCastAs(LogicalType::BOOLEAN);

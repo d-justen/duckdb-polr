@@ -23,6 +23,124 @@ class Value;
 class TypeCatalogEntry;
 class Vector;
 class ClientContext;
+//! Type used to represent dates (days since 1970-01-01)
+struct date_t { // NOLINT
+	int32_t days;
+
+	date_t() = default;
+	explicit inline date_t(int32_t days_p) : days(days_p) {}
+
+	// explicit conversion
+	explicit inline operator int32_t() const {return days;}
+
+	// comparison operators
+	inline bool operator==(const date_t &rhs) const {return days == rhs.days;};
+	inline bool operator!=(const date_t &rhs) const {return days != rhs.days;};
+	inline bool operator<=(const date_t &rhs) const {return days <= rhs.days;};
+	inline bool operator<(const date_t &rhs) const {return days < rhs.days;};
+	inline bool operator>(const date_t &rhs) const {return days > rhs.days;};
+	inline bool operator>=(const date_t &rhs) const {return days >= rhs.days;};
+
+	// arithmetic operators
+	inline date_t operator+(const int32_t &days) const {return date_t(this->days + days);};
+	inline date_t operator-(const int32_t &days) const {return date_t(this->days - days);};
+
+	// in-place operators
+	inline date_t &operator+=(const int32_t &days) {this->days += days; return *this;};
+	inline date_t &operator-=(const int32_t &days) {this->days -= days; return *this;};
+
+	// special values
+	static inline date_t infinity() {return date_t(std::numeric_limits<int32_t>::max()); } // NOLINT
+	static inline date_t ninfinity() {return date_t(-std::numeric_limits<int32_t>::max()); } // NOLINT
+	static inline date_t epoch() {return date_t(0); } // NOLINT
+};
+
+//! Type used to represent time (microseconds)
+struct dtime_t { // NOLINT
+	int64_t micros;
+
+	dtime_t() = default;
+	explicit inline dtime_t(int64_t micros_p) : micros(micros_p) {}
+	inline dtime_t& operator=(int64_t micros_p) {micros = micros_p; return *this;}
+
+	// explicit conversion
+	explicit inline operator int64_t() const {return micros;}
+	explicit inline operator double() const {return micros;}
+
+	// comparison operators
+	inline bool operator==(const dtime_t &rhs) const {return micros == rhs.micros;};
+	inline bool operator!=(const dtime_t &rhs) const {return micros != rhs.micros;};
+	inline bool operator<=(const dtime_t &rhs) const {return micros <= rhs.micros;};
+	inline bool operator<(const dtime_t &rhs) const {return micros < rhs.micros;};
+	inline bool operator>(const dtime_t &rhs) const {return micros > rhs.micros;};
+	inline bool operator>=(const dtime_t &rhs) const {return micros >= rhs.micros;};
+
+	// arithmetic operators
+	inline dtime_t operator+(const int64_t &micros) const {return dtime_t(this->micros + micros);};
+	inline dtime_t operator+(const double &micros) const {return dtime_t(this->micros + int64_t(micros));};
+	inline dtime_t operator-(const int64_t &micros) const {return dtime_t(this->micros - micros);};
+	inline dtime_t operator*(const idx_t &copies) const {return dtime_t(this->micros * copies);};
+	inline dtime_t operator/(const idx_t &copies) const {return dtime_t(this->micros / copies);};
+	inline int64_t operator-(const dtime_t &other) const {return this->micros - other.micros;};
+
+	// in-place operators
+	inline dtime_t &operator+=(const int64_t &micros) {this->micros += micros; return *this;};
+	inline dtime_t &operator-=(const int64_t &micros) {this->micros -= micros; return *this;};
+	inline dtime_t &operator+=(const dtime_t &other) {this->micros += other.micros; return *this;};
+
+	// special values
+	static inline dtime_t allballs() {return dtime_t(0); } // NOLINT
+};
+
+struct dtime_tz_t : public dtime_t {};
+
+//! Type used to represent timestamps (seconds,microseconds,milliseconds or nanoseconds since 1970-01-01)
+struct timestamp_t { // NOLINT
+	int64_t value;
+
+	timestamp_t() = default;
+	explicit inline timestamp_t(int64_t value_p) : value(value_p) {}
+	inline timestamp_t& operator=(int64_t value_p) {value = value_p; return *this;}
+
+	// explicit conversion
+	explicit inline operator int64_t() const {return value;}
+
+	// comparison operators
+	inline bool operator==(const timestamp_t &rhs) const {return value == rhs.value;};
+	inline bool operator!=(const timestamp_t &rhs) const {return value != rhs.value;};
+	inline bool operator<=(const timestamp_t &rhs) const {return value <= rhs.value;};
+	inline bool operator<(const timestamp_t &rhs) const {return value < rhs.value;};
+	inline bool operator>(const timestamp_t &rhs) const {return value > rhs.value;};
+	inline bool operator>=(const timestamp_t &rhs) const {return value >= rhs.value;};
+
+	// arithmetic operators
+	inline timestamp_t operator+(const double &value) const {return timestamp_t(this->value + int64_t(value));};
+	inline int64_t operator-(const timestamp_t &other) const {return this->value - other.value;};
+
+	// in-place operators
+	inline timestamp_t &operator+=(const int64_t &value) {this->value += value; return *this;};
+	inline timestamp_t &operator-=(const int64_t &value) {this->value -= value; return *this;};
+
+	// special values
+	static inline timestamp_t infinity() {return timestamp_t(std::numeric_limits<int64_t>::max()); } // NOLINT
+	static inline timestamp_t ninfinity() {return timestamp_t(-std::numeric_limits<int64_t>::max()); } // NOLINT
+	static inline timestamp_t epoch() {return timestamp_t(0); } // NOLINT
+};
+
+struct timestamp_tz_t : public timestamp_t {};
+struct timestamp_ns_t : public timestamp_t {};
+struct timestamp_ms_t : public timestamp_t {};
+struct timestamp_sec_t : public timestamp_t {};
+
+struct interval_t {
+	int32_t months;
+	int32_t days;
+	int64_t micros;
+
+	inline bool operator==(const interval_t &rhs) const {
+		return this->days == rhs.days && this->months == rhs.months && this->micros == rhs.micros;
+	}
+};
 
 struct hugeint_t {
 public:
@@ -32,9 +150,8 @@ public:
 public:
 	DUCKDB_API hugeint_t() = default;
 	DUCKDB_API hugeint_t(int64_t value); // NOLINT: Allow implicit conversion from `int64_t`
-	DUCKDB_API constexpr hugeint_t(int64_t upper, uint64_t lower): lower(lower), upper(upper) {};
-	DUCKDB_API constexpr hugeint_t(const hugeint_t &rhs) = default;
-	DUCKDB_API constexpr hugeint_t(hugeint_t &&rhs) = default;
+	DUCKDB_API hugeint_t(const hugeint_t &rhs) = default;
+	DUCKDB_API hugeint_t(hugeint_t &&rhs) = default;
 	DUCKDB_API hugeint_t &operator=(const hugeint_t &rhs) = default;
 	DUCKDB_API hugeint_t &operator=(hugeint_t &&rhs) = default;
 
@@ -98,8 +215,6 @@ struct list_entry_t {
 	uint64_t offset;
 	uint64_t length;
 };
-
-using union_tag_t = uint8_t; 
 
 //===--------------------------------------------------------------------===//
 // Internal Types
@@ -195,6 +310,9 @@ enum class PhysicalType : uint8_t {
 	///// ArrayData struct
 	//DICTIONARY = 26,
 
+	/// Map, a repeated struct logical type
+	MAP = 27,
+
 	///// Custom data type, implemented by user
 	//EXTENSION = 28,
 
@@ -257,6 +375,7 @@ enum class LogicalTypeId : uint8_t {
 	UBIGINT = 31,
 	TIMESTAMP_TZ = 32,
 	TIME_TZ = 34,
+	JSON = 35,
 
 	HUGEINT = 50,
 	POINTER = 51,
@@ -270,8 +389,7 @@ enum class LogicalTypeId : uint8_t {
 	TABLE = 103,
 	ENUM = 104,
 	AGGREGATE_STATE = 105,
-	LAMBDA = 106,
-	UNION = 107
+	LAMBDA = 106
 };
 
 struct ExtraTypeInfo;
@@ -313,7 +431,7 @@ struct LogicalType {
 	inline LogicalType& operator=(LogicalType&& other) noexcept {
 		id_ = other.id_;
 		physical_type_ = other.physical_type_;
-		type_info_ = std::move(other.type_info_);
+		type_info_ = move(other.type_info_);
 		return *this;
 	}
 
@@ -397,6 +515,7 @@ public:
 	static constexpr const LogicalTypeId TABLE = LogicalTypeId::TABLE;
 	static constexpr const LogicalTypeId LAMBDA = LogicalTypeId::LAMBDA;
 	static constexpr const LogicalTypeId INVALID = LogicalTypeId::INVALID;
+	static constexpr const LogicalTypeId JSON = LogicalTypeId::JSON;
 	static constexpr const LogicalTypeId ROW_TYPE = LogicalTypeId::BIGINT;
 
 	// explicitly allowing these functions to be capitalized to be in-line with the remaining functions
@@ -405,11 +524,10 @@ public:
 	DUCKDB_API static LogicalType LIST( LogicalType child);                       // NOLINT
 	DUCKDB_API static LogicalType STRUCT( child_list_t<LogicalType> children);    // NOLINT
 	DUCKDB_API static LogicalType AGGREGATE_STATE(aggregate_state_t state_type);    // NOLINT
-	DUCKDB_API static LogicalType MAP(LogicalType child);				// NOLINT
 	DUCKDB_API static LogicalType MAP( child_list_t<LogicalType> children);       // NOLINT
 	DUCKDB_API static LogicalType MAP(LogicalType key, LogicalType value); // NOLINT
-	DUCKDB_API static LogicalType UNION( child_list_t<LogicalType> members);     // NOLINT
 	DUCKDB_API static LogicalType ENUM(const string &enum_name, Vector &ordered_data, idx_t size); // NOLINT
+	DUCKDB_API static LogicalType DEDUP_POINTER_ENUM(); // NOLINT
 	DUCKDB_API static LogicalType USER(const string &user_type_name); // NOLINT
 	//! A list of all NUMERIC types (integral and floating point types)
 	DUCKDB_API static const vector<LogicalType> Numeric();
@@ -460,18 +578,11 @@ struct MapType {
 	DUCKDB_API static const LogicalType &ValueType(const LogicalType &type);
 };
 
-struct UnionType {
-	DUCKDB_API static const idx_t MAX_UNION_MEMBERS = 256;
-	DUCKDB_API static idx_t GetMemberCount(const LogicalType &type);
-	DUCKDB_API static const LogicalType &GetMemberType(const LogicalType &type, idx_t index);
-	DUCKDB_API static const string &GetMemberName(const LogicalType &type, idx_t index);
-	DUCKDB_API static const child_list_t<LogicalType> CopyMemberTypes(const LogicalType &type);
-};
-
 struct AggregateStateType {
 	DUCKDB_API static const string GetTypeName(const LogicalType &type);
 	DUCKDB_API static const aggregate_state_t &GetStateType(const LogicalType &type);
 };
+
 
 DUCKDB_API string LogicalTypeIdToString(LogicalTypeId type);
 
@@ -479,23 +590,78 @@ DUCKDB_API LogicalTypeId TransformStringToLogicalTypeId(const string &str);
 
 DUCKDB_API LogicalType TransformStringToLogicalType(const string &str);
 
-DUCKDB_API LogicalType TransformStringToLogicalType(const string &str, ClientContext &context);
+//! Returns the PhysicalType for the given type
+template <class T>
+PhysicalType GetTypeId() {
+	if (std::is_same<T, bool>()) {
+		return PhysicalType::BOOL;
+	} else if (std::is_same<T, int8_t>()) {
+		return PhysicalType::INT8;
+	} else if (std::is_same<T, int16_t>()) {
+		return PhysicalType::INT16;
+	} else if (std::is_same<T, int32_t>()) {
+		return PhysicalType::INT32;
+	} else if (std::is_same<T, int64_t>()) {
+		return PhysicalType::INT64;
+	} else if (std::is_same<T, uint8_t>()) {
+		return PhysicalType::UINT8;
+	} else if (std::is_same<T, uint16_t>()) {
+		return PhysicalType::UINT16;
+	} else if (std::is_same<T, uint32_t>()) {
+		return PhysicalType::UINT32;
+	} else if (std::is_same<T, uint64_t>()) {
+		return PhysicalType::UINT64;
+	} else if (std::is_same<T, hugeint_t>()) {
+		return PhysicalType::INT128;
+	} else if (std::is_same<T, date_t>()) {
+		return PhysicalType::INT32;
+	} else if (std::is_same<T, dtime_t>()) {
+		return PhysicalType::INT64;
+	} else if (std::is_same<T, timestamp_t>()) {
+		return PhysicalType::INT64;
+	} else if (std::is_same<T, float>()) {
+		return PhysicalType::FLOAT;
+	} else if (std::is_same<T, double>()) {
+		return PhysicalType::DOUBLE;
+	} else if (std::is_same<T, const char *>() || std::is_same<T, char *>() || std::is_same<T, string_t>()) {
+		return PhysicalType::VARCHAR;
+	} else if (std::is_same<T, interval_t>()) {
+		return PhysicalType::INTERVAL;
+	} else {
+		return PhysicalType::INVALID;
+	}
+}
+
+template<class T>
+bool TypeIsNumber() {
+	return std::is_integral<T>() || std::is_floating_point<T>() || std::is_same<T, hugeint_t>();
+}
+
+template <class T>
+bool IsValidType() {
+	return GetTypeId<T>() != PhysicalType::INVALID;
+}
 
 //! The PhysicalType used by the row identifiers column
 extern const PhysicalType ROW_TYPE;
 
 DUCKDB_API string TypeIdToString(PhysicalType type);
-DUCKDB_API idx_t GetTypeIdSize(PhysicalType type);
-DUCKDB_API bool TypeIsConstantSize(PhysicalType type);
-DUCKDB_API bool TypeIsIntegral(PhysicalType type);
-DUCKDB_API bool TypeIsNumeric(PhysicalType type);
-DUCKDB_API bool TypeIsInteger(PhysicalType type);
+idx_t GetTypeIdSize(PhysicalType type);
+bool TypeIsConstantSize(PhysicalType type);
+bool TypeIsIntegral(PhysicalType type);
+bool TypeIsNumeric(PhysicalType type);
+bool TypeIsInteger(PhysicalType type);
+
+template <class T>
+bool IsIntegerType() {
+	return TypeIsIntegral(GetTypeId<T>());
+}
 
 bool ApproxEqual(float l, float r);
 bool ApproxEqual(double l, double r);
 
 struct aggregate_state_t {
-	aggregate_state_t(string function_name_p, LogicalType return_type_p, vector<LogicalType> bound_argument_types_p) : function_name(std::move(function_name_p)), return_type(std::move(return_type_p)), bound_argument_types(std::move(bound_argument_types_p)) {
+	aggregate_state_t(string function_name_p, LogicalType return_type_p, vector<LogicalType> bound_argument_types_p) : function_name(move(function_name_p)), return_type(move(return_type_p)), bound_argument_types(move(bound_argument_types_p)) {
 	}
 
 	string function_name;
@@ -504,3 +670,84 @@ struct aggregate_state_t {
 };
 
 } // namespace duckdb
+
+namespace std {
+
+	//! Date
+	template <>
+	struct hash<duckdb::date_t>
+	{
+		std::size_t operator()(const duckdb::date_t& k) const
+		{
+			using std::hash;
+			return hash<int32_t>()((int32_t)k);
+		}
+	};
+
+	//! Time
+	template <>
+	struct hash<duckdb::dtime_t>
+	{
+		std::size_t operator()(const duckdb::dtime_t& k) const
+		{
+			using std::hash;
+			return hash<int64_t>()((int64_t)k);
+		}
+	};
+	template <>
+	struct hash<duckdb::dtime_tz_t>
+	{
+		std::size_t operator()(const duckdb::dtime_tz_t& k) const
+		{
+			using std::hash;
+			return hash<int64_t>()((int64_t)k);
+		}
+	};
+
+	//! Timestamp
+	template <>
+	struct hash<duckdb::timestamp_t>
+	{
+		std::size_t operator()(const duckdb::timestamp_t& k) const
+		{
+			using std::hash;
+			return hash<int64_t>()((int64_t)k);
+		}
+	};
+	template <>
+	struct hash<duckdb::timestamp_ms_t>
+	{
+		std::size_t operator()(const duckdb::timestamp_ms_t& k) const
+		{
+			using std::hash;
+			return hash<int64_t>()((int64_t)k);
+		}
+	};
+	template <>
+	struct hash<duckdb::timestamp_ns_t>
+	{
+		std::size_t operator()(const duckdb::timestamp_ns_t& k) const
+		{
+			using std::hash;
+			return hash<int64_t>()((int64_t)k);
+		}
+	};
+	template <>
+	struct hash<duckdb::timestamp_sec_t>
+	{
+		std::size_t operator()(const duckdb::timestamp_sec_t& k) const
+		{
+			using std::hash;
+			return hash<int64_t>()((int64_t)k);
+		}
+	};
+	template <>
+	struct hash<duckdb::timestamp_tz_t>
+	{
+		std::size_t operator()(const duckdb::timestamp_tz_t& k) const
+		{
+			using std::hash;
+			return hash<int64_t>()((int64_t)k);
+		}
+	};
+}

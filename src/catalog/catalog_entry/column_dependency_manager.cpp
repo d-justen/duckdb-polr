@@ -11,22 +11,23 @@ ColumnDependencyManager::ColumnDependencyManager() {
 ColumnDependencyManager::~ColumnDependencyManager() {
 }
 
-void ColumnDependencyManager::AddGeneratedColumn(const ColumnDefinition &column, const ColumnList &list) {
+void ColumnDependencyManager::AddGeneratedColumn(const ColumnDefinition &column,
+                                                 const case_insensitive_map_t<column_t> &name_map) {
 	D_ASSERT(column.Generated());
 	vector<string> referenced_columns;
 	column.GetListOfDependencies(referenced_columns);
-	vector<LogicalIndex> indices;
+	vector<column_t> indices;
 	for (auto &col : referenced_columns) {
-		if (!list.ColumnExists(col)) {
-			throw BinderException("Column \"%s\" referenced by generated column does not exist", col);
+		auto entry = name_map.find(col);
+		if (entry == name_map.end()) {
+			throw InvalidInputException("Referenced column \"%s\" was not found in the table", col);
 		}
-		auto &entry = list.GetColumn(col);
-		indices.push_back(entry.Logical());
+		indices.push_back(entry->second);
 	}
-	return AddGeneratedColumn(column.Logical(), indices);
+	return AddGeneratedColumn(column.Oid(), indices);
 }
 
-void ColumnDependencyManager::AddGeneratedColumn(LogicalIndex index, const vector<LogicalIndex> &indices, bool root) {
+void ColumnDependencyManager::AddGeneratedColumn(column_t index, const vector<column_t> &indices, bool root) {
 	if (indices.empty()) {
 		return;
 	}
@@ -64,7 +65,7 @@ void ColumnDependencyManager::AddGeneratedColumn(LogicalIndex index, const vecto
 	}
 }
 
-vector<LogicalIndex> ColumnDependencyManager::RemoveColumn(LogicalIndex index, idx_t column_amount) {
+vector<column_t> ColumnDependencyManager::RemoveColumn(column_t index, column_t column_amount) {
 	// Always add the initial column
 	deleted_columns.insert(index);
 
@@ -72,12 +73,12 @@ vector<LogicalIndex> ColumnDependencyManager::RemoveColumn(LogicalIndex index, i
 	RemoveStandardColumn(index);
 
 	// Clean up the internal list
-	vector<LogicalIndex> new_indices = CleanupInternals(column_amount);
+	vector<column_t> new_indices = CleanupInternals(column_amount);
 	D_ASSERT(deleted_columns.empty());
 	return new_indices;
 }
 
-bool ColumnDependencyManager::IsDependencyOf(LogicalIndex gcol, LogicalIndex col) const {
+bool ColumnDependencyManager::IsDependencyOf(column_t gcol, column_t col) const {
 	auto entry = dependents_map.find(gcol);
 	if (entry == dependents_map.end()) {
 		return false;
@@ -86,7 +87,7 @@ bool ColumnDependencyManager::IsDependencyOf(LogicalIndex gcol, LogicalIndex col
 	return list.count(col);
 }
 
-bool ColumnDependencyManager::HasDependencies(LogicalIndex index) const {
+bool ColumnDependencyManager::HasDependencies(column_t index) const {
 	auto entry = dependents_map.find(index);
 	if (entry == dependents_map.end()) {
 		return false;
@@ -94,13 +95,13 @@ bool ColumnDependencyManager::HasDependencies(LogicalIndex index) const {
 	return true;
 }
 
-const logical_index_set_t &ColumnDependencyManager::GetDependencies(LogicalIndex index) const {
+const unordered_set<column_t> &ColumnDependencyManager::GetDependencies(column_t index) const {
 	auto entry = dependents_map.find(index);
 	D_ASSERT(entry != dependents_map.end());
 	return entry->second;
 }
 
-bool ColumnDependencyManager::HasDependents(LogicalIndex index) const {
+bool ColumnDependencyManager::HasDependents(column_t index) const {
 	auto entry = dependencies_map.find(index);
 	if (entry == dependencies_map.end()) {
 		return false;
@@ -108,13 +109,13 @@ bool ColumnDependencyManager::HasDependents(LogicalIndex index) const {
 	return true;
 }
 
-const logical_index_set_t &ColumnDependencyManager::GetDependents(LogicalIndex index) const {
+const unordered_set<column_t> &ColumnDependencyManager::GetDependents(column_t index) const {
 	auto entry = dependencies_map.find(index);
 	D_ASSERT(entry != dependencies_map.end());
 	return entry->second;
 }
 
-void ColumnDependencyManager::RemoveStandardColumn(LogicalIndex index) {
+void ColumnDependencyManager::RemoveStandardColumn(column_t index) {
 	if (!HasDependents(index)) {
 		return;
 	}
@@ -130,7 +131,7 @@ void ColumnDependencyManager::RemoveStandardColumn(LogicalIndex index) {
 	dependencies_map.erase(index);
 }
 
-void ColumnDependencyManager::RemoveGeneratedColumn(LogicalIndex index) {
+void ColumnDependencyManager::RemoveGeneratedColumn(column_t index) {
 	deleted_columns.insert(index);
 	if (!HasDependencies(index)) {
 		return;
@@ -150,9 +151,9 @@ void ColumnDependencyManager::RemoveGeneratedColumn(LogicalIndex index) {
 	dependents_map.erase(index);
 }
 
-void ColumnDependencyManager::AdjustSingle(LogicalIndex idx, idx_t offset) {
-	D_ASSERT(idx.index >= offset);
-	LogicalIndex new_idx = LogicalIndex(idx.index - offset);
+void ColumnDependencyManager::AdjustSingle(column_t idx, idx_t offset) {
+	D_ASSERT(idx >= offset);
+	column_t new_idx = idx - offset;
 	// Adjust this index in the dependents of this column
 	bool has_dependents = HasDependents(idx);
 	bool has_dependencies = HasDependencies(idx);
@@ -177,50 +178,48 @@ void ColumnDependencyManager::AdjustSingle(LogicalIndex idx, idx_t offset) {
 	}
 	if (has_dependents) {
 		D_ASSERT(!dependencies_map.count(new_idx));
-		dependencies_map[new_idx] = std::move(dependencies_map[idx]);
+		dependencies_map[new_idx] = move(dependencies_map[idx]);
 		dependencies_map.erase(idx);
 	}
 	if (has_dependencies) {
 		D_ASSERT(!dependents_map.count(new_idx));
-		dependents_map[new_idx] = std::move(dependents_map[idx]);
+		dependents_map[new_idx] = move(dependents_map[idx]);
 		dependents_map.erase(idx);
 	}
 }
 
-vector<LogicalIndex> ColumnDependencyManager::CleanupInternals(idx_t column_amount) {
-	vector<LogicalIndex> to_adjust;
+vector<column_t> ColumnDependencyManager::CleanupInternals(column_t column_amount) {
+	vector<column_t> to_adjust;
 	D_ASSERT(!deleted_columns.empty());
 	// Get the lowest index that was deleted
-	vector<LogicalIndex> new_indices(column_amount, LogicalIndex(DConstants::INVALID_INDEX));
-	idx_t threshold = deleted_columns.begin()->index;
+	vector<column_t> new_indices(column_amount, DConstants::INVALID_INDEX);
+	column_t threshold = *deleted_columns.begin();
 
 	idx_t offset = 0;
-	for (idx_t i = 0; i < column_amount; i++) {
-		auto current_index = LogicalIndex(i);
-		auto new_index = LogicalIndex(i - offset);
-		new_indices[i] = new_index;
-		if (deleted_columns.count(current_index)) {
+	for (column_t i = 0; i < column_amount; i++) {
+		new_indices[i] = i - offset;
+		if (deleted_columns.count(i)) {
 			offset++;
 			continue;
 		}
-		if (i > threshold && (HasDependencies(current_index) || HasDependents(current_index))) {
-			to_adjust.push_back(current_index);
+		if (i > threshold && (HasDependencies(i) || HasDependents(i))) {
+			to_adjust.push_back(i);
 		}
 	}
 
 	// Adjust all indices inside the dependency managers internal mappings
 	for (auto &col : to_adjust) {
-		auto offset = col.index - new_indices[col.index].index;
+		offset = col - new_indices[col];
 		AdjustSingle(col, offset);
 	}
 	deleted_columns.clear();
 	return new_indices;
 }
 
-stack<LogicalIndex> ColumnDependencyManager::GetBindOrder(const ColumnList &columns) {
-	stack<LogicalIndex> bind_order;
-	queue<LogicalIndex> to_visit;
-	logical_index_set_t visited;
+stack<column_t> ColumnDependencyManager::GetBindOrder(const vector<ColumnDefinition> &columns) {
+	stack<column_t> bind_order;
+	queue<column_t> to_visit;
+	unordered_set<column_t> visited;
 
 	for (auto &entry : direct_dependencies) {
 		auto dependent = entry.first;
@@ -252,16 +251,17 @@ stack<LogicalIndex> ColumnDependencyManager::GetBindOrder(const ColumnList &colu
 	}
 
 	// Add generated columns that have no dependencies, but still might need to have their type resolved
-	for (auto &col : columns.Logical()) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto &col = columns[i];
 		// Not a generated column
 		if (!col.Generated()) {
 			continue;
 		}
 		// Already added to the bind_order stack
-		if (visited.count(col.Logical())) {
+		if (visited.count(i)) {
 			continue;
 		}
-		bind_order.push(col.Logical());
+		bind_order.push(i);
 	}
 
 	return bind_order;

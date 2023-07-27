@@ -63,8 +63,6 @@ SET SCHEMA = 'test';
 
 statement error
 SET SCHEMA = 'test,test2';
-----
-expected a single entry
 
 statement error
 SET SCHEMA = 'does_not_exist';
@@ -83,9 +81,9 @@ SELECT MAIN.CURRENT_SETTING('search_path');
 test,test2
 
 query I
-SELECT MAIN.CURRENT_SCHEMAS(false);
+SELECT MAIN.CURRENT_SETTING('schema');
 ----
-[test, test2]
+test,test2
 
 statement ok
 SET SCHEMA = 'test';
@@ -96,7 +94,7 @@ SELECT MAIN.CURRENT_SETTING('search_path');
 test
 
 query I
-SELECT MAIN.CURRENT_SCHEMA();
+SELECT MAIN.CURRENT_SETTING('schema');
 ----
 test
 
@@ -108,7 +106,7 @@ test
 query I
 SELECT current_schemas(true);
 ----
-[main, test, main, main, pg_catalog]
+[temp, test, main, pg_catalog]
 
 query I
 SELECT current_schemas(false);

@@ -20,7 +20,7 @@ struct ApproximateQuantileBindData : public FunctionData {
 	explicit ApproximateQuantileBindData(float quantile_p) : quantiles(1, quantile_p) {
 	}
 
-	explicit ApproximateQuantileBindData(vector<float> quantiles_p) : quantiles(std::move(quantiles_p)) {
+	explicit ApproximateQuantileBindData(vector<float> quantiles_p) : quantiles(move(quantiles_p)) {
 	}
 
 	unique_ptr<FunctionData> Copy() const override {
@@ -45,7 +45,7 @@ struct ApproximateQuantileBindData : public FunctionData {
 	static unique_ptr<FunctionData> Deserialize(ClientContext &context, FieldReader &reader,
 	                                            AggregateFunction &bound_function) {
 		auto quantiles = reader.ReadRequiredList<float>();
-		return make_unique<ApproximateQuantileBindData>(std::move(quantiles));
+		return make_unique<ApproximateQuantileBindData>(move(quantiles));
 	}
 
 	vector<float> quantiles;
@@ -169,7 +169,7 @@ unique_ptr<FunctionData> BindApproxQuantile(ClientContext &context, AggregateFun
 	if (!arguments[1]->IsFoldable()) {
 		throw BinderException("APPROXIMATE QUANTILE can only take constant quantile parameters");
 	}
-	Value quantile_val = ExpressionExecutor::EvaluateScalar(context, *arguments[1]);
+	Value quantile_val = ExpressionExecutor::EvaluateScalar(*arguments[1]);
 
 	vector<float> quantiles;
 	if (quantile_val.type().id() != LogicalTypeId::LIST) {

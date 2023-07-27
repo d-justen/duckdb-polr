@@ -14,7 +14,7 @@ namespace duckdb {
 
 class ClientContext;
 
-//! ClientContext-specific FileOpener implementation.
+//! ClientContext-specific FileOpener implemenation.
 //! This object is owned by ClientContext and never outlives it.
 class ClientContextFileOpener : public FileOpener {
 public:
@@ -22,10 +22,6 @@ public:
 	}
 
 	bool TryGetCurrentSetting(const string &key, Value &result) override;
-
-	ClientContext *TryGetClientContext() override {
-		return &context;
-	};
 
 private:
 	ClientContext &context;

@@ -25,8 +25,7 @@ public:
 	vector<PhysicalOperator *> GetChildren() const override;
 
 public:
-	bool AllOperatorsPreserveOrder() const override;
-	void BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) override;
+	void BuildPipelines(Executor &executor, Pipeline &current, PipelineBuildState &state) override;
 };
 
 } // namespace duckdb

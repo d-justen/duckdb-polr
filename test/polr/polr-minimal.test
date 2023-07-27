@@ -1,0 +1,28 @@
+# name: test/polr/polr-minimal.test
+# description: Run POLR test queries
+# group: [polr]
+
+statement ok
+CREATE TABLE table_a AS SELECT * FROM range(0, 10, 1) t1(a_a), range(10, 20, 1) t2(a_b) WHERE t2.a_b = t1.a_a + 10
+
+statement ok
+CREATE TABLE table_b AS SELECT * FROM range(0, 5, 1) t1(b_a)
+
+statement ok
+CREATE TABLE table_c AS SELECT * FROM range(10, 15, 1) t1(c_b)
+
+statement ok
+PRAGMA enable_polr
+
+statement ok
+PRAGMA disable_profiling
+
+# row-wise
+query IIII
+SELECT * FROM table_a, table_b, table_c WHERE table_a.a_a = table_b.b_a AND table_a.a_b = table_c.c_b
+----
+0	10	0	10
+1	11	1	11
+2	12	2	12
+3	13	3	13
+4	14	4	14

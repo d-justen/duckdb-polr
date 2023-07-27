@@ -10,14 +10,8 @@
 
 #include "duckdb/common/types.hpp"
 #include "duckdb/common/exception.hpp"
-#include "duckdb/common/type_util.hpp"
 
 namespace duckdb {
-
-struct interval_t;
-struct date_t;
-struct timestamp_t;
-struct dtime_t;
 
 struct SubtractOperator {
 	template <class TA, class TB, class TR>
@@ -72,7 +66,7 @@ bool TrySubtractOperator::Operation(hugeint_t left, hugeint_t right, hugeint_t &
 
 struct SubtractOperatorOverflowCheck {
 	template <class TA, class TB, class TR>
-	DUCKDB_API static inline TR Operation(TA left, TB right) {
+	static inline TR Operation(TA left, TB right) {
 		TR result;
 		if (!TrySubtractOperator::Operation(left, right, result)) {
 			throw OutOfRangeException("Overflow in subtraction of %s (%d - %d)!", TypeIdToString(GetTypeId<TA>()), left,

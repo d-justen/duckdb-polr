@@ -38,7 +38,6 @@ public:
 
 public:
 	BoundOrderByNode Copy() const;
-	bool Equals(const BoundOrderByNode &other) const;
 	string ToString() const;
 
 	void Serialize(Serializer &serializer) const;

@@ -28,10 +28,7 @@ BindResult ColumnAliasBinder::BindAlias(ExpressionBinder &enclosing_binder, Colu
 	// found an alias: bind the alias expression
 	auto expression = node.original_expressions[alias_entry->second]->Copy();
 	in_alias = true;
-
-	// since the alias has been found, pass a depth of 0. See Issue 4978 (#16)
-	// ColumnAliasBinders are only in Having, Qualify and Where Binders
-	auto result = enclosing_binder.BindExpression(&expression, 0, root_expression);
+	auto result = enclosing_binder.BindExpression(&expression, depth, root_expression);
 	in_alias = false;
 	return result;
 }

@@ -23,84 +23,103 @@
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/storage_manager.hpp"
-#include "duckdb/common/index_map.hpp"
 
 #include <sstream>
 
 namespace duckdb {
 
-bool TableCatalogEntry::HasGeneratedColumns() const {
-	return columns.LogicalColumnCount() != columns.PhysicalColumnCount();
+const string &TableCatalogEntry::GetColumnName(column_t index) {
+	return columns[index].Name();
 }
 
-LogicalIndex TableCatalogEntry::GetColumnIndex(string &column_name, bool if_exists) {
-	auto entry = columns.GetColumnIndex(column_name);
-	if (!entry.IsValid()) {
-		if (if_exists) {
-			return entry;
+column_t TableCatalogEntry::GetColumnIndex(string &column_name, bool if_exists) {
+	auto entry = name_map.find(column_name);
+	if (entry == name_map.end()) {
+		// entry not found: try lower-casing the name
+		entry = name_map.find(StringUtil::Lower(column_name));
+		if (entry == name_map.end()) {
+			if (if_exists) {
+				return DConstants::INVALID_INDEX;
+			}
+			throw BinderException("Table \"%s\" does not have a column with name \"%s\"", name, column_name);
 		}
-		throw BinderException("Table \"%s\" does not have a column with name \"%s\"", name, column_name);
 	}
-	return entry;
+	if (entry->second == COLUMN_IDENTIFIER_ROW_ID) {
+		column_name = "rowid";
+		return COLUMN_IDENTIFIER_ROW_ID;
+	}
+	column_name = GetColumnName(entry->second);
+	return entry->second;
 }
 
-void AddDataTableIndex(DataTable *storage, const ColumnList &columns, const vector<PhysicalIndex> &keys,
+void AddDataTableIndex(DataTable *storage, vector<ColumnDefinition> &columns, vector<idx_t> &keys,
                        IndexConstraintType constraint_type, BlockPointer *index_block = nullptr) {
 	// fetch types and create expressions for the index from the columns
 	vector<column_t> column_ids;
 	vector<unique_ptr<Expression>> unbound_expressions;
 	vector<unique_ptr<Expression>> bound_expressions;
 	idx_t key_nr = 0;
-	column_ids.reserve(keys.size());
-	for (auto &physical_key : keys) {
-		auto &column = columns.GetColumn(physical_key);
-		D_ASSERT(!column.Generated());
-		unbound_expressions.push_back(
-		    make_unique<BoundColumnRefExpression>(column.Name(), column.Type(), ColumnBinding(0, column_ids.size())));
+	for (auto &key : keys) {
+		D_ASSERT(key < columns.size());
+		auto &column = columns[key];
+		if (column.Generated()) {
+			throw InvalidInputException("Creating index on generated column is not supported");
+		}
 
-		bound_expressions.push_back(make_unique<BoundReferenceExpression>(column.Type(), key_nr++));
+		unbound_expressions.push_back(make_unique<BoundColumnRefExpression>(columns[key].Name(), columns[key].Type(),
+		                                                                    ColumnBinding(0, column_ids.size())));
+
+		bound_expressions.push_back(make_unique<BoundReferenceExpression>(columns[key].Type(), key_nr++));
 		column_ids.push_back(column.StorageOid());
 	}
 	unique_ptr<ART> art;
 	// create an adaptive radix tree around the expressions
 	if (index_block) {
-		art = make_unique<ART>(column_ids, TableIOManager::Get(*storage), std::move(unbound_expressions),
-		                       constraint_type, storage->db, index_block->block_id, index_block->offset);
+		art = make_unique<ART>(column_ids, TableIOManager::Get(*storage), move(unbound_expressions), constraint_type,
+		                       storage->db, index_block->block_id, index_block->offset);
 	} else {
-		art = make_unique<ART>(column_ids, TableIOManager::Get(*storage), std::move(unbound_expressions),
-		                       constraint_type, storage->db);
+		art = make_unique<ART>(column_ids, TableIOManager::Get(*storage), move(unbound_expressions), constraint_type,
+		                       storage->db);
 		if (!storage->IsRoot()) {
 			throw TransactionException("Transaction conflict: cannot add an index to a table that has been altered!");
 		}
 	}
-	storage->info->indexes.AddIndex(std::move(art));
-}
-
-void AddDataTableIndex(DataTable *storage, const ColumnList &columns, vector<LogicalIndex> &keys,
-                       IndexConstraintType constraint_type, BlockPointer *index_block = nullptr) {
-	vector<PhysicalIndex> new_keys;
-	new_keys.reserve(keys.size());
-	for (auto &logical_key : keys) {
-		new_keys.push_back(columns.LogicalToPhysical(logical_key));
-	}
-	AddDataTableIndex(storage, columns, new_keys, constraint_type, index_block);
+	storage->info->indexes.AddIndex(move(art));
 }
 
 TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schema, BoundCreateTableInfo *info,
                                      std::shared_ptr<DataTable> inherited_storage)
-    : StandardEntry(CatalogType::TABLE_ENTRY, schema, catalog, info->Base().table),
-      storage(std::move(inherited_storage)), columns(std::move(info->Base().columns)),
-      constraints(std::move(info->Base().constraints)), bound_constraints(std::move(info->bound_constraints)),
-      column_dependency_manager(std::move(info->column_dependency_manager)) {
+    : StandardEntry(CatalogType::TABLE_ENTRY, schema, catalog, info->Base().table), storage(move(inherited_storage)),
+      columns(move(info->Base().columns)), constraints(move(info->Base().constraints)),
+      bound_constraints(move(info->bound_constraints)),
+      column_dependency_manager(move(info->column_dependency_manager)) {
 	this->temporary = info->Base().temporary;
+	// add lower case aliases
+	this->name_map = move(info->name_map);
+#ifdef DEBUG
+	D_ASSERT(name_map.size() == columns.size());
+	for (idx_t i = 0; i < columns.size(); i++) {
+		D_ASSERT(name_map[columns[i].Name()] == i);
+	}
+#endif
+	// add the "rowid" alias, if there is no rowid column specified in the table
+	if (name_map.find("rowid") == name_map.end()) {
+		name_map["rowid"] = COLUMN_IDENTIFIER_ROW_ID;
+	}
 	if (!storage) {
 		// create the physical storage
 		vector<ColumnDefinition> storage_columns;
-		for (auto &col_def : columns.Physical()) {
+		vector<ColumnDefinition> get_columns;
+		for (auto &col_def : columns) {
+			get_columns.push_back(col_def.Copy());
+			if (col_def.Generated()) {
+				continue;
+			}
 			storage_columns.push_back(col_def.Copy());
 		}
-		storage = make_shared<DataTable>(catalog->GetAttached(), StorageManager::Get(*catalog).GetTableIOManager(info),
-		                                 schema->name, name, std::move(storage_columns), std::move(info->data));
+		storage =
+		    make_shared<DataTable>(catalog->db, StorageManager::GetStorageManager(catalog->db).GetTableIOManager(info),
+		                           schema->name, name, move(storage_columns), move(info->data));
 
 		// create the unique indexes for the UNIQUE and PRIMARY KEY and FOREIGN KEY constraints
 		idx_t indexes_idx = 0;
@@ -114,9 +133,9 @@ TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schem
 					constraint_type = IndexConstraintType::PRIMARY;
 				}
 				if (info->indexes.empty()) {
-					AddDataTableIndex(storage.get(), columns, unique.keys, constraint_type);
+					AddDataTableIndex(storage.get(), get_columns, unique.keys, constraint_type);
 				} else {
-					AddDataTableIndex(storage.get(), columns, unique.keys, constraint_type,
+					AddDataTableIndex(storage.get(), get_columns, unique.keys, constraint_type,
 					                  &info->indexes[indexes_idx++]);
 				}
 			} else if (constraint->type == ConstraintType::FOREIGN_KEY) {
@@ -125,9 +144,9 @@ TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schem
 				if (bfk.info.type == ForeignKeyType::FK_TYPE_FOREIGN_KEY_TABLE ||
 				    bfk.info.type == ForeignKeyType::FK_TYPE_SELF_REFERENCE_TABLE) {
 					if (info->indexes.empty()) {
-						AddDataTableIndex(storage.get(), columns, bfk.info.fk_keys, IndexConstraintType::FOREIGN);
+						AddDataTableIndex(storage.get(), get_columns, bfk.info.fk_keys, IndexConstraintType::FOREIGN);
 					} else {
-						AddDataTableIndex(storage.get(), columns, bfk.info.fk_keys, IndexConstraintType::FOREIGN,
+						AddDataTableIndex(storage.get(), get_columns, bfk.info.fk_keys, IndexConstraintType::FOREIGN,
 						                  &info->indexes[indexes_idx++]);
 					}
 				}
@@ -137,18 +156,34 @@ TableCatalogEntry::TableCatalogEntry(Catalog *catalog, SchemaCatalogEntry *schem
 }
 
 bool TableCatalogEntry::ColumnExists(const string &name) {
-	return columns.ColumnExists(name);
+	auto iterator = name_map.find(name);
+	if (iterator == name_map.end()) {
+		return false;
+	}
+	return true;
+}
+
+idx_t TableCatalogEntry::StandardColumnCount() const {
+	idx_t count = 0;
+	for (auto &col : columns) {
+		if (col.Category() == TableColumnType::STANDARD) {
+			count++;
+		}
+	}
+	return count;
 }
 
 unique_ptr<BaseStatistics> TableCatalogEntry::GetStatistics(ClientContext &context, column_t column_id) {
 	if (column_id == COLUMN_IDENTIFIER_ROW_ID) {
 		return nullptr;
 	}
-	auto &column = columns.GetColumn(LogicalIndex(column_id));
-	if (column.Generated()) {
+	if (column_id >= columns.size()) {
+		throw InternalException("TableCatalogEntry::GetStatistics column_id out of range");
+	}
+	if (columns[column_id].Generated()) {
 		return nullptr;
 	}
-	return storage->GetStatistics(context, column.StorageOid());
+	return storage->GetStatistics(context, columns[column_id].StorageOid());
 }
 
 unique_ptr<CatalogEntry> TableCatalogEntry::AlterEntry(ClientContext &context, AlterInfo *info) {
@@ -166,7 +201,6 @@ unique_ptr<CatalogEntry> TableCatalogEntry::AlterEntry(ClientContext &context, A
 		auto rename_info = (RenameTableInfo *)table_info;
 		auto copied_table = Copy(context);
 		copied_table->name = rename_info->new_table_name;
-		storage->info->table = rename_info->new_table_name;
 		return copied_table;
 	}
 	case AlterTableType::ADD_COLUMN: {
@@ -206,20 +240,6 @@ unique_ptr<CatalogEntry> TableCatalogEntry::AlterEntry(ClientContext &context, A
 	}
 }
 
-void TableCatalogEntry::UndoAlter(ClientContext &context, AlterInfo *info) {
-	D_ASSERT(!internal);
-	D_ASSERT(info->type == AlterType::ALTER_TABLE);
-	auto table_info = (AlterTableInfo *)info;
-	switch (table_info->alter_table_type) {
-	case AlterTableType::RENAME_TABLE: {
-		storage->info->table = this->name;
-		break;
-	default:
-		break;
-	}
-	}
-}
-
 static void RenameExpression(ParsedExpression &expr, RenameColumnInfo &info) {
 	if (expr.type == ExpressionType::COLUMN_REF) {
 		auto &colref = (ColumnRefExpression &)expr;
@@ -233,20 +253,22 @@ static void RenameExpression(ParsedExpression &expr, RenameColumnInfo &info) {
 
 unique_ptr<CatalogEntry> TableCatalogEntry::RenameColumn(ClientContext &context, RenameColumnInfo &info) {
 	auto rename_idx = GetColumnIndex(info.old_name);
-	if (rename_idx.index == COLUMN_IDENTIFIER_ROW_ID) {
+	if (rename_idx == COLUMN_IDENTIFIER_ROW_ID) {
 		throw CatalogException("Cannot rename rowid column");
 	}
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
 	create_info->temporary = temporary;
-	for (auto &col : columns.Logical()) {
-		auto copy = col.Copy();
-		if (rename_idx == col.Logical()) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto copy = columns[i].Copy();
+
+		if (rename_idx == i) {
 			copy.SetName(info.new_name);
 		}
-		if (col.Generated() && column_dependency_manager.IsDependencyOf(col.Logical(), rename_idx)) {
-			RenameExpression(copy.GeneratedExpressionMutable(), info);
+		create_info->columns.push_back(move(copy));
+		auto &col = create_info->columns[i];
+		if (col.Generated() && column_dependency_manager.IsDependencyOf(i, rename_idx)) {
+			RenameExpression(col.GeneratedExpressionMutable(), info);
 		}
-		create_info->columns.AddColumn(std::move(copy));
 	}
 	for (idx_t c_idx = 0; c_idx < constraints.size(); c_idx++) {
 		auto copy = constraints[c_idx]->Copy();
@@ -293,10 +315,10 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RenameColumn(ClientContext &context,
 		default:
 			throw InternalException("Unsupported constraint for entry!");
 		}
-		create_info->constraints.push_back(std::move(copy));
+		create_info->constraints.push_back(move(copy));
 	}
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), storage);
 }
 
@@ -304,28 +326,29 @@ unique_ptr<CatalogEntry> TableCatalogEntry::AddColumn(ClientContext &context, Ad
 	auto col_name = info.new_column.GetName();
 
 	// We're checking for the opposite condition (ADD COLUMN IF _NOT_ EXISTS ...).
-	if (info.if_column_not_exists && ColumnExists(col_name)) {
+	if (info.if_column_not_exists && GetColumnIndex(col_name, true) != DConstants::INVALID_INDEX) {
 		return nullptr;
 	}
 
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
 	create_info->temporary = temporary;
 
-	for (auto &col : columns.Logical()) {
-		create_info->columns.AddColumn(col.Copy());
+	for (idx_t i = 0; i < columns.size(); i++) {
+		create_info->columns.push_back(columns[i].Copy());
 	}
 	for (auto &constraint : constraints) {
 		create_info->constraints.push_back(constraint->Copy());
 	}
-	Binder::BindLogicalType(context, info.new_column.TypeMutable(), catalog->GetName(), schema->name);
-	info.new_column.SetOid(columns.LogicalColumnCount());
-	info.new_column.SetStorageOid(columns.PhysicalColumnCount());
+	Binder::BindLogicalType(context, info.new_column.TypeMutable(), schema->name);
+	info.new_column.SetOid(columns.size());
+	info.new_column.SetStorageOid(storage->column_definitions.size());
+
 	auto col = info.new_column.Copy();
 
-	create_info->columns.AddColumn(std::move(col));
+	create_info->columns.push_back(move(col));
 
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 	auto new_storage =
 	    make_shared<DataTable>(context, *storage, info.new_column, bound_create_info->bound_defaults.back().get());
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
@@ -334,33 +357,34 @@ unique_ptr<CatalogEntry> TableCatalogEntry::AddColumn(ClientContext &context, Ad
 
 unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context, RemoveColumnInfo &info) {
 	auto removed_index = GetColumnIndex(info.removed_column, info.if_column_exists);
-	if (!removed_index.IsValid()) {
+	if (removed_index == DConstants::INVALID_INDEX) {
 		if (!info.if_column_exists) {
 			throw CatalogException("Cannot drop column: rowid column cannot be dropped");
 		}
 		return nullptr;
 	}
 
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
 	create_info->temporary = temporary;
 
-	logical_index_set_t removed_columns;
+	unordered_set<column_t> removed_columns;
 	if (column_dependency_manager.HasDependents(removed_index)) {
 		removed_columns = column_dependency_manager.GetDependents(removed_index);
 	}
 	if (!removed_columns.empty() && !info.cascade) {
 		throw CatalogException("Cannot drop column: column is a dependency of 1 or more generated column(s)");
 	}
-	for (auto &col : columns.Logical()) {
-		if (col.Logical() == removed_index || removed_columns.count(col.Logical())) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto &col = columns[i];
+		if (i == removed_index || removed_columns.count(i)) {
 			continue;
 		}
-		create_info->columns.AddColumn(col.Copy());
+		create_info->columns.push_back(col.Copy());
 	}
 	if (create_info->columns.empty()) {
 		throw CatalogException("Cannot drop column: table only has one column remaining!");
 	}
-	auto adjusted_indices = column_dependency_manager.RemoveColumn(removed_index, columns.LogicalColumnCount());
+	vector<column_t> adjusted_indices = column_dependency_manager.RemoveColumn(removed_index, columns.size());
 	// handle constraints for the new table
 	D_ASSERT(constraints.size() == bound_constraints.size());
 	for (idx_t constr_idx = 0; constr_idx < constraints.size(); constr_idx++) {
@@ -369,11 +393,11 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 		switch (constraint->type) {
 		case ConstraintType::NOT_NULL: {
 			auto &not_null_constraint = (BoundNotNullConstraint &)*bound_constraint;
-			auto not_null_index = columns.PhysicalToLogical(not_null_constraint.index);
-			if (not_null_index != removed_index) {
+			if (not_null_constraint.index != removed_index) {
 				// the constraint is not about this column: we need to copy it
 				// we might need to shift the index back by one though, to account for the removed column
-				auto new_index = adjusted_indices[not_null_index.index];
+				idx_t new_index = not_null_constraint.index;
+				new_index = adjusted_indices[new_index];
 				create_info->constraints.push_back(make_unique<NotNullConstraint>(new_index));
 			}
 			break;
@@ -382,8 +406,7 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 			// CHECK constraint
 			auto &bound_check = (BoundCheckConstraint &)*bound_constraint;
 			// check if the removed column is part of the check constraint
-			auto physical_index = columns.LogicalToPhysical(removed_index);
-			if (bound_check.bound_columns.find(physical_index) != bound_check.bound_columns.end()) {
+			if (bound_check.bound_columns.find(removed_index) != bound_check.bound_columns.end()) {
 				if (bound_check.bound_columns.size() > 1) {
 					// CHECK constraint that concerns mult
 					throw CatalogException(
@@ -401,15 +424,15 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 		case ConstraintType::UNIQUE: {
 			auto copy = constraint->Copy();
 			auto &unique = (UniqueConstraint &)*copy;
-			if (unique.index.index != DConstants::INVALID_INDEX) {
+			if (unique.index != DConstants::INVALID_INDEX) {
 				if (unique.index == removed_index) {
 					throw CatalogException(
 					    "Cannot drop column \"%s\" because there is a UNIQUE constraint that depends on it",
 					    info.removed_column);
 				}
-				unique.index = adjusted_indices[unique.index.index];
+				unique.index = adjusted_indices[unique.index];
 			}
-			create_info->constraints.push_back(std::move(copy));
+			create_info->constraints.push_back(move(copy));
 			break;
 		}
 		case ConstraintType::FOREIGN_KEY: {
@@ -430,7 +453,7 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 					    info.removed_column);
 				}
 			}
-			create_info->constraints.push_back(std::move(copy));
+			create_info->constraints.push_back(move(copy));
 			break;
 		}
 		default:
@@ -439,54 +462,56 @@ unique_ptr<CatalogEntry> TableCatalogEntry::RemoveColumn(ClientContext &context,
 	}
 
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
-	if (columns.GetColumn(LogicalIndex(removed_index)).Generated()) {
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
+	if (columns[removed_index].Generated()) {
 		return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
 		                                      storage);
 	}
-	auto new_storage =
-	    make_shared<DataTable>(context, *storage, columns.LogicalToPhysical(LogicalIndex(removed_index)).index);
+	auto new_storage = make_shared<DataTable>(context, *storage, columns[removed_index].StorageOid());
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
 	                                      new_storage);
 }
 
 unique_ptr<CatalogEntry> TableCatalogEntry::SetDefault(ClientContext &context, SetDefaultInfo &info) {
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
 	auto default_idx = GetColumnIndex(info.column_name);
-	if (default_idx.index == COLUMN_IDENTIFIER_ROW_ID) {
+	if (default_idx == COLUMN_IDENTIFIER_ROW_ID) {
 		throw CatalogException("Cannot SET DEFAULT for rowid column");
 	}
 
 	// Copy all the columns, changing the value of the one that was specified by 'column_name'
-	for (auto &col : columns.Logical()) {
-		auto copy = col.Copy();
-		if (default_idx == col.Logical()) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto copy = columns[i].Copy();
+		if (default_idx == i) {
 			// set the default value of this column
 			if (copy.Generated()) {
-				throw BinderException("Cannot SET DEFAULT for generated column \"%s\"", col.Name());
+				throw BinderException("Cannot SET DEFAULT for generated column \"%s\"", columns[i].Name());
 			}
 			copy.SetDefaultValue(info.expression ? info.expression->Copy() : nullptr);
 		}
-		create_info->columns.AddColumn(std::move(copy));
+		create_info->columns.push_back(move(copy));
 	}
 	// Copy all the constraints
 	for (idx_t i = 0; i < constraints.size(); i++) {
 		auto constraint = constraints[i]->Copy();
-		create_info->constraints.push_back(std::move(constraint));
+		create_info->constraints.push_back(move(constraint));
 	}
 
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), storage);
 }
 
 unique_ptr<CatalogEntry> TableCatalogEntry::SetNotNull(ClientContext &context, SetNotNullInfo &info) {
 
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
-	create_info->columns = columns.Copy();
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto copy = columns[i].Copy();
+		create_info->columns.push_back(move(copy));
+	}
 
-	auto not_null_idx = GetColumnIndex(info.column_name);
-	if (columns.GetColumn(LogicalIndex(not_null_idx)).Generated()) {
+	idx_t not_null_idx = GetColumnIndex(info.column_name);
+	if (columns[not_null_idx].Generated()) {
 		throw BinderException("Unsupported constraint for generated column!");
 	}
 	bool has_not_null = false;
@@ -498,13 +523,13 @@ unique_ptr<CatalogEntry> TableCatalogEntry::SetNotNull(ClientContext &context, S
 				has_not_null = true;
 			}
 		}
-		create_info->constraints.push_back(std::move(constraint));
+		create_info->constraints.push_back(move(constraint));
 	}
 	if (!has_not_null) {
 		create_info->constraints.push_back(make_unique<NotNullConstraint>(not_null_idx));
 	}
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 
 	// Early return
 	if (has_not_null) {
@@ -513,17 +538,20 @@ unique_ptr<CatalogEntry> TableCatalogEntry::SetNotNull(ClientContext &context, S
 	}
 
 	// Return with new storage info. Note that we need the bound column index here.
-	auto new_storage = make_shared<DataTable>(
-	    context, *storage, make_unique<BoundNotNullConstraint>(columns.LogicalToPhysical(LogicalIndex(not_null_idx))));
+	auto new_storage = make_shared<DataTable>(context, *storage,
+	                                          make_unique<BoundNotNullConstraint>(columns[not_null_idx].StorageOid()));
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(),
 	                                      new_storage);
 }
 
 unique_ptr<CatalogEntry> TableCatalogEntry::DropNotNull(ClientContext &context, DropNotNullInfo &info) {
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
-	create_info->columns = columns.Copy();
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto copy = columns[i].Copy();
+		create_info->columns.push_back(move(copy));
+	}
 
-	auto not_null_idx = GetColumnIndex(info.column_name);
+	idx_t not_null_idx = GetColumnIndex(info.column_name);
 	for (idx_t i = 0; i < constraints.size(); i++) {
 		auto constraint = constraints[i]->Copy();
 		// Skip/drop not_null
@@ -533,39 +561,40 @@ unique_ptr<CatalogEntry> TableCatalogEntry::DropNotNull(ClientContext &context, 
 				continue;
 			}
 		}
-		create_info->constraints.push_back(std::move(constraint));
+		create_info->constraints.push_back(move(constraint));
 	}
 
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), storage);
 }
 
 unique_ptr<CatalogEntry> TableCatalogEntry::ChangeColumnType(ClientContext &context, ChangeColumnTypeInfo &info) {
 	if (info.target_type.id() == LogicalTypeId::USER) {
-		info.target_type =
-		    Catalog::GetType(context, catalog->GetName(), schema->name, UserType::GetTypeName(info.target_type));
+		auto &catalog = Catalog::GetCatalog(context);
+		info.target_type = catalog.GetType(context, schema->name, UserType::GetTypeName(info.target_type));
 	}
 	auto change_idx = GetColumnIndex(info.column_name);
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
 	create_info->temporary = temporary;
 
-	for (auto &col : columns.Logical()) {
-		auto copy = col.Copy();
-		if (change_idx == col.Logical()) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto copy = columns[i].Copy();
+		if (change_idx == i) {
 			// set the type of this column
 			if (copy.Generated()) {
 				throw NotImplementedException("Changing types of generated columns is not supported yet");
+				// copy.ChangeGeneratedExpressionType(info.target_type);
 			}
 			copy.SetType(info.target_type);
 		}
 		// TODO: check if the generated_expression breaks, only delete it if it does
-		if (copy.Generated() && column_dependency_manager.IsDependencyOf(col.Logical(), change_idx)) {
+		if (copy.Generated() && column_dependency_manager.IsDependencyOf(i, change_idx)) {
 			throw BinderException(
 			    "This column is referenced by the generated column \"%s\", so its type can not be changed",
 			    copy.Name());
 		}
-		create_info->columns.AddColumn(std::move(copy));
+		create_info->columns.push_back(move(copy));
 	}
 
 	for (idx_t i = 0; i < constraints.size(); i++) {
@@ -573,8 +602,7 @@ unique_ptr<CatalogEntry> TableCatalogEntry::ChangeColumnType(ClientContext &cont
 		switch (constraint->type) {
 		case ConstraintType::CHECK: {
 			auto &bound_check = (BoundCheckConstraint &)*bound_constraints[i];
-			auto physical_index = columns.LogicalToPhysical(change_idx);
-			if (bound_check.bound_columns.find(physical_index) != bound_check.bound_columns.end()) {
+			if (bound_check.bound_columns.find(change_idx) != bound_check.bound_columns.end()) {
 				throw BinderException("Cannot change the type of a column that has a CHECK constraint specified");
 			}
 			break;
@@ -591,7 +619,7 @@ unique_ptr<CatalogEntry> TableCatalogEntry::ChangeColumnType(ClientContext &cont
 		}
 		case ConstraintType::FOREIGN_KEY: {
 			auto &bfk = (BoundForeignKeyConstraint &)*bound_constraints[i];
-			auto key_set = bfk.pk_key_set;
+			unordered_set<idx_t> key_set = bfk.pk_key_set;
 			if (bfk.info.type == ForeignKeyType::FK_TYPE_FOREIGN_KEY_TABLE) {
 				key_set = bfk.fk_key_set;
 			} else if (bfk.info.type == ForeignKeyType::FK_TYPE_SELF_REFERENCE_TABLE) {
@@ -599,7 +627,7 @@ unique_ptr<CatalogEntry> TableCatalogEntry::ChangeColumnType(ClientContext &cont
 					key_set.insert(bfk.info.fk_keys[i]);
 				}
 			}
-			if (key_set.find(columns.LogicalToPhysical(change_idx)) != key_set.end()) {
+			if (key_set.find(change_idx) != key_set.end()) {
 				throw BinderException("Cannot change the type of a column that has a FOREIGN KEY constraint specified");
 			}
 			break;
@@ -607,38 +635,42 @@ unique_ptr<CatalogEntry> TableCatalogEntry::ChangeColumnType(ClientContext &cont
 		default:
 			throw InternalException("Unsupported constraint for entry!");
 		}
-		create_info->constraints.push_back(std::move(constraint));
+		create_info->constraints.push_back(move(constraint));
 	}
 
 	auto binder = Binder::CreateBinder(context);
 	// bind the specified expression
-	vector<LogicalIndex> bound_columns;
+	vector<column_t> bound_columns;
 	AlterBinder expr_binder(*binder, context, *this, bound_columns, info.target_type);
 	auto expression = info.expression->Copy();
 	auto bound_expression = expr_binder.Bind(expression);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 	vector<column_t> storage_oids;
-	for (idx_t i = 0; i < bound_columns.size(); i++) {
-		storage_oids.push_back(columns.LogicalToPhysical(bound_columns[i]).index);
-	}
-	if (storage_oids.empty()) {
+	if (bound_columns.empty()) {
 		storage_oids.push_back(COLUMN_IDENTIFIER_ROW_ID);
 	}
+	// transform to storage_oid
+	else {
+		for (idx_t i = 0; i < bound_columns.size(); i++) {
+			storage_oids.push_back(columns[bound_columns[i]].StorageOid());
+		}
+	}
 
-	auto new_storage =
-	    make_shared<DataTable>(context, *storage, columns.LogicalToPhysical(LogicalIndex(change_idx)).index,
-	                           info.target_type, std::move(storage_oids), *bound_expression);
+	auto new_storage = make_shared<DataTable>(context, *storage, columns[change_idx].StorageOid(), info.target_type,
+	                                          move(storage_oids), *bound_expression);
 	auto result =
 	    make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), new_storage);
-	return std::move(result);
+	return move(result);
 }
 
 unique_ptr<CatalogEntry> TableCatalogEntry::AddForeignKeyConstraint(ClientContext &context, AlterForeignKeyInfo &info) {
 	D_ASSERT(info.type == AlterForeignKeyType::AFT_ADD);
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
 	create_info->temporary = temporary;
 
-	create_info->columns = columns.Copy();
+	for (idx_t i = 0; i < columns.size(); i++) {
+		create_info->columns.push_back(columns[i].Copy());
+	}
 	for (idx_t i = 0; i < constraints.size(); i++) {
 		create_info->constraints.push_back(constraints[i]->Copy());
 	}
@@ -649,10 +681,10 @@ unique_ptr<CatalogEntry> TableCatalogEntry::AddForeignKeyConstraint(ClientContex
 	fk_info.pk_keys = info.pk_keys;
 	fk_info.fk_keys = info.fk_keys;
 	create_info->constraints.push_back(
-	    make_unique<ForeignKeyConstraint>(info.pk_columns, info.fk_columns, std::move(fk_info)));
+	    make_unique<ForeignKeyConstraint>(info.pk_columns, info.fk_columns, move(fk_info)));
 
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), storage);
 }
@@ -660,10 +692,12 @@ unique_ptr<CatalogEntry> TableCatalogEntry::AddForeignKeyConstraint(ClientContex
 unique_ptr<CatalogEntry> TableCatalogEntry::DropForeignKeyConstraint(ClientContext &context,
                                                                      AlterForeignKeyInfo &info) {
 	D_ASSERT(info.type == AlterForeignKeyType::AFT_DELETE);
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
 	create_info->temporary = temporary;
 
-	create_info->columns = columns.Copy();
+	for (idx_t i = 0; i < columns.size(); i++) {
+		create_info->columns.push_back(columns[i].Copy());
+	}
 	for (idx_t i = 0; i < constraints.size(); i++) {
 		auto constraint = constraints[i]->Copy();
 		if (constraint->type == ConstraintType::FOREIGN_KEY) {
@@ -672,23 +706,31 @@ unique_ptr<CatalogEntry> TableCatalogEntry::DropForeignKeyConstraint(ClientConte
 				continue;
 			}
 		}
-		create_info->constraints.push_back(std::move(constraint));
+		create_info->constraints.push_back(move(constraint));
 	}
 
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), storage);
 }
 
 ColumnDefinition &TableCatalogEntry::GetColumn(const string &name) {
-	return columns.GetColumnMutable(name);
+	auto entry = name_map.find(name);
+	if (entry == name_map.end() || entry->second == COLUMN_IDENTIFIER_ROW_ID) {
+		throw CatalogException("Column with name %s does not exist!", name);
+	}
+	auto column_index = entry->second;
+	return columns[column_index];
 }
 
 vector<LogicalType> TableCatalogEntry::GetTypes() {
 	vector<LogicalType> types;
-	for (auto &col : columns.Physical()) {
-		types.push_back(col.Type());
+	for (auto &it : columns) {
+		if (it.Generated()) {
+			continue;
+		}
+		types.push_back(it.Type());
 	}
 	return types;
 }
@@ -699,7 +741,7 @@ void TableCatalogEntry::Serialize(Serializer &serializer) {
 	FieldWriter writer(serializer);
 	writer.WriteString(schema->name);
 	writer.WriteString(name);
-	columns.Serialize(writer);
+	writer.WriteRegularSerializableList(columns);
 	writer.WriteSerializableList(constraints);
 	writer.Finalize();
 }
@@ -710,7 +752,7 @@ unique_ptr<CreateTableInfo> TableCatalogEntry::Deserialize(Deserializer &source,
 	FieldReader reader(source);
 	info->schema = reader.ReadRequired<string>();
 	info->table = reader.ReadRequired<string>();
-	info->columns = ColumnList::Deserialize(reader);
+	info->columns = reader.ReadRequiredSerializableList<ColumnDefinition, ColumnDefinition>();
 	info->constraints = reader.ReadRequiredSerializableList<Constraint>();
 	reader.Finalize();
 
@@ -729,9 +771,9 @@ string TableCatalogEntry::ToSQL() {
 	ss << KeywordHelper::WriteOptionallyQuoted(name) << "(";
 
 	// find all columns that have NOT NULL specified, but are NOT primary key columns
-	logical_index_set_t not_null_columns;
-	logical_index_set_t unique_columns;
-	logical_index_set_t pk_columns;
+	unordered_set<idx_t> not_null_columns;
+	unordered_set<idx_t> unique_columns;
+	unordered_set<idx_t> pk_columns;
 	unordered_set<string> multi_key_pks;
 	vector<string> extra_constraints;
 	for (auto &constraint : constraints) {
@@ -741,7 +783,7 @@ string TableCatalogEntry::ToSQL() {
 		} else if (constraint->type == ConstraintType::UNIQUE) {
 			auto &pk = (UniqueConstraint &)*constraint;
 			vector<string> constraint_columns = pk.columns;
-			if (pk.index.index != DConstants::INVALID_INDEX) {
+			if (pk.index != DConstants::INVALID_INDEX) {
 				// no columns specified: single column constraint
 				if (pk.is_primary_key) {
 					pk_columns.insert(pk.index);
@@ -769,16 +811,17 @@ string TableCatalogEntry::ToSQL() {
 		}
 	}
 
-	for (auto &column : columns.Logical()) {
-		if (column.Oid() > 0) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		if (i > 0) {
 			ss << ", ";
 		}
+		auto &column = columns[i];
 		ss << KeywordHelper::WriteOptionallyQuoted(column.Name()) << " ";
 		ss << column.Type().ToString();
-		bool not_null = not_null_columns.find(column.Logical()) != not_null_columns.end();
-		bool is_single_key_pk = pk_columns.find(column.Logical()) != pk_columns.end();
+		bool not_null = not_null_columns.find(column.Oid()) != not_null_columns.end();
+		bool is_single_key_pk = pk_columns.find(column.Oid()) != pk_columns.end();
 		bool is_multi_key_pk = multi_key_pks.find(column.Name()) != multi_key_pks.end();
-		bool is_unique = unique_columns.find(column.Logical()) != unique_columns.end();
+		bool is_unique = unique_columns.find(column.Oid()) != unique_columns.end();
 		if (not_null && !is_single_key_pk && !is_multi_key_pk) {
 			// NOT NULL but not a primary key column
 			ss << " NOT NULL";
@@ -809,22 +852,23 @@ string TableCatalogEntry::ToSQL() {
 }
 
 unique_ptr<CatalogEntry> TableCatalogEntry::Copy(ClientContext &context) {
-	auto create_info = make_unique<CreateTableInfo>(schema, name);
-	create_info->columns = columns.Copy();
+	auto create_info = make_unique<CreateTableInfo>(schema->name, name);
+	for (idx_t i = 0; i < columns.size(); i++) {
+		create_info->columns.push_back(columns[i].Copy());
+	}
 
 	for (idx_t i = 0; i < constraints.size(); i++) {
 		auto constraint = constraints[i]->Copy();
-		create_info->constraints.push_back(std::move(constraint));
+		create_info->constraints.push_back(move(constraint));
 	}
 
 	auto binder = Binder::CreateBinder(context);
-	auto bound_create_info = binder->BindCreateTableInfo(std::move(create_info));
+	auto bound_create_info = binder->BindCreateTableInfo(move(create_info));
 	return make_unique<TableCatalogEntry>(catalog, schema, (BoundCreateTableInfo *)bound_create_info.get(), storage);
 }
 
 void TableCatalogEntry::SetAsRoot() {
 	storage->SetAsRoot();
-	storage->info->table = name;
 }
 
 void TableCatalogEntry::CommitAlter(AlterInfo &info) {
@@ -849,18 +893,19 @@ void TableCatalogEntry::CommitAlter(AlterInfo &info) {
 		return;
 	}
 	idx_t removed_index = DConstants::INVALID_INDEX;
-	for (auto &col : columns.Logical()) {
+	for (idx_t i = 0; i < columns.size(); i++) {
+		auto &col = columns[i];
 		if (col.Name() == column_name) {
 			// No need to alter storage, removed column is generated column
 			if (col.Generated()) {
 				return;
 			}
-			removed_index = col.Oid();
+			removed_index = i;
 			break;
 		}
 	}
 	D_ASSERT(removed_index != DConstants::INVALID_INDEX);
-	storage->CommitDropColumn(columns.LogicalToPhysical(LogicalIndex(removed_index)).index);
+	storage->CommitDropColumn(columns[removed_index].StorageOid());
 }
 
 void TableCatalogEntry::CommitDrop() {

@@ -10,8 +10,8 @@ namespace duckdb {
 
 class UnnestOperatorState : public OperatorState {
 public:
-	UnnestOperatorState(ClientContext &context, const vector<unique_ptr<Expression>> &select_list)
-	    : parent_position(0), list_position(0), list_length(-1), first_fetch(true), executor(context) {
+	UnnestOperatorState(Allocator &allocator, const vector<unique_ptr<Expression>> &select_list)
+	    : parent_position(0), list_position(0), list_length(-1), first_fetch(true), executor(allocator) {
 		vector<LogicalType> list_data_types;
 		for (auto &exp : select_list) {
 			D_ASSERT(exp->type == ExpressionType::BOUND_UNNEST);
@@ -19,7 +19,6 @@ public:
 			list_data_types.push_back(bue->child->return_type);
 			executor.AddExpression(*bue->child.get());
 		}
-		auto &allocator = Allocator::Get(context);
 		list_data.Initialize(allocator, list_data_types);
 
 		list_vector_data.resize(list_data.ColumnCount());
@@ -40,11 +39,17 @@ public:
 // this implements a sorted window functions variant
 PhysicalUnnest::PhysicalUnnest(vector<LogicalType> types, vector<unique_ptr<Expression>> select_list,
                                idx_t estimated_cardinality, PhysicalOperatorType type)
-    : PhysicalOperator(type, std::move(types), estimated_cardinality), select_list(std::move(select_list)) {
+    : PhysicalOperator(type, move(types), estimated_cardinality), select_list(std::move(select_list)) {
 	D_ASSERT(!this->select_list.empty());
 }
 
 static void UnnestNull(idx_t start, idx_t end, Vector &result) {
+	if (result.GetType().InternalType() == PhysicalType::STRUCT) {
+		auto &children = StructVector::GetEntries(result);
+		for (auto &child : children) {
+			UnnestNull(start, end, *child);
+		}
+	}
 	auto &validity = FlatVector::Validity(result);
 	for (idx_t i = start; i < end; i++) {
 		validity.SetInvalid(i);
@@ -89,7 +94,6 @@ static void UnnestValidity(UnifiedVectorFormat &vdata, idx_t start, idx_t end, V
 
 static void UnnestVector(UnifiedVectorFormat &vdata, Vector &source, idx_t list_size, idx_t start, idx_t end,
                          Vector &result) {
-	D_ASSERT(source.GetType() == result.GetType());
 	switch (result.GetType().InternalType()) {
 	case PhysicalType::BOOL:
 	case PhysicalType::INT8:
@@ -160,7 +164,7 @@ unique_ptr<OperatorState> PhysicalUnnest::GetOperatorState(ExecutionContext &con
 
 unique_ptr<OperatorState> PhysicalUnnest::GetState(ExecutionContext &context,
                                                    const vector<unique_ptr<Expression>> &select_list) {
-	return make_unique<UnnestOperatorState>(context.client, select_list);
+	return make_unique<UnnestOperatorState>(Allocator::Get(context.client), select_list);
 }
 
 OperatorResultType PhysicalUnnest::ExecuteInternal(ExecutionContext &context, DataChunk &input, DataChunk &chunk,

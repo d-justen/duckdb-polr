@@ -115,6 +115,94 @@ static void PragmaDisableOptimizer(ClientContext &context, const FunctionParamet
 	ClientConfig::GetConfig(context).enable_optimizer = false;
 }
 
+static void PragmaEnablePOLR(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_polr = true;
+	ClientConfig::GetConfig(context).bushy_polr = false;
+}
+
+static void PragmaDisablePOLR(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_polr = false;
+	ClientConfig::GetConfig(context).bushy_polr = false;
+}
+
+static void PragmaEnablePOLRBushy(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_polr = true;
+	ClientConfig::GetConfig(context).bushy_polr = true;
+}
+
+static void PragmaDisablePOLRBushy(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_polr = false;
+	ClientConfig::GetConfig(context).bushy_polr = false;
+}
+
+static void PragmaEnableCardinalityEstimator(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = true;
+	ClientConfig::GetConfig(context).min_cardinality = 1.0;
+}
+
+static void PragmaDisableCardinalityEstimator(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = false;
+	ClientConfig::GetConfig(context).min_cardinality = 1.0;
+}
+
+static void PragmaEnableRandomCardinalities(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = false;
+	ClientConfig::GetConfig(context).min_cardinality = 0.01;
+}
+
+static void PragmaDisableRandomCardinalities(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).enable_cardinality_estimator = true;
+	ClientConfig::GetConfig(context).min_cardinality = 1.0;
+}
+
+static void PragmaEnableMpxAlternateChunks(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).mpx_alternate_chunks = true;
+}
+
+static void PragmaDisableMpxAlternateChunks(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).mpx_alternate_chunks = false;
+}
+
+static void PragmaEnableLogTuplesRouted(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).log_tuples_routed = true;
+}
+
+static void PragmaDisableLogTuplesRouted(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).log_tuples_routed = false;
+}
+
+static void PragmaEnableGreedyOrdering(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering = true;
+}
+
+static void PragmaDisableGreedyOrdering(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering = false;
+}
+
+static void PragmaEnableMeasurePipeline(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).measure_polr_pipeline = true;
+}
+
+static void PragmaDisableMeasurePipeline(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).measure_polr_pipeline = false;
+}
+
+static void PragmaEnableGreedyOrderingLDT(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering_ldt = true;
+}
+
+static void PragmaDisableGreedyOrderingLDT(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).greedy_ordering_ldt = false;
+}
+
+static void PragmaEnableCaching(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).caching = true;
+}
+
+static void PragmaDisableCaching(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).caching = false;
+}
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -151,6 +239,37 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_checkpoint_on_shutdown", PragmaEnableCheckpointOnShutdown));
 	set.AddFunction(
 	    PragmaFunction::PragmaStatement("disable_checkpoint_on_shutdown", PragmaDisableCheckpointOnShutdown));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_polr", PragmaEnablePOLR));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_polr", PragmaDisablePOLR));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_polr_bushy", PragmaEnablePOLRBushy));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_polr_bushy", PragmaDisablePOLRBushy));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_cardinality_estimator", PragmaEnableCardinalityEstimator));
+	set.AddFunction(
+	    PragmaFunction::PragmaStatement("disable_cardinality_estimator", PragmaDisableCardinalityEstimator));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_random_cardinalities", PragmaEnableRandomCardinalities));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_random_cardinalities", PragmaDisableRandomCardinalities));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_mpx_alternate_chunks", PragmaEnableMpxAlternateChunks));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_mpx_alternate_chunks", PragmaDisableMpxAlternateChunks));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_log_tuples_routed", PragmaEnableLogTuplesRouted));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_log_tuples_routed", PragmaDisableLogTuplesRouted));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_greedy_ordering", PragmaEnableGreedyOrdering));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_greedy_ordering", PragmaDisableGreedyOrdering));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_measure_pipeline", PragmaEnableMeasurePipeline));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_measure_pipeline", PragmaDisableMeasurePipeline));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_greedy_ordering_ldt", PragmaEnableGreedyOrderingLDT));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_greedy_ordering_ldt", PragmaDisableGreedyOrderingLDT));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_caching", PragmaEnableCaching));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_caching", PragmaDisableCaching));
 }
 
 } // namespace duckdb

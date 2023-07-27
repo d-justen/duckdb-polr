@@ -15,7 +15,7 @@ RegexOptimizationRule::RegexOptimizationRule(ExpressionRewriter &rewriter) : Rul
 	func->policy = SetMatcher::Policy::ORDERED;
 	func->matchers.push_back(make_unique<ExpressionMatcher>());
 	func->matchers.push_back(make_unique<ConstantExpressionMatcher>());
-	root = std::move(func);
+	root = move(func);
 }
 
 unique_ptr<Expression> RegexOptimizationRule::Apply(LogicalOperator &op, vector<Expression *> &bindings,
@@ -33,7 +33,7 @@ unique_ptr<Expression> RegexOptimizationRule::Apply(LogicalOperator &op, vector<
 		return nullptr;
 	}
 
-	auto constant_value = ExpressionExecutor::EvaluateScalar(GetContext(), *constant_expr);
+	auto constant_value = ExpressionExecutor::EvaluateScalar(*constant_expr);
 	D_ASSERT(constant_value.type() == constant_expr->return_type);
 	auto &patt_str = StringValue::Get(constant_value);
 
@@ -45,10 +45,10 @@ unique_ptr<Expression> RegexOptimizationRule::Apply(LogicalOperator &op, vector<
 	if (pattern.Regexp()->op() == duckdb_re2::kRegexpLiteralString ||
 	    pattern.Regexp()->op() == duckdb_re2::kRegexpLiteral) {
 		auto contains = make_unique<BoundFunctionExpression>(root->return_type, ContainsFun::GetFunction(),
-		                                                     std::move(root->children), nullptr);
+		                                                     move(root->children), nullptr);
 
 		contains->children[1] = make_unique<BoundConstantExpression>(Value(patt_str));
-		return std::move(contains);
+		return move(contains);
 	}
 	return nullptr;
 }

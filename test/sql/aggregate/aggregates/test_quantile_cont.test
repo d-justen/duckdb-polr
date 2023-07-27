@@ -104,6 +104,8 @@ SELECT quantile_cont('00:00:00'::TIME + interval (r/100) second, 0.5) FROM quant
 
 statement error
 SELECT quantile_cont(interval (r/100) second, 0.5) FROM quantile
+----
+01:23:19
 
 # WITH TIME ZONE
 query I
@@ -117,12 +119,6 @@ SELECT quantile_cont(1, 0.1) FROM quantile
 ----
 1
 
-# Negative/Descending fractions
-query I
-SELECT quantile_cont(r, -0.1) FROM quantile
-----
-899910.0
-
 # empty input
 query R
 SELECT quantile_cont(r, 0.1) FROM quantile WHERE 1=0
@@ -130,7 +126,7 @@ SELECT quantile_cont(r, 0.1) FROM quantile WHERE 1=0
 NULL
 
 statement error
-SELECT quantile_cont(r, -1.1) FROM quantile
+SELECT quantile_cont(r, -0.1) FROM quantile
 
 statement error
 SELECT quantile_cont(r, 1.1) FROM quantile

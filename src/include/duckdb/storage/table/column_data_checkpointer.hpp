@@ -25,7 +25,7 @@ public:
 	RowGroup &GetRowGroup();
 	ColumnCheckpointState &GetCheckpointState();
 
-	void Checkpoint(vector<SegmentNode> nodes);
+	void Checkpoint(unique_ptr<SegmentBase> segment);
 
 private:
 	void ScanSegments(const std::function<void(Vector &, idx_t)> &callback);
@@ -40,7 +40,7 @@ private:
 	ColumnCheckpointState &state;
 	bool is_validity;
 	Vector intermediate;
-	vector<SegmentNode> nodes;
+	unique_ptr<SegmentBase> owned_segment;
 	vector<CompressionFunction *> compression_functions;
 	ColumnCheckpointInfo &checkpoint_info;
 };

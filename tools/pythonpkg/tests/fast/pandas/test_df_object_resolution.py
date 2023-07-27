@@ -4,11 +4,7 @@ import datetime
 import numpy as np
 import pytest
 import decimal
-import math
 from decimal import Decimal
-import re
-
-standard_vector_size = duckdb.__standard_vector_size__
 
 def create_generic_dataframe(data):
     return pd.DataFrame({'0': pd.Series(data=data, dtype='object')})
@@ -30,7 +26,7 @@ def ConvertStringToDecimal(data: list):
 
 class TestResolveObjectColumns(object):
 
-    def test_integers(self):
+    def test_integers(self, duckdb_cursor):
         data = [5, 0, 3]
         df_in = create_generic_dataframe(data)
         # These are float64 because pandas would force these to be float64 even if we set them to int8, int16, int32, int64 respectively
@@ -39,14 +35,14 @@ class TestResolveObjectColumns(object):
         print(df_out)
         pd.testing.assert_frame_equal(df_expected_res, df_out)
 
-    def test_struct_correct(self):
+    def test_struct_correct(self, duckdb_cursor):
         data = [{'a': 1, 'b': 3, 'c': 3, 'd': 7}]
         df = pd.DataFrame({'0': pd.Series(data=data)})
         duckdb_col = duckdb.query("SELECT {a: 1, b: 3, c: 3, d: 7} as '0'").df()
         converted_col = duckdb.query_df(df, "data", "SELECT * FROM data").df()
         pd.testing.assert_frame_equal(duckdb_col, converted_col)
 
-    def test_map_fallback_different_keys(self):
+    def test_map_fallback_different_keys(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'a': 1, 'b': 3, 'c': 3, 'd': 7}],
@@ -70,7 +66,7 @@ class TestResolveObjectColumns(object):
         equal_df = duckdb.query_df(y, "y", "SELECT * FROM y").df()
         pd.testing.assert_frame_equal(converted_df, equal_df)
 
-    def test_map_fallback_incorrect_amount_of_keys(self):
+    def test_map_fallback_incorrect_amount_of_keys(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'a': 1, 'b': 3, 'c': 3, 'd': 7}],
@@ -93,7 +89,7 @@ class TestResolveObjectColumns(object):
         equal_df = duckdb.query_df(y, "y", "SELECT * FROM y").df()
         pd.testing.assert_frame_equal(converted_df, equal_df)
 
-    def test_struct_value_upgrade(self):
+    def test_struct_value_upgrade(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'a': 1, 'b': 3, 'c': 3, 'd': 'string'}],
@@ -116,7 +112,7 @@ class TestResolveObjectColumns(object):
         equal_df = duckdb.query_df(y, "y", "SELECT * FROM y").df()
         pd.testing.assert_frame_equal(converted_df, equal_df)
 
-    def test_struct_null(self):
+    def test_struct_null(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [None],
@@ -139,7 +135,7 @@ class TestResolveObjectColumns(object):
         equal_df = duckdb.query_df(y, "y", "SELECT * FROM y").df()
         pd.testing.assert_frame_equal(converted_df, equal_df)
 
-    def test_map_fallback_value_upgrade(self):
+    def test_map_fallback_value_upgrade(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'a': 1, 'b': 3, 'c': 3, 'd': 'test'}],
@@ -162,7 +158,7 @@ class TestResolveObjectColumns(object):
         equal_df = duckdb.query_df(y, "df", "SELECT * FROM df").df()
         pd.testing.assert_frame_equal(converted_df, equal_df)
 
-    def test_map_correct(self):
+    def test_map_correct(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'key': ['a', 'b', 'c', 'd'], 'value': [1, 3, 3, 7]}],
@@ -188,7 +184,7 @@ class TestResolveObjectColumns(object):
         print(converted_col.columns)
         pd.testing.assert_frame_equal(converted_col, duckdb_col)
 
-    def test_map_value_upgrade(self):
+    def test_map_value_upgrade(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'key': ['a', 'b', 'c', 'd'], 'value': [1, 3, 3, 'test']}],
@@ -217,7 +213,7 @@ class TestResolveObjectColumns(object):
         print(converted_col.columns)
         pd.testing.assert_frame_equal(converted_col, duckdb_col)
 
-    def test_map_duplicate(self):
+    def test_map_duplicate(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'key': ['a', 'a', 'b'], 'value': [4, 0, 4]}]
@@ -226,7 +222,7 @@ class TestResolveObjectColumns(object):
         with pytest.raises(duckdb.InvalidInputException, match="Dict->Map conversion failed because 'key' list contains duplicates"):
             converted_col = duckdb.query_df(x, "x", "select * from x").df()
 
-    def test_map_nullkey(self):
+    def test_map_nullkey(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'key': [None, 'a', 'b'], 'value': [4, 0, 4]}]
@@ -235,7 +231,7 @@ class TestResolveObjectColumns(object):
         with pytest.raises(duckdb.InvalidInputException, match="Dict->Map conversion failed because 'key' list contains None"):
             converted_col = duckdb.query_df(x, "x", "select * from x").df()
 
-    def test_map_nullkeylist(self):
+    def test_map_nullkeylist(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'key': None, 'value': None}]
@@ -246,7 +242,7 @@ class TestResolveObjectColumns(object):
         duckdb_col = duckdb.query("SELECT {key: NULL, value: NULL} as '0'").df()
         pd.testing.assert_frame_equal(duckdb_col, converted_col)
 
-    def test_map_fallback_nullkey(self):
+    def test_map_fallback_nullkey(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'a': 4, None: 0, 'c': 4}],
@@ -256,7 +252,7 @@ class TestResolveObjectColumns(object):
         with pytest.raises(duckdb.InvalidInputException, match="Dict->Map conversion failed because 'key' list contains None"):
             converted_col = duckdb.query_df(x, "x", "select * from x").df()
 
-    def test_map_fallback_nullkey_coverage(self):
+    def test_map_fallback_nullkey_coverage(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{'key': None, 'value': None}],
@@ -266,7 +262,7 @@ class TestResolveObjectColumns(object):
         with pytest.raises(duckdb.InvalidInputException, match="Dict->Map conversion failed because 'key' list contains None"):
             converted_col = duckdb.query_df(x, "x", "select * from x").df()
 
-    def test_struct_key_conversion(self):
+    def test_struct_key_conversion(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [{
@@ -282,7 +278,7 @@ class TestResolveObjectColumns(object):
         duckdb.query("drop view if exists tbl")
         pd.testing.assert_frame_equal(duckdb_col, converted_col)
 
-    def test_list_correct(self):
+    def test_list_correct(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 {'0': [[5], [34], [-245]]}
@@ -293,7 +289,7 @@ class TestResolveObjectColumns(object):
         duckdb.query("drop view if exists tbl")
         pd.testing.assert_frame_equal(duckdb_col, converted_col)
 
-    def test_list_contains_null(self):
+    def test_list_contains_null(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 {'0': [[5], None, [-245]]}
@@ -304,7 +300,7 @@ class TestResolveObjectColumns(object):
         duckdb.query("drop view if exists tbl")
         pd.testing.assert_frame_equal(duckdb_col, converted_col)
 
-    def test_list_starts_with_null(self):
+    def test_list_starts_with_null(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 {'0': [None, [5], [-245]]}
@@ -315,7 +311,7 @@ class TestResolveObjectColumns(object):
         duckdb.query("drop view if exists tbl")
         pd.testing.assert_frame_equal(duckdb_col, converted_col)
 
-    def test_list_value_upgrade(self):
+    def test_list_value_upgrade(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 {'0': [['5'], [34], [-245]]}
@@ -326,7 +322,7 @@ class TestResolveObjectColumns(object):
         duckdb.query("drop view if exists tbl")
         pd.testing.assert_frame_equal(duckdb_col, converted_col)
 
-    def test_list_column_value_upgrade(self):
+    def test_list_column_value_upgrade(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [ [1, 25, 300] ],
@@ -355,7 +351,7 @@ class TestResolveObjectColumns(object):
         print(converted_col.columns)
         pd.testing.assert_frame_equal(converted_col, duckdb_col)
 
-    def test_ubigint_object_conversion(self):
+    def test_ubigint_object_conversion(self, duckdb_cursor):
         # UBIGINT + TINYINT would result in HUGEINT, but conversion to HUGEINT is not supported yet from pandas->duckdb
         # So this instead becomes a DOUBLE
         data = [18446744073709551615, 0]
@@ -364,14 +360,14 @@ class TestResolveObjectColumns(object):
         float64 = np.dtype('float64')
         assert isinstance(converted_col['0'].dtype, float64.__class__) == True
 
-    def test_double_object_conversion(self):
+    def test_double_object_conversion(self, duckdb_cursor):
         data = [18446744073709551616, 0]
         x = pd.DataFrame({'0': pd.Series(data=data, dtype='object')})
         converted_col = duckdb.query_df(x, "x", "select * from x").df()
         double_dtype = np.dtype('float64')
         assert isinstance(converted_col['0'].dtype, double_dtype.__class__) == True
 
-    def test_integer_conversion_fail(self):
+    def test_integer_conversion_fail(self, duckdb_cursor):
         data = [2**10000, 0]
         x = pd.DataFrame({'0': pd.Series(data=data, dtype='object')})
         converted_col = duckdb.query_df(x, "x", "select * from x").df()
@@ -379,30 +375,7 @@ class TestResolveObjectColumns(object):
         double_dtype = np.dtype('object')
         assert isinstance(converted_col['0'].dtype, double_dtype.__class__) == True
 
-    # Most of the time numpy.datetime64 is just a wrapper around a datetime.datetime object
-    # But to support arbitrary precision, it can fall back to using an `int` internally
-    # Which we don't support yet
-    def test_numpy_datetime(self):
-        numpy = pytest.importorskip("numpy")
-
-        data = []
-        data += [numpy.datetime64('2022-12-10T21:38:24.578696')] * standard_vector_size
-        data += [numpy.datetime64('2022-02-21T06:59:23.324812')] * standard_vector_size
-        data += [numpy.datetime64('1974-06-05T13:12:01.000000')] * standard_vector_size
-        data += [numpy.datetime64('2049-01-13T00:24:31.999999')] * standard_vector_size
-        x = pd.DataFrame({'dates': pd.Series(data=data, dtype='object')})
-        res = duckdb.query_df(x, "x", "select distinct * from x").df()
-        assert(len(res['dates'].__array__()) == 4)
-
-    def test_numpy_datetime_int_internally(self):
-        numpy = pytest.importorskip("numpy")
-
-        data = [numpy.datetime64('2022-12-10T21:38:24.0000000000001')]
-        x = pd.DataFrame({'dates': pd.Series(data=data, dtype='object')})
-        with pytest.raises(duckdb.ConversionException, match=re.escape("Conversion Error: Unimplemented type for cast (BIGINT -> TIMESTAMP)")):
-            rel = duckdb.query_df(x, "x", "create table dates as select dates::TIMESTAMP WITHOUT TIME ZONE from x")
-
-    def test_fallthrough_object_conversion(self):
+    def test_fallthrough_object_conversion(self, duckdb_cursor):
         x = pd.DataFrame(
             [
                 [IntString(4)],
@@ -441,27 +414,11 @@ class TestResolveObjectColumns(object):
 
         assert(conversion == reference)
 
-    def test_numeric_decimal_coverage(self):
-        duckdb_conn = duckdb.connect()
-
-        x = pd.DataFrame({
-            '0': [Decimal("nan"), Decimal("+nan"), Decimal("-nan"), Decimal("inf"), Decimal("+inf"), Decimal("-inf")]
-        })
-        conversion = duckdb.query_df(x, "x", "select * from x").fetchall()
-        print(conversion[0][0].__class__)
-        for item in conversion:
-            assert(isinstance(item[0], float))
-        assert(math.isnan(conversion[0][0]))
-        assert(math.isnan(conversion[1][0]))
-        assert(math.isnan(conversion[2][0]))
-        assert(math.isinf(conversion[3][0]))
-        assert(math.isinf(conversion[4][0]))
-        assert(math.isinf(conversion[5][0]))
-        assert(str(conversion) == '[(nan,), (nan,), (nan,), (inf,), (inf,), (inf,)]')
-
     # Test that the column 'offset' is actually used when converting,
-    # and that the same 2048 (STANDARD_VECTOR_SIZE) values are not being scanned over and over again
+    # and that the same 1024 (STANDARD_VECTOR_SIZE) values are not being scanned over and over again
     def test_multiple_chunks(self):
+        standard_vector_size = 1024
+
         data = []
         data += [datetime.date(2022, 9, 13) for x in range(standard_vector_size)]
         data += [datetime.date(2022, 9, 14) for x in range(standard_vector_size)]
@@ -628,64 +585,6 @@ class TestResolveObjectColumns(object):
         assert(conversion == reference)
         print(reference)
         print(conversion)
-
-    def test_numeric_decimal_fallback_to_double(self):
-        duckdb_conn = duckdb.connect()
-        # The widths of these decimal values are bigger than the max supported width for DECIMAL
-        data = [Decimal("1.234567890123456789012345678901234567890123456789"), Decimal("123456789012345678901234567890123456789012345678.0")]
-        decimals = pd.DataFrame(
-            data={
-                "0": data
-            }
-        )
-        reference_query = """
-            CREATE TABLE tbl AS SELECT * FROM (
-                VALUES
-                    (1.234567890123456789012345678901234567890123456789),
-                    (123456789012345678901234567890123456789012345678.0)
-            ) tbl(a);
-        """
-        duckdb_conn.execute(reference_query)
-        reference = duckdb.query("select * from tbl", connection=duckdb_conn).fetchall()
-        conversion = duckdb.query_df(decimals, "x", "select * from x").fetchall()
-        assert(conversion == reference)
-        assert(isinstance(conversion[0][0], float))
-
-    def test_numeric_decimal_double_mixed(self):
-        duckdb_conn = duckdb.connect()
-        data = [
-            Decimal("1.234"),
-            Decimal("1.234567891234567890123456789012345678901234567890123456789"),
-            Decimal("0.00000000000345"),
-            Decimal("0.00000000000000000000000000000000000000000000000000000000000123456789"),
-            Decimal("1234543534535213412342342.2345456"),
-            Decimal("123456789123456789123456789123456789123456789123456789123456789123456789"),
-            Decimal("1232354.000000000000000000000000000035"),
-            Decimal("123.5e300")
-        ]
-        decimals = pd.DataFrame(
-            data={
-                "0": data
-            }
-        )
-        reference_query = """
-            CREATE TABLE tbl AS SELECT * FROM (
-                VALUES
-                    (1.234),
-                    (1.234567891234567890123456789012345678901234567890123456789),
-                    (0.00000000000345),
-                    (0.00000000000000000000000000000000000000000000000000000000000123456789),
-                    (1234543534535213412342342.2345456),
-                    (123456789123456789123456789123456789123456789123456789123456789123456789),
-                    (1232354.000000000000000000000000000035),
-                    (123.5e300)
-            ) tbl(a);
-        """
-        duckdb_conn.execute(reference_query)
-        reference = duckdb.query("select * from tbl", connection=duckdb_conn).fetchall()
-        conversion = duckdb.query_df(decimals, "x", "select * from x").fetchall()
-        assert(conversion == reference)
-        assert(isinstance(conversion[0][0], float))
 
     def test_numeric_decimal_out_of_range(self):
         duckdb_conn = duckdb.connect()

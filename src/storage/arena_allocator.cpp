@@ -1,5 +1,4 @@
 #include "duckdb/storage/arena_allocator.hpp"
-
 #include "duckdb/common/assert.hpp"
 
 namespace duckdb {
@@ -10,9 +9,9 @@ ArenaChunk::ArenaChunk(Allocator &allocator, idx_t size) : current_position(0), 
 }
 ArenaChunk::~ArenaChunk() {
 	if (next) {
-		auto current_next = std::move(next);
+		auto current_next = move(next);
 		while (current_next) {
-			current_next = std::move(current_next->next);
+			current_next = move(current_next->next);
 		}
 	}
 }
@@ -35,11 +34,11 @@ data_ptr_t ArenaAllocator::Allocate(idx_t len) {
 		auto new_chunk = make_unique<ArenaChunk>(allocator, current_capacity);
 		if (head) {
 			head->prev = new_chunk.get();
-			new_chunk->next = std::move(head);
+			new_chunk->next = move(head);
 		} else {
 			tail = new_chunk.get();
 		}
-		head = std::move(new_chunk);
+		head = move(new_chunk);
 	}
 	D_ASSERT(head->current_position + len <= head->maximum_size);
 	auto result = head->data.get() + head->current_position;
@@ -47,43 +46,14 @@ data_ptr_t ArenaAllocator::Allocate(idx_t len) {
 	return result;
 }
 
-data_ptr_t ArenaAllocator::Reallocate(data_ptr_t pointer, idx_t old_size, idx_t size) {
-	D_ASSERT(head);
-	if (old_size == size) {
-		// nothing to do
-		return pointer;
-	}
-
-	auto head_ptr = head->data.get() + head->current_position;
-	int64_t diff = size - old_size;
-	if (pointer == head_ptr && (size < old_size || head->current_position + diff <= head->maximum_size)) {
-		// passed pointer is the head pointer, and the diff fits on the current chunk
-		head->current_position += diff;
-		return pointer;
-	} else {
-		// allocate new memory
-		auto result = Allocate(size);
-		memcpy(result, pointer, old_size);
-		return result;
-	}
-}
-
-data_ptr_t ArenaAllocator::AllocateAligned(idx_t size) {
-	return Allocate(AlignValue<idx_t>(size));
-}
-
-data_ptr_t ArenaAllocator::ReallocateAligned(data_ptr_t pointer, idx_t old_size, idx_t size) {
-	return Reallocate(pointer, old_size, AlignValue<idx_t>(size));
-}
-
 void ArenaAllocator::Reset() {
 
 	if (head) {
 		// destroy all chunks except the current one
 		if (head->next) {
-			auto current_next = std::move(head->next);
+			auto current_next = move(head->next);
 			while (current_next) {
-				current_next = std::move(current_next->next);
+				current_next = move(current_next->next);
 			}
 		}
 		tail = head.get();
@@ -103,7 +73,7 @@ void ArenaAllocator::Destroy() {
 void ArenaAllocator::Move(ArenaAllocator &other) {
 	D_ASSERT(!other.head);
 	other.tail = tail;
-	other.head = std::move(head);
+	other.head = move(head);
 	other.current_capacity = current_capacity;
 	Destroy();
 }

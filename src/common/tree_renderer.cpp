@@ -6,7 +6,6 @@
 #include "duckdb/common/to_string.hpp"
 #include "duckdb/execution/operator/join/physical_delim_join.hpp"
 #include "duckdb/execution/operator/aggregate/physical_hash_aggregate.hpp"
-#include "duckdb/execution/operator/scan/physical_positional_scan.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 
 #include "utf8proc_wrapper.hpp"
@@ -38,7 +37,7 @@ idx_t RenderTree::GetPosition(idx_t x, idx_t y) {
 }
 
 void RenderTree::SetNode(idx_t x, idx_t y, unique_ptr<RenderTreeNode> node) {
-	nodes[GetPosition(x, y)] = std::move(node);
+	nodes[GetPosition(x, y)] = move(node);
 }
 
 void TreeRenderer::RenderTopLayer(RenderTree &root, std::ostream &ss, idx_t y) {
@@ -358,8 +357,8 @@ string TreeRenderer::ExtraInfoSeparator() {
 
 unique_ptr<RenderTreeNode> TreeRenderer::CreateRenderNode(string name, string extra_info) {
 	auto result = make_unique<RenderTreeNode>();
-	result->name = std::move(name);
-	result->extra_text = std::move(extra_info);
+	result->name = move(name);
+	result->extra_text = move(extra_info);
 	return result;
 }
 
@@ -379,13 +378,10 @@ public:
 
 template <>
 bool TreeChildrenIterator::HasChildren(const PhysicalOperator &op) {
-	switch (op.type) {
-	case PhysicalOperatorType::DELIM_JOIN:
-	case PhysicalOperatorType::POSITIONAL_SCAN:
+	if (op.type == PhysicalOperatorType::DELIM_JOIN) {
 		return true;
-	default:
-		return !op.children.empty();
 	}
+	return !op.children.empty();
 }
 template <>
 void TreeChildrenIterator::Iterate(const PhysicalOperator &op,
@@ -396,11 +392,6 @@ void TreeChildrenIterator::Iterate(const PhysicalOperator &op,
 	if (op.type == PhysicalOperatorType::DELIM_JOIN) {
 		auto &delim = (PhysicalDelimJoin &)op;
 		callback(*delim.join);
-	} else if ((op.type == PhysicalOperatorType::POSITIONAL_SCAN)) {
-		auto &pscan = (PhysicalPositionalScan &)op;
-		for (auto &table : pscan.child_tables) {
-			callback(*table);
-		}
 	}
 }
 
@@ -447,7 +438,7 @@ static void GetTreeWidthHeight(const T &op, idx_t &width, idx_t &height) {
 template <class T>
 idx_t TreeRenderer::CreateRenderTreeRecursive(RenderTree &result, const T &op, idx_t x, idx_t y) {
 	auto node = TreeRenderer::CreateNode(op);
-	result.SetNode(x, y, std::move(node));
+	result.SetNode(x, y, move(node));
 
 	if (!TreeChildrenIterator::HasChildren(op)) {
 		return 1;
@@ -545,8 +536,8 @@ unique_ptr<RenderTree> TreeRenderer::CreateTree(const Pipeline &op) {
 	unique_ptr<PipelineRenderNode> node;
 	for (auto &op : operators) {
 		auto new_node = make_unique<PipelineRenderNode>(*op);
-		new_node->child = std::move(node);
-		node = std::move(new_node);
+		new_node->child = move(node);
+		node = move(new_node);
 	}
 	return CreateRenderTree<PipelineRenderNode>(*node);
 }

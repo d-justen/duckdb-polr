@@ -5,4 +5,10 @@ set -x
 
 cd `dirname $0`
 
-python3 configure.py
+if [ ! -f "../../scripts/amalgamation.py" ]; then
+	echo "Could not find the amalgamation build script"
+	exit 1
+fi
+
+(cd ../.. && python3 scripts/amalgamation.py --extended --source=tools/nodejs/src/duckdb.cpp --header=tools/nodejs/src/duckdb.hpp)
+(cd ../.. && python3 scripts/parquet_amalgamation.py && cp src/amalgamation/parquet-amalgamation* tools/nodejs/src/)

@@ -14,7 +14,6 @@
 #include "duckdb/common/preserved_error.hpp"
 
 namespace duckdb {
-struct BoxRendererConfig;
 
 enum class QueryResultType : uint8_t { MATERIALIZED_RESULT, STREAM_RESULT, PENDING_RESULT };
 
@@ -77,8 +76,6 @@ public:
 	unique_ptr<QueryResult> next;
 
 public:
-	//! Returns the name of the column for the given index
-	DUCKDB_API const string &ColumnName(idx_t index) const;
 	//! Fetches a DataChunk of normalized (flat) vectors from the query result.
 	//! Returns nullptr if there are no more results to fetch.
 	DUCKDB_API virtual unique_ptr<DataChunk> Fetch();
@@ -87,8 +84,6 @@ public:
 	DUCKDB_API virtual unique_ptr<DataChunk> FetchRaw() = 0;
 	//! Converts the QueryResult to a string
 	DUCKDB_API virtual string ToString() = 0;
-	//! Converts the QueryResult to a box-rendered string
-	DUCKDB_API virtual string ToBox(ClientContext &context, const BoxRendererConfig &config);
 	//! Prints the QueryResult to the console
 	DUCKDB_API void Print();
 	//! Returns true if the two results are identical; false otherwise. Note that this method is destructive; it calls

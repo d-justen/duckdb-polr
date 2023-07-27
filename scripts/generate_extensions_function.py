@@ -15,7 +15,7 @@ parser.add_argument('--validate', action=argparse.BooleanOptionalAction,
 args = parser.parse_args()
 
 stored_functions = {
-    'substrait': ["from_substrait", "get_substrait", "get_substrait_json", "from_substrait_json"]
+    'substrait': ["from_substrait", "get_substrait", "get_substrait_json"]
 }
 
 functions = {}
@@ -60,7 +60,7 @@ for extension in reader:
     })
 
 if args.validate:
-    file = open(os.path.join("..","src","include","duckdb", "main", "extension_functions.hpp"),'r')
+    file = open(os.path.join("..","src","include","extension_functions.hpp"),'r')
     pattern = re.compile("{\"(.*?)\", \"(.*?)\"},")
     cur_function_map = dict(pattern.findall(file.read()))
     print("Cur Function Map: ")
@@ -83,11 +83,11 @@ if args.validate:
         exit(1)
 else:
     # Generate Header
-    file = open(os.path.join("..","src","include","duckdb", "main", "extension_functions.hpp"),'w')
+    file = open(os.path.join("..","src","include","extension_functions.hpp"),'w')
     header = """//===----------------------------------------------------------------------===//
 //                         DuckDB
 //
-// duckdb/main/extension_functions.hpp
+// extension_functions.hpp
 //
 //
 //===----------------------------------------------------------------------===//

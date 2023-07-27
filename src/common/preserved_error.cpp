@@ -11,11 +11,15 @@ PreservedError::PreservedError() : initialized(false) {
 }
 
 PreservedError::PreservedError(const Exception &exception)
-    : initialized(true), type(exception.type), raw_message(SanitizeErrorMessage(exception.RawMessage())) {
+    : initialized(true), type(exception.type), raw_message(exception.RawMessage()) {
+}
+
+PreservedError::PreservedError(const std::exception &exception)
+    : initialized(true), type(ExceptionType::INVALID), raw_message(exception.what()) {
 }
 
 PreservedError::PreservedError(const string &message)
-    : initialized(true), type(ExceptionType::INVALID), raw_message(SanitizeErrorMessage(message)) {
+    : initialized(true), type(ExceptionType::INVALID), raw_message(message) {
 }
 
 const string &PreservedError::Message() {
@@ -23,10 +27,6 @@ const string &PreservedError::Message() {
 		final_message = Exception::ExceptionTypeToString(type) + " Error: " + raw_message;
 	}
 	return final_message;
-}
-
-string PreservedError::SanitizeErrorMessage(string error) {
-	return StringUtil::Replace(std::move(error), string("\0", 1), "\\0");
 }
 
 void PreservedError::Throw(const string &prepended_message) const {

@@ -1,14 +1,13 @@
 {
   "name": "duckdb",
   "main": "./lib/duckdb.js",
-  "types": "./lib/duckdb.d.ts",
   "version": "0.2.4",
   "description": "DuckDB node.js API",
   "gypfile": true,
   "dependencies": {
     "@mapbox/node-pre-gyp": "^1.0.0",
     "node-addon-api": "*",
-    "node-gyp": "^9.3.0"
+    "node-gyp": "^7.1.2"
   },
   "binary": {
     "module_name": "duckdb",
@@ -18,7 +17,7 @@
   "scripts": {
     "install": "node-pre-gyp install --fallback-to-build",
     "pretest": "node test/support/createdb.js",
-    "test": "mocha -R spec --timeout 480000 --expose-gc",
+    "test": "mocha -R spec --timeout 480000",
     "pack": "node-pre-gyp package"
   },
   "directories": {
@@ -26,26 +25,14 @@
     "test": "test"
   },
   "devDependencies": {
-    "@types/chai": "^4.3.4",
-    "@types/mocha": "^10.0.0",
-    "@types/node": "^18.11.0",
-    "apache-arrow": "^9.0.0",
     "aws-sdk": "^2.790.0",
     "chai": "^4.3.6",
     "jsdoc3-parser": "^2.0.0",
-    "mocha": "^8.3.0",
-    "ts-node": "^10.9.1",
-    "tsconfig-paths": "^4.0.0",
-    "typescript": "^4.8.4"
+    "mocha": "^8.3.0"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cwida/duckdb.git"
-  },
-  "ts-node": {
-    "require": [
-      "tsconfig-paths/register"
-    ]
   },
   "keywords": [
     "database",

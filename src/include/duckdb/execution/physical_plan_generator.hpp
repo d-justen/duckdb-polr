@@ -13,7 +13,6 @@
 #include "duckdb/planner/logical_operator.hpp"
 #include "duckdb/planner/logical_tokens.hpp"
 #include "duckdb/planner/operator/logical_limit_percent.hpp"
-#include "duckdb/catalog/dependency_list.hpp"
 #include "duckdb/common/unordered_map.hpp"
 #include "duckdb/common/unordered_set.hpp"
 
@@ -28,7 +27,7 @@ public:
 	explicit PhysicalPlanGenerator(ClientContext &context);
 	~PhysicalPlanGenerator();
 
-	DependencyList dependencies;
+	unordered_set<CatalogEntry *> dependencies;
 	//! Recursive CTEs require at least one ChunkScan, referencing the working_table.
 	//! This data structure is used to establish it.
 	unordered_map<idx_t, std::shared_ptr<ColumnDataCollection>> recursive_cte_tables;
@@ -37,11 +36,6 @@ public:
 	//! Creates a plan from the logical operator. This involves resolving column bindings and generating physical
 	//! operator nodes.
 	unique_ptr<PhysicalOperator> CreatePlan(unique_ptr<LogicalOperator> logical);
-
-	//! Whether or not we can (or should) use a batch-index based operator for executing the given sink
-	static bool UseBatchIndex(ClientContext &context, PhysicalOperator &plan);
-	//! Whether or not we should preserve insertion order for executing the given sink
-	static bool PreserveInsertionOrder(ClientContext &context, PhysicalOperator &plan);
 
 protected:
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalOperator &op);
@@ -68,7 +62,6 @@ protected:
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalLimitPercent &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalOrder &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalTopN &op);
-	unique_ptr<PhysicalOperator> CreatePlan(LogicalPositionalJoin &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalProjection &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalInsert &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalCopyToFile &op);
@@ -81,7 +74,6 @@ protected:
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalPragma &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalSample &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalSet &op);
-	unique_ptr<PhysicalOperator> CreatePlan(LogicalReset &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalShow &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalSimple &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalUnnest &op);
@@ -94,10 +86,6 @@ protected:
 	unique_ptr<PhysicalOperator> ExtractAggregateExpressions(unique_ptr<PhysicalOperator> child,
 	                                                         vector<unique_ptr<Expression>> &expressions,
 	                                                         vector<unique_ptr<Expression>> &groups);
-
-private:
-	bool PreserveInsertionOrder(PhysicalOperator &plan);
-	bool UseBatchIndex(PhysicalOperator &plan);
 
 private:
 	ClientContext &context;

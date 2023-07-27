@@ -46,29 +46,6 @@ MainHeader MainHeader::Deserialize(Deserializer &source) {
 		throw IOException("The file is not a valid DuckDB database file!");
 	}
 	header.version_number = source.Read<uint64_t>();
-	// check the version number
-	if (header.version_number != VERSION_NUMBER) {
-		auto version = GetDuckDBVersion(header.version_number);
-		string version_text;
-		if (version) {
-			// known version
-			version_text = "DuckDB version " + string(version);
-		} else {
-			version_text = string("an ") + (VERSION_NUMBER > header.version_number ? "older development" : "newer") +
-			               string(" version of DuckDB");
-		}
-		throw IOException(
-		    "Trying to read a database file with version number %lld, but we can only read version %lld.\n"
-		    "The database file was created with %s.\n\n"
-		    "The storage of DuckDB is not yet stable; newer versions of DuckDB cannot read old database files and "
-		    "vice versa.\n"
-		    "The storage will be stabilized when version 1.0 releases.\n\n"
-		    "For now, we recommend that you load the database file in a supported version of DuckDB, and use the "
-		    "EXPORT DATABASE command "
-		    "followed by IMPORT DATABASE on the current version of DuckDB.\n\n"
-		    "See the storage page for more information: https://duckdb.org/internals/storage",
-		    header.version_number, VERSION_NUMBER, version_text);
-	}
 	// read the flags
 	FieldReader reader(source);
 	for (idx_t i = 0; i < FLAG_COUNT; i++) {
@@ -106,12 +83,11 @@ T DeserializeHeaderStructure(data_ptr_t ptr) {
 	return T::Deserialize(source);
 }
 
-SingleFileBlockManager::SingleFileBlockManager(AttachedDatabase &db, string path_p, bool read_only, bool create_new,
+SingleFileBlockManager::SingleFileBlockManager(DatabaseInstance &db, string path_p, bool read_only, bool create_new,
                                                bool use_direct_io)
-    : BlockManager(BufferManager::GetBufferManager(db)), db(db), path(std::move(path_p)),
-      header_buffer(Allocator::Get(db), FileBufferType::MANAGED_BUFFER,
-                    Storage::FILE_HEADER_SIZE - Storage::BLOCK_HEADER_SIZE),
-      iteration_count(0), read_only(read_only), use_direct_io(use_direct_io) {
+    : BlockManager(BufferManager::GetBufferManager(db)), db(db), path(move(path_p)),
+      header_buffer(Allocator::Get(db), FileBufferType::MANAGED_BUFFER, Storage::FILE_HEADER_SIZE), iteration_count(0),
+      read_only(read_only), use_direct_io(use_direct_io) {
 	uint8_t flags;
 	FileLockType lock;
 	if (read_only) {
@@ -129,7 +105,7 @@ SingleFileBlockManager::SingleFileBlockManager(AttachedDatabase &db, string path
 		flags |= FileFlags::FILE_FLAGS_DIRECT_IO;
 	}
 	// open the RDBMS handle
-	auto &fs = FileSystem::Get(db);
+	auto &fs = FileSystem::GetFileSystem(db);
 	handle = fs.OpenFile(path, flags, lock);
 	if (create_new) {
 		// if we create a new file, we fill the metadata of the file
@@ -173,7 +149,20 @@ SingleFileBlockManager::SingleFileBlockManager(AttachedDatabase &db, string path
 		MainHeader::CheckMagicBytes(*handle);
 		// otherwise, we check the metadata of the file
 		header_buffer.ReadAndChecksum(*handle, 0);
-		DeserializeHeaderStructure<MainHeader>(header_buffer.buffer);
+		MainHeader header = DeserializeHeaderStructure<MainHeader>(header_buffer.buffer);
+		// check the version number
+		if (header.version_number != VERSION_NUMBER) {
+			throw IOException(
+			    "Trying to read a database file with version number %lld, but we can only read version %lld.\n"
+			    "The database file was created with an %s version of DuckDB.\n\n"
+			    "The storage of DuckDB is not yet stable; newer versions of DuckDB cannot read old database files and "
+			    "vice versa.\n"
+			    "The storage will be stabilized when version 1.0 releases.\n\n"
+			    "For now, we recommend that you load the database file in a supported version of DuckDB, and use the "
+			    "EXPORT DATABASE command "
+			    "followed by IMPORT DATABASE on the current version of DuckDB.",
+			    header.version_number, VERSION_NUMBER, VERSION_NUMBER > header.version_number ? "older" : "newer");
+		}
 
 		// read the database headers from disk
 		DatabaseHeader h1, h2;
@@ -245,19 +234,9 @@ block_id_t SingleFileBlockManager::GetFreeBlockId() {
 	return block;
 }
 
-void SingleFileBlockManager::MarkBlockAsFree(block_id_t block_id) {
-	lock_guard<mutex> lock(block_lock);
-	D_ASSERT(block_id >= 0);
-	D_ASSERT(block_id < max_block);
-	D_ASSERT(free_list.find(block_id) == free_list.end());
-	multi_use_blocks.erase(block_id);
-	free_list.insert(block_id);
-}
-
 void SingleFileBlockManager::MarkBlockAsModified(block_id_t block_id) {
 	lock_guard<mutex> lock(block_lock);
 	D_ASSERT(block_id >= 0);
-	D_ASSERT(block_id < max_block);
 
 	// check if the block is a multi-use block
 	auto entry = multi_use_blocks.find(block_id);
@@ -280,8 +259,6 @@ void SingleFileBlockManager::MarkBlockAsModified(block_id_t block_id) {
 
 void SingleFileBlockManager::IncreaseBlockReferenceCount(block_id_t block_id) {
 	lock_guard<mutex> lock(block_lock);
-	D_ASSERT(block_id >= 0);
-	D_ASSERT(block_id < max_block);
 	D_ASSERT(free_list.find(block_id) == free_list.end());
 	auto entry = multi_use_blocks.find(block_id);
 	if (entry != multi_use_blocks.end()) {
@@ -339,6 +316,10 @@ vector<block_id_t> SingleFileBlockManager::GetFreeListBlocks() {
 		// a bit from the max block size
 		auto space_in_block = Storage::BLOCK_SIZE - 4 * sizeof(block_id_t);
 		auto total_blocks = (total_size + space_in_block - 1) / space_in_block;
+		auto &config = DBConfig::GetConfig(db);
+		if (config.options.debug_many_free_list_blocks) {
+			total_blocks++;
+		}
 		D_ASSERT(total_size > 0);
 		D_ASSERT(total_blocks > 0);
 
@@ -416,7 +397,7 @@ void SingleFileBlockManager::WriteHeader(DatabaseHeader header) {
 	}
 	header.block_count = max_block;
 
-	auto &config = DBConfig::Get(db);
+	auto &config = DBConfig::GetConfig(db);
 	if (config.options.checkpoint_abort == CheckpointAbort::DEBUG_ABORT_AFTER_FREE_LIST_WRITE) {
 		throw FatalException("Checkpoint aborted after free list write because of PRAGMA checkpoint_abort flag");
 	}

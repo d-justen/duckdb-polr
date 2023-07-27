@@ -19,7 +19,7 @@ CommonTableExpressionMap CommonTableExpressionMap::Copy() const {
 			kv_info->aliases.push_back(al);
 		}
 		kv_info->query = unique_ptr_cast<SQLStatement, SelectStatement>(kv.second->query->Copy());
-		res.map[kv.first] = std::move(kv_info);
+		res.map[kv.first] = move(kv_info);
 	}
 	return res;
 }
@@ -146,7 +146,7 @@ void QueryNode::CopyProperties(QueryNode &other) const {
 			kv_info->aliases.push_back(al);
 		}
 		kv_info->query = unique_ptr_cast<SQLStatement, SelectStatement>(kv.second->query->Copy());
-		other.cte_map.map[kv.first] = std::move(kv_info);
+		other.cte_map.map[kv.first] = move(kv_info);
 	}
 }
 
@@ -180,7 +180,7 @@ unique_ptr<QueryNode> QueryNode::Deserialize(Deserializer &main_source) {
 		auto info = make_unique<CommonTableExpressionInfo>();
 		source.ReadStringVector(info->aliases);
 		info->query = SelectStatement::Deserialize(source);
-		new_map[name] = std::move(info);
+		new_map[name] = move(info);
 	}
 	unique_ptr<QueryNode> result;
 	switch (type) {
@@ -196,30 +196,10 @@ unique_ptr<QueryNode> QueryNode::Deserialize(Deserializer &main_source) {
 	default:
 		throw SerializationException("Could not deserialize Query Node: unknown type!");
 	}
-	result->modifiers = std::move(modifiers);
-	result->cte_map.map = std::move(new_map);
+	result->modifiers = move(modifiers);
+	result->cte_map.map = move(new_map);
 	reader.Finalize();
 	return result;
-}
-
-void QueryNode::AddDistinct() {
-	// check if we already have a DISTINCT modifier
-	for (idx_t modifier_idx = modifiers.size(); modifier_idx > 0; modifier_idx--) {
-		auto &modifier = *modifiers[modifier_idx - 1];
-		if (modifier.type == ResultModifierType::DISTINCT_MODIFIER) {
-			auto &distinct_modifier = (DistinctModifier &)modifier;
-			if (distinct_modifier.distinct_on_targets.empty()) {
-				// we have a DISTINCT without an ON clause - this distinct does not need to be added
-				return;
-			}
-		} else if (modifier.type == ResultModifierType::LIMIT_MODIFIER ||
-		           modifier.type == ResultModifierType::LIMIT_PERCENT_MODIFIER) {
-			// we encountered a LIMIT or LIMIT PERCENT - these change the result of DISTINCT, so we do need to push a
-			// DISTINCT relation
-			break;
-		}
-	}
-	modifiers.push_back(make_unique<DistinctModifier>());
 }
 
 } // namespace duckdb

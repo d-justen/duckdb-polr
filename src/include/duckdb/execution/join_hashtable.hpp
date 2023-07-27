@@ -10,7 +10,6 @@
 
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/radix_partitioning.hpp"
-#include "duckdb/common/types/column_data_consumer.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/types/null_value.hpp"
 #include "duckdb/common/types/row_data_collection.hpp"
@@ -114,6 +113,9 @@ public:
 
 		idx_t ScanInnerJoin(DataChunk &keys, SelectionVector &result_vector);
 
+		idx_t ResolvePredicates(DataChunk &keys, SelectionVector &match_sel);
+		idx_t ResolvePredicates(DataChunk &keys, SelectionVector &match_sel, SelectionVector &no_match_sel);
+
 	public:
 		void InitializeSelectionVector(const SelectionVector *&current_sel);
 		void AdvancePointers();
@@ -148,8 +150,6 @@ public:
 
 	//! Fill the pointer with all the addresses from the hashtable for full scan
 	idx_t FillWithHTOffsets(data_ptr_t *key_locations, JoinHTScanState &state);
-	//! Pins all fixed-size blocks
-	void PinAllBlocks();
 
 	idx_t Count() const {
 		return block_collection->count;
@@ -230,7 +230,7 @@ private:
 	mutex pinned_handles_lock;
 	vector<BufferHandle> pinned_handles;
 	//! The hash map of the HT, created after finalization
-	AllocatedData hash_map;
+	BufferHandle hash_map;
 	//! Whether or not NULL values are considered equal in each of the comparisons
 	vector<bool> null_values_are_equal;
 
@@ -241,58 +241,6 @@ public:
 	//===--------------------------------------------------------------------===//
 	// External Join
 	//===--------------------------------------------------------------------===//
-	struct ProbeSpillLocalAppendState {
-		//! Local partition and append state (if partitioned)
-		PartitionedColumnData *local_partition;
-		PartitionedColumnDataAppendState *local_partition_append_state;
-		//! Local spill and append state (if not partitioned)
-		ColumnDataCollection *local_spill_collection;
-		ColumnDataAppendState *local_spill_append_state;
-	};
-	//! ProbeSpill represents materialized probe-side data that could not be probed during PhysicalHashJoin::Execute
-	//! because the HashTable did not fit in memory. The ProbeSpill is not partitioned if the remaining data can be
-	//! dealt with in just 1 more round of probing, otherwise it is radix partitioned in the same way as the HashTable
-	struct ProbeSpill {
-	public:
-		ProbeSpill(JoinHashTable &ht, ClientContext &context, const vector<LogicalType> &probe_types);
-
-	public:
-		//! Create a state for a new thread
-		ProbeSpillLocalAppendState RegisterThread();
-		//! Append a chunk to this ProbeSpill
-		void Append(DataChunk &chunk, ProbeSpillLocalAppendState &local_state);
-		//! Finalize by merging the thread-local accumulated data
-		void Finalize();
-
-	public:
-		//! Prepare the next probe round
-		void PrepareNextProbe();
-		//! Scans and consumes the ColumnDataCollection
-		unique_ptr<ColumnDataConsumer> consumer;
-
-	private:
-		JoinHashTable &ht;
-		mutex lock;
-		ClientContext &context;
-
-		//! Whether the probe data is partitioned
-		bool partitioned;
-		//! The types of the probe DataChunks
-		const vector<LogicalType> &probe_types;
-		//! The column ids
-		vector<column_t> column_ids;
-
-		//! The partitioned probe data (if partitioned) and append states
-		unique_ptr<PartitionedColumnData> global_partitions;
-		vector<unique_ptr<PartitionedColumnData>> local_partitions;
-		vector<unique_ptr<PartitionedColumnDataAppendState>> local_partition_append_states;
-
-		//! The probe data (if not partitioned) and append states
-		unique_ptr<ColumnDataCollection> global_spill_collection;
-		vector<unique_ptr<ColumnDataCollection>> local_spill_collections;
-		vector<unique_ptr<ColumnDataAppendState>> local_spill_append_states;
-	};
-
 	//! Whether we are doing an external hash join
 	bool external;
 	//! The current number of radix bits used to partition
@@ -303,25 +251,25 @@ public:
 	idx_t tuples_per_round;
 
 	//! The number of tuples that are swizzled
-	idx_t SwizzledCount() const {
+	idx_t SwizzledCount() {
 		return swizzled_block_collection->count;
 	}
 	//! Size of the in-memory data
-	idx_t SizeInBytes() const {
+	idx_t SizeInBytes() {
 		return block_collection->SizeInBytes() + string_heap->SizeInBytes();
 	}
 	//! Size of the swizzled data
-	idx_t SwizzledSize() const {
+	idx_t SwizzledSize() {
 		return swizzled_block_collection->SizeInBytes() + swizzled_string_heap->SizeInBytes();
 	}
-	//! Capacity of the pointer table given the ht count
-	//! (minimum of 1024 to prevent collision chance for small HT's)
-	static idx_t PointerTableCapacity(idx_t count) {
-		return MaxValue<idx_t>(NextPowerOfTwo(count * 2), 1 << 10);
+	idx_t PointerTableCapacity(idx_t count) {
+		return NextPowerOfTwo(MaxValue<idx_t>(count * 2, (Storage::BLOCK_SIZE / sizeof(data_ptr_t)) + 1));
 	}
 
 	//! Swizzle the blocks in this HT (moves from block_collection and string_heap to swizzled_...)
 	void SwizzleBlocks();
+	//! Unswizzle the blocks in this HT (moves from swizzled_... to block_collection and string_heap)
+	void UnswizzleBlocks();
 
 	//! Computes partition sizes and number of radix bits (called before scheduling partition tasks)
 	void ComputePartitionSizes(ClientConfig &config, vector<unique_ptr<JoinHashTable>> &local_hts, idx_t max_ht_size);
@@ -333,20 +281,22 @@ public:
 	//! Build HT for the next partitioned probe round
 	bool PrepareExternalFinalize();
 	//! Probe whatever we can, sink the rest into a thread-local HT
-	unique_ptr<ScanStructure> ProbeAndSpill(DataChunk &keys, DataChunk &payload, ProbeSpill &probe_spill,
-	                                        ProbeSpillLocalAppendState &spill_state, DataChunk &spill_chunk);
+	unique_ptr<ScanStructure> ProbeAndSpill(DataChunk &keys, DataChunk &payload, ColumnDataCollection &spill_collection,
+	                                        ColumnDataAppendState &spill_append_state, DataChunk &spill_chunk);
 
 private:
-	//! First and last partition of the current probe round
+	//! First and last partition of the current partitioned round
 	idx_t partition_start;
 	idx_t partition_end;
 
-	//! Swizzled row data
+	//! The RowDataCollection holding the swizzled main data of the hash table
 	unique_ptr<RowDataCollection> swizzled_block_collection;
+	//! The stringheap accompanying the swizzled main data
 	unique_ptr<RowDataCollection> swizzled_string_heap;
 
+	//! Partitioned data lock
+	mutex partition_lock;
 	//! Partitioned data
-	mutex partitioned_data_lock;
 	vector<unique_ptr<RowDataCollection>> partition_block_collections;
 	vector<unique_ptr<RowDataCollection>> partition_string_heaps;
 };

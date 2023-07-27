@@ -22,7 +22,6 @@
 #undef RemoveDirectory
 
 namespace duckdb {
-class AttachedDatabase;
 class ClientContext;
 class DatabaseInstance;
 class FileOpener;
@@ -108,7 +107,6 @@ public:
 	DUCKDB_API static constexpr FileCompressionType DEFAULT_COMPRESSION = FileCompressionType::UNCOMPRESSED;
 	DUCKDB_API static FileSystem &GetFileSystem(ClientContext &context);
 	DUCKDB_API static FileSystem &GetFileSystem(DatabaseInstance &db);
-	DUCKDB_API static FileSystem &Get(AttachedDatabase &db);
 	DUCKDB_API static FileOpener *GetFileOpener(ClientContext &context);
 
 	DUCKDB_API virtual unique_ptr<FileHandle> OpenFile(const string &path, uint8_t flags,
@@ -119,7 +117,7 @@ public:
 	//! Read exactly nr_bytes from the specified location in the file. Fails if nr_bytes could not be read. This is
 	//! equivalent to calling SetFilePointer(location) followed by calling Read().
 	DUCKDB_API virtual void Read(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location);
-	//! Write exactly nr_bytes to the specified location in the file. Fails if nr_bytes could not be written. This is
+	//! Write exactly nr_bytes to the specified location in the file. Fails if nr_bytes could not be read. This is
 	//! equivalent to calling SetFilePointer(location) followed by calling Write().
 	DUCKDB_API virtual void Write(FileHandle &handle, void *buffer, int64_t nr_bytes, idx_t location);
 	//! Read nr_bytes from the specified file into the buffer, moving the file pointer forward by nr_bytes. Returns the

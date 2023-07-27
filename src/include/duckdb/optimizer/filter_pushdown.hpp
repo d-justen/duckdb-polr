@@ -18,7 +18,8 @@ class Optimizer;
 
 class FilterPushdown {
 public:
-	explicit FilterPushdown(Optimizer &optimizer);
+	explicit FilterPushdown(Optimizer &optimizer) : optimizer(optimizer) {
+	}
 	//! Perform filter pushdown
 	unique_ptr<LogicalOperator> Rewrite(unique_ptr<LogicalOperator> op);
 
@@ -28,7 +29,7 @@ public:
 
 		Filter() {
 		}
-		explicit Filter(unique_ptr<Expression> filter) : filter(std::move(filter)) {
+		explicit Filter(unique_ptr<Expression> filter) : filter(move(filter)) {
 		}
 
 		void ExtractBindings();

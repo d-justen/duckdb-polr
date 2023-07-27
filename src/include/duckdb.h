@@ -119,8 +119,8 @@ typedef enum DUCKDB_TYPE {
 	DUCKDB_TYPE_MAP,
 	// duckdb_hugeint
 	DUCKDB_TYPE_UUID,
-	// union type, only useful as logical type
-	DUCKDB_TYPE_UNION,
+	// const char*
+	DUCKDB_TYPE_JSON,
 } duckdb_type;
 
 //! Days are stored as days since 1970-01-01
@@ -181,11 +181,6 @@ typedef struct {
 } duckdb_decimal;
 
 typedef struct {
-	char *data;
-	idx_t size;
-} duckdb_string;
-
-typedef struct {
 	void *data;
 	idx_t size;
 } duckdb_blob;
@@ -231,48 +226,19 @@ typedef struct {
 	void *internal_data;
 } duckdb_result;
 
-typedef struct _duckdb_database {
-	void *__db;
-} * duckdb_database;
-typedef struct _duckdb_connection {
-	void *__conn;
-} * duckdb_connection;
-typedef struct _duckdb_prepared_statement {
-	void *__prep;
-} * duckdb_prepared_statement;
-typedef struct _duckdb_extracted_statements {
-	void *__extrac;
-} * duckdb_extracted_statements;
-typedef struct _duckdb_pending_result {
-	void *__pend;
-} * duckdb_pending_result;
-typedef struct _duckdb_appender {
-	void *__appn;
-} * duckdb_appender;
-typedef struct _duckdb_arrow {
-	void *__arrw;
-} * duckdb_arrow;
-typedef struct _duckdb_config {
-	void *__cnfg;
-} * duckdb_config;
-typedef struct _duckdb_arrow_schema {
-	void *__arrs;
-} * duckdb_arrow_schema;
-typedef struct _duckdb_arrow_array {
-	void *__arra;
-} * duckdb_arrow_array;
-typedef struct _duckdb_logical_type {
-	void *__lglt;
-} * duckdb_logical_type;
-typedef struct _duckdb_data_chunk {
-	void *__dtck;
-} * duckdb_data_chunk;
-typedef struct _duckdb_vector {
-	void *__vctr;
-} * duckdb_vector;
-typedef struct _duckdb_value {
-	void *__val;
-} * duckdb_value;
+typedef void *duckdb_database;
+typedef void *duckdb_connection;
+typedef void *duckdb_prepared_statement;
+typedef void *duckdb_pending_result;
+typedef void *duckdb_appender;
+typedef void *duckdb_arrow;
+typedef void *duckdb_config;
+typedef void *duckdb_arrow_schema;
+typedef void *duckdb_arrow_array;
+typedef void *duckdb_logical_type;
+typedef void *duckdb_data_chunk;
+typedef void *duckdb_vector;
+typedef void *duckdb_value;
 
 typedef enum { DuckDBSuccess = 0, DuckDBError = 1 } duckdb_state;
 typedef enum {
@@ -547,8 +513,6 @@ DUCKDB_API const char *duckdb_result_error(duckdb_result *result);
 /*!
 Fetches a data chunk from the duckdb_result. This function should be called repeatedly until the result is exhausted.
 
-The result must be destroyed with `duckdb_destroy_data_chunk`.
-
 This function supersedes all `duckdb_value` functions, as well as the `duckdb_column_data` and `duckdb_nullmask_data`
 functions. It results in significantly better performance, and should be preferred in newer code-bases.
 
@@ -663,37 +627,18 @@ DUCKDB_API duckdb_timestamp duckdb_value_timestamp(duckdb_result *result, idx_t 
 DUCKDB_API duckdb_interval duckdb_value_interval(duckdb_result *result, idx_t col, idx_t row);
 
 /*!
-* DEPRECATED: use duckdb_value_string instead. This function does not work correctly if the string contains null bytes.
-* returns: The text value at the specified location as a null-terminated string, or nullptr if the value cannot be
-converted. The result must be freed with `duckdb_free`.
+* returns: The char* value at the specified location, or nullptr if the value cannot be converted.
+The result must be freed with `duckdb_free`.
 */
 DUCKDB_API char *duckdb_value_varchar(duckdb_result *result, idx_t col, idx_t row);
 
-/*!s
-* returns: The string value at the specified location.
-The result must be freed with `duckdb_free`.
-*/
-DUCKDB_API duckdb_string duckdb_value_string(duckdb_result *result, idx_t col, idx_t row);
-
 /*!
-* DEPRECATED: use duckdb_value_string_internal instead. This function does not work correctly if the string contains
-null bytes.
 * returns: The char* value at the specified location. ONLY works on VARCHAR columns and does not auto-cast.
 If the column is NOT a VARCHAR column this function will return NULL.
 
 The result must NOT be freed.
 */
 DUCKDB_API char *duckdb_value_varchar_internal(duckdb_result *result, idx_t col, idx_t row);
-
-/*!
-* DEPRECATED: use duckdb_value_string_internal instead. This function does not work correctly if the string contains
-null bytes.
-* returns: The char* value at the specified location. ONLY works on VARCHAR columns and does not auto-cast.
-If the column is NOT a VARCHAR column this function will return NULL.
-
-The result must NOT be freed.
-*/
-DUCKDB_API duckdb_string duckdb_value_string_internal(duckdb_result *result, idx_t col, idx_t row);
 
 /*!
 * returns: The duckdb_blob value at the specified location. Returns a blob with blob.data set to nullptr if the
@@ -804,16 +749,6 @@ If the conversion fails because the double value is too big the result will be 0
 * returns: The converted `duckdb_hugeint` element.
 */
 DUCKDB_API duckdb_hugeint duckdb_double_to_hugeint(double val);
-
-/*!
-Converts a double value to a duckdb_decimal object.
-
-If the conversion fails because the double value is too big, or the width/scale are invalid the result will be 0.
-
-* val: The double value.
-* returns: The converted `duckdb_decimal` element.
-*/
-DUCKDB_API duckdb_decimal duckdb_double_to_decimal(double val, uint8_t width, uint8_t scale);
 
 //===--------------------------------------------------------------------===//
 // Decimal Helpers
@@ -928,11 +863,6 @@ Binds an duckdb_hugeint value to the prepared statement at the specified index.
 */
 DUCKDB_API duckdb_state duckdb_bind_hugeint(duckdb_prepared_statement prepared_statement, idx_t param_idx,
                                             duckdb_hugeint val);
-/*!
-Binds a duckdb_decimal value to the prepared statement at the specified index.
-*/
-DUCKDB_API duckdb_state duckdb_bind_decimal(duckdb_prepared_statement prepared_statement, idx_t param_idx,
-                                            duckdb_decimal val);
 
 /*!
 Binds an uint8_t value to the prepared statement at the specified index.
@@ -1033,53 +963,6 @@ Executes the prepared statement with the given bound parameters, and returns an 
 */
 DUCKDB_API duckdb_state duckdb_execute_prepared_arrow(duckdb_prepared_statement prepared_statement,
                                                       duckdb_arrow *out_result);
-
-//===--------------------------------------------------------------------===//
-// Extract Statements
-//===--------------------------------------------------------------------===//
-// A query string can be extracted into multiple SQL statements. Each statement can be prepared and executed separately.
-
-/*!
-Extract all statements from a query.
-Note that after calling `duckdb_extract_statements`, the extracted statements should always be destroyed using
-`duckdb_destroy_extracted`, even if no statements were extracted.
-If the extract fails, `duckdb_extract_statements_error` can be called to obtain the reason why the extract failed.
-* connection: The connection object
-* query: The SQL query to extract
-* out_extracted_statements: The resulting extracted statements object
-* returns: The number of extracted statements or 0 on failure.
-*/
-DUCKDB_API idx_t duckdb_extract_statements(duckdb_connection connection, const char *query,
-                                           duckdb_extracted_statements *out_extracted_statements);
-
-/*!
-Prepare an extracted statement.
-Note that after calling `duckdb_prepare_extracted_statement`, the prepared statement should always be destroyed using
-`duckdb_destroy_prepare`, even if the prepare fails.
-If the prepare fails, `duckdb_prepare_error` can be called to obtain the reason why the prepare failed.
-* connection: The connection object
-* extracted_statements: The extracted statements object
-* index: The index of the extracted statement to prepare
-* out_prepared_statement: The resulting prepared statement object
-* returns: `DuckDBSuccess` on success or `DuckDBError` on failure.
-*/
-DUCKDB_API duckdb_state duckdb_prepare_extracted_statement(duckdb_connection connection,
-                                                           duckdb_extracted_statements extracted_statements,
-                                                           idx_t index,
-                                                           duckdb_prepared_statement *out_prepared_statement);
-/*!
-Returns the error message contained within the extracted statements.
-The result of this function must not be freed. It will be cleaned up when `duckdb_destroy_extracted` is called.
-* result: The extracted statements to fetch the error from.
-* returns: The error of the extracted statements.
-*/
-DUCKDB_API const char *duckdb_extract_statements_error(duckdb_extracted_statements extracted_statements);
-
-/*!
-De-allocates all memory allocated for the extracted statements.
-* extracted_statements: The extracted statements to destroy.
-*/
-DUCKDB_API void duckdb_destroy_extracted(duckdb_extracted_statements *extracted_statements);
 
 //===--------------------------------------------------------------------===//
 // Pending Result Interface
@@ -1228,17 +1111,6 @@ The resulting type should be destroyed with `duckdb_destroy_logical_type`.
 DUCKDB_API duckdb_logical_type duckdb_create_map_type(duckdb_logical_type key_type, duckdb_logical_type value_type);
 
 /*!
-Creates a UNION type from the passed types array
-The resulting type should be destroyed with `duckdb_destroy_logical_type`.
-
-* types: The array of types that the union should consist of.
-* type_amount: The size of the types array.
-* returns: The logical type.
-*/
-DUCKDB_API duckdb_logical_type duckdb_create_union_type(duckdb_logical_type member_types, const char **member_names,
-                                                        idx_t member_count);
-
-/*!
 Creates a `duckdb_logical_type` of type decimal with the specified width and scale
 The resulting type should be destroyed with `duckdb_destroy_logical_type`.
 
@@ -1366,36 +1238,6 @@ The result must be freed with `duckdb_destroy_logical_type`
 * returns: The child type of the struct type. Must be destroyed with `duckdb_destroy_logical_type`.
 */
 DUCKDB_API duckdb_logical_type duckdb_struct_type_child_type(duckdb_logical_type type, idx_t index);
-
-/*!
-Returns the number of members that the union type has.
-
-* type: The logical type (union) object
-* returns: The number of members of a union type.
-*/
-DUCKDB_API idx_t duckdb_union_type_member_count(duckdb_logical_type type);
-
-/*!
-Retrieves the name of the union member.
-
-The result must be freed with `duckdb_free`
-
-* type: The logical type object
-* index: The child index
-* returns: The name of the union member. Must be freed with `duckdb_free`.
-*/
-DUCKDB_API char *duckdb_union_type_member_name(duckdb_logical_type type, idx_t index);
-
-/*!
-Retrieves the child type of the given union member at the specified index.
-
-The result must be freed with `duckdb_destroy_logical_type`
-
-* type: The logical type object
-* index: The child index
-* returns: The child type of the union member. Must be destroyed with `duckdb_destroy_logical_type`.
-*/
-DUCKDB_API duckdb_logical_type duckdb_union_type_member_type(duckdb_logical_type type, idx_t index);
 
 /*!
 Destroys the logical type and de-allocates all memory allocated for that type.

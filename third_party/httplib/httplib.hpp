@@ -104,10 +104,8 @@
 #define CPPHTTPLIB_RECV_FLAGS 0
 #endif
 
-#ifndef MSG_NOSIGNAL
+#ifndef CPPHTTPLIB_SEND_FLAGS
 #define CPPHTTPLIB_SEND_FLAGS 0
-#else
-#define CPPHTTPLIB_SEND_FLAGS MSG_NOSIGNAL
 #endif
 
 #ifndef CPPHTTPLIB_LISTEN_BACKLOG
@@ -3239,7 +3237,7 @@ inline bool parse_header(const char *beg, const char *end, T fn) {
 	}
 
 	if (p < end) {
-		fn(std::string(beg, key_end), std::string(p, end));
+		fn(std::string(beg, key_end), decode_url(std::string(p, end), false));
 		return true;
 	}
 
@@ -6079,7 +6077,7 @@ inline bool ClientImpl::redirect(Request &req, Response &res, Error &error) {
 		return false;
 	}
 
-	auto location = res.get_header_value("location");
+	auto location = detail::decode_url(res.get_header_value("location"), false);
 	if (location.empty()) { return false; }
 
 	const static Regex re(

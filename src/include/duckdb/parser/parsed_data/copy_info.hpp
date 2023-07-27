@@ -16,11 +16,9 @@
 namespace duckdb {
 
 struct CopyInfo : public ParseInfo {
-	CopyInfo() : catalog(INVALID_CATALOG), schema(DEFAULT_SCHEMA) {
+	CopyInfo() : schema(DEFAULT_SCHEMA) {
 	}
 
-	//! The catalog name to copy to/from
-	string catalog;
 	//! The schema name to copy to/from
 	string schema;
 	//! The table name to copy to/from
@@ -39,7 +37,6 @@ struct CopyInfo : public ParseInfo {
 public:
 	unique_ptr<CopyInfo> Copy() const {
 		auto result = make_unique<CopyInfo>();
-		result->catalog = catalog;
 		result->schema = schema;
 		result->table = table;
 		result->select_list = select_list;

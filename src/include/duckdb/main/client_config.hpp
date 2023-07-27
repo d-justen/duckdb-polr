@@ -12,8 +12,8 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/enums/output_type.hpp"
 #include "duckdb/common/enums/profiler_format.hpp"
+#include "duckdb/common/enums/join_enumerator.hpp"
 #include "duckdb/common/types/value.hpp"
-#include "duckdb/common/progress_bar/progress_bar.hpp"
 
 namespace duckdb {
 class ClientContext;
@@ -69,15 +69,24 @@ struct ClientConfig {
 	bool force_external = false;
 	//! Force disable cross product generation when hyper graph isn't connected, used for testing
 	bool force_no_cross_product = false;
-	//! If this context should also try to use the available replacement scans
-	//! True by default
-	bool use_replacement_scans = true;
 	//! Maximum bits allowed for using a perfect hash table (i.e. the perfect HT can hold up to 2^perfect_ht_threshold
 	//! elements)
 	idx_t perfect_ht_threshold = 12;
 
-	//! Callback to create a progress bar display
-	progress_bar_display_create_func_t display_create_func = nullptr;
+	//! Enable POLR
+	bool enable_polr = false;
+	bool bushy_polr = false;
+	bool enable_cardinality_estimator = true;
+	double min_cardinality = 1.0;
+	int seed = 1337;
+	bool mpx_alternate_chunks = false;
+	bool log_tuples_routed = false;
+	bool greedy_ordering = false;
+	bool measure_polr_pipeline = false;
+	bool greedy_ordering_ldt = false;
+	bool caching = true;
+	JoinEnumerator join_enumerator = JoinEnumerator::BFS_MIN_CARD;
+	idx_t max_join_orders = 24;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

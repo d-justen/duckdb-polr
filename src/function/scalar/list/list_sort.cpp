@@ -23,6 +23,7 @@ struct ListSortBindData : public FunctionData {
 	vector<LogicalType> payload_types;
 
 	ClientContext &context;
+	unique_ptr<GlobalSortState> global_sort_state;
 	RowLayout payload_layout;
 	vector<BoundOrderByNode> orders;
 
@@ -52,8 +53,8 @@ ListSortBindData::ListSortBindData(OrderType order_type_p, OrderByNullType null_
 	// get the BoundOrderByNode
 	auto idx_col_expr = make_unique_base<Expression, BoundReferenceExpression>(LogicalType::USMALLINT, 0);
 	auto lists_col_expr = make_unique_base<Expression, BoundReferenceExpression>(child_type, 1);
-	orders.emplace_back(OrderType::ASCENDING, OrderByNullType::ORDER_DEFAULT, std::move(idx_col_expr));
-	orders.emplace_back(order_type, null_order, std::move(lists_col_expr));
+	orders.emplace_back(OrderType::ASCENDING, OrderByNullType::ORDER_DEFAULT, move(idx_col_expr));
+	orders.emplace_back(order_type, null_order, move(lists_col_expr));
 }
 
 unique_ptr<FunctionData> ListSortBindData::Copy() const {
@@ -93,7 +94,6 @@ void SinkDataChunk(Vector *child_vector, SelectionVector &sel, idx_t offset_list
 	payload_chunk.Verify();
 
 	// sink
-	key_chunk.Flatten();
 	local_sort_state.SinkChunk(key_chunk, payload_chunk);
 	data_to_sort = true;
 }
@@ -116,7 +116,8 @@ static void ListSortFunction(DataChunk &args, ExpressionState &state, Vector &re
 
 	// initialize the global and local sorting state
 	auto &buffer_manager = BufferManager::GetBufferManager(info.context);
-	GlobalSortState global_sort_state(buffer_manager, info.orders, info.payload_layout);
+	info.global_sort_state = make_unique<GlobalSortState>(buffer_manager, info.orders, info.payload_layout);
+	auto &global_sort_state = *info.global_sort_state;
 	LocalSortState local_sort_state;
 	local_sort_state.Initialize(global_sort_state, buffer_manager);
 
@@ -243,13 +244,14 @@ static unique_ptr<FunctionData> ListSortBind(ClientContext &context, ScalarFunct
 	return make_unique<ListSortBindData>(order, null_order, bound_function.return_type, child_type, context);
 }
 
-OrderByNullType GetNullOrder(ClientContext &context, vector<unique_ptr<Expression>> &arguments, idx_t idx) {
+OrderByNullType GetNullOrder(vector<unique_ptr<Expression>> &arguments, idx_t idx) {
 
 	if (!arguments[idx]->IsFoldable()) {
 		throw InvalidInputException("Null sorting order must be a constant");
 	}
-	Value null_order_value = ExpressionExecutor::EvaluateScalar(context, *arguments[idx]);
-	auto null_order_name = StringUtil::Upper(null_order_value.ToString());
+	Value null_order_value = ExpressionExecutor::EvaluateScalar(*arguments[idx]);
+	auto null_order_name = null_order_value.ToString();
+	std::transform(null_order_name.begin(), null_order_name.end(), null_order_name.begin(), ::toupper);
 	if (null_order_name != "NULLS FIRST" && null_order_name != "NULLS LAST") {
 		throw InvalidInputException("Null sorting order must be either NULLS FIRST or NULLS LAST");
 	}
@@ -277,8 +279,9 @@ static unique_ptr<FunctionData> ListNormalSortBind(ClientContext &context, Scala
 		if (!arguments[1]->IsFoldable()) {
 			throw InvalidInputException("Sorting order must be a constant");
 		}
-		Value order_value = ExpressionExecutor::EvaluateScalar(context, *arguments[1]);
-		auto order_name = StringUtil::Upper(order_value.ToString());
+		Value order_value = ExpressionExecutor::EvaluateScalar(*arguments[1]);
+		auto order_name = order_value.ToString();
+		std::transform(order_name.begin(), order_name.end(), order_name.begin(), ::toupper);
 		if (order_name != "DESC" && order_name != "ASC") {
 			throw InvalidInputException("Sorting order must be either ASC or DESC");
 		}
@@ -291,7 +294,7 @@ static unique_ptr<FunctionData> ListNormalSortBind(ClientContext &context, Scala
 
 	// get the null sorting order
 	if (arguments.size() == 3) {
-		null_order = GetNullOrder(context, arguments, 2);
+		null_order = GetNullOrder(arguments, 2);
 	}
 
 	return ListSortBind(context, bound_function, arguments, order, null_order);
@@ -311,7 +314,7 @@ static unique_ptr<FunctionData> ListReverseSortBind(ClientContext &context, Scal
 
 	// get the null sorting order
 	if (arguments.size() == 2) {
-		null_order = GetNullOrder(context, arguments, 1);
+		null_order = GetNullOrder(arguments, 1);
 	}
 
 	return ListSortBind(context, bound_function, arguments, order, null_order);

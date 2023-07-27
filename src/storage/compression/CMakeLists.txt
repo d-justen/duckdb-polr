@@ -1,7 +1,5 @@
-add_subdirectory(chimp)
-
 add_library_unity(
-  duckdb_storage_compression
+  duckdb_storage_segment
   OBJECT
   numeric_constant.cpp
   fixed_size_uncompressed.cpp
@@ -11,8 +9,7 @@ add_library_unity(
   uncompressed.cpp
   validity_uncompressed.cpp
   bitpacking.cpp
-  patas.cpp
   fsst.cpp)
 set(ALL_OBJECT_FILES
-    ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_storage_compression>
+    ${ALL_OBJECT_FILES} $<TARGET_OBJECTS:duckdb_storage_segment>
     PARENT_SCOPE)

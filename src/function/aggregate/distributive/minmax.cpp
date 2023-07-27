@@ -268,6 +268,7 @@ static bool TemplatedOptimumValue(Vector &left, idx_t lidx, idx_t lcount, Vector
 		return TemplatedOptimumType<string_t, OP>(left, lidx, lcount, right, ridx, rcount);
 	case PhysicalType::LIST:
 		return TemplatedOptimumList<OP>(left, lidx, lcount, right, ridx, rcount);
+	case PhysicalType::MAP:
 	case PhysicalType::STRUCT:
 		return TemplatedOptimumStruct<OP>(left, lidx, lcount, right, ridx, rcount);
 	default:
@@ -511,7 +512,7 @@ unique_ptr<FunctionData> BindDecimalMinMax(ClientContext &context, AggregateFunc
 		function = GetUnaryAggregate<OP>(LogicalType::HUGEINT);
 		break;
 	}
-	function.name = std::move(name);
+	function.name = move(name);
 	function.arguments[0] = decimal_type;
 	function.return_type = decimal_type;
 	return nullptr;
@@ -542,9 +543,9 @@ template <class OP, class OP_STRING, class OP_VECTOR>
 unique_ptr<FunctionData> BindMinMax(ClientContext &context, AggregateFunction &function,
                                     vector<unique_ptr<Expression>> &arguments) {
 	auto input_type = arguments[0]->return_type;
-	auto name = std::move(function.name);
+	auto name = move(function.name);
 	function = GetMinMaxOperator<OP, OP_STRING, OP_VECTOR>(input_type);
-	function.name = std::move(name);
+	function.name = move(name);
 	if (function.bind) {
 		return function.bind(context, function, arguments);
 	} else {

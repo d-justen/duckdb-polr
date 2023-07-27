@@ -24,12 +24,10 @@
 #include "duckdb/storage/table/data_table_info.hpp"
 
 namespace duckdb {
-class BoundForeignKeyConstraint;
 class ClientContext;
 class ColumnDataCollection;
 class ColumnDefinition;
 class DataTable;
-class OptimisticDataWriter;
 class RowGroup;
 class StorageManager;
 class TableCatalogEntry;
@@ -37,14 +35,12 @@ class TableIOManager;
 class Transaction;
 class WriteAheadLog;
 class TableDataWriter;
-class ConflictManager;
-enum class VerifyExistenceType : uint8_t;
 
 //! DataTable represents a physical table on disk
 class DataTable {
 public:
 	//! Constructs a new data table from an (optional) set of persistent segments
-	DataTable(AttachedDatabase &db, shared_ptr<TableIOManager> table_io_manager, const string &schema,
+	DataTable(DatabaseInstance &db, shared_ptr<TableIOManager> table_io_manager, const string &schema,
 	          const string &table, vector<ColumnDefinition> column_definitions_p,
 	          unique_ptr<PersistentTableData> data = nullptr);
 	//! Constructs a DataTable as a delta on an existing data table with a newly added column
@@ -62,7 +58,7 @@ public:
 	//! The set of physical columns stored by this DataTable
 	vector<ColumnDefinition> column_definitions;
 	//! A reference to the database instance
-	AttachedDatabase &db;
+	DatabaseInstance &db;
 
 public:
 	//! Returns a list of types of the table
@@ -85,30 +81,25 @@ public:
 	void Scan(Transaction &transaction, DataChunk &result, TableScanState &state);
 
 	//! Fetch data from the specific row identifiers from the base table
-	void Fetch(Transaction &transaction, DataChunk &result, const vector<column_t> &column_ids, const Vector &row_ids,
+	void Fetch(Transaction &transaction, DataChunk &result, const vector<column_t> &column_ids, Vector &row_ids,
 	           idx_t fetch_count, ColumnFetchState &state);
 
 	//! Initializes an append to transaction-local storage
 	void InitializeLocalAppend(LocalAppendState &state, ClientContext &context);
 	//! Append a DataChunk to the transaction-local storage of the table.
-	void LocalAppend(LocalAppendState &state, TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
-	                 bool unsafe = false);
+	void LocalAppend(LocalAppendState &state, TableCatalogEntry &table, ClientContext &context, DataChunk &chunk);
 	//! Finalizes a transaction-local append
 	void FinalizeLocalAppend(LocalAppendState &state);
 	//! Append a chunk to the transaction-local storage of this table
 	void LocalAppend(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk);
 	//! Append a column data collection to the transaction-local storage of this table
 	void LocalAppend(TableCatalogEntry &table, ClientContext &context, ColumnDataCollection &collection);
-	//! Merge a row group collection into the transaction-local storage
-	void LocalMerge(ClientContext &context, RowGroupCollection &collection);
-	//! Creates an optimistic writer for this table - used for optimistically writing parallel appends
-	OptimisticDataWriter *CreateOptimisticWriter(ClientContext &context);
 
 	//! Delete the entries with the specified row identifier from the table
 	idx_t Delete(TableCatalogEntry &table, ClientContext &context, Vector &row_ids, idx_t count);
 	//! Update the entries with the specified row identifier from the table
-	void Update(TableCatalogEntry &table, ClientContext &context, Vector &row_ids,
-	            const vector<PhysicalIndex> &column_ids, DataChunk &data);
+	void Update(TableCatalogEntry &table, ClientContext &context, Vector &row_ids, const vector<column_t> &column_ids,
+	            DataChunk &data);
 	//! Update a single (sub-)column along a column path
 	//! The column_path vector is a *path* towards a column within the table
 	//! i.e. if we have a table with a single column S STRUCT(A INT, B INT)
@@ -139,7 +130,7 @@ public:
 	void ScanTableSegment(idx_t start_row, idx_t count, const std::function<void(DataChunk &chunk)> &function);
 
 	//! Merge a row group collection directly into this table - appending it to the end of the table without copying
-	void MergeStorage(RowGroupCollection &data, TableIndexList &indexes);
+	void MergeStorage(RowGroupCollection &data, TableIndexList &indexes, TableStatistics &stats);
 
 	//! Append a chunk with the row ids [row_start, ..., row_start + chunk.size()] to all indexes of the table, returns
 	//! whether or not the append succeeded
@@ -172,41 +163,33 @@ public:
 	idx_t GetTotalRows();
 
 	vector<vector<Value>> GetStorageInfo();
-	static bool IsForeignKeyIndex(const vector<PhysicalIndex> &fk_keys, Index &index, ForeignKeyType fk_type);
+	static bool IsForeignKeyIndex(const vector<idx_t> &fk_keys, Index &index, ForeignKeyType fk_type);
 
 	//! Initializes a special scan that is used to create an index on the table, it keeps locks on the table
 	void InitializeCreateIndexScan(CreateIndexScanState &state, const vector<column_t> &column_ids);
 	//! Scans the next chunk for the CREATE INDEX operator
 	bool CreateIndexScan(TableScanState &state, DataChunk &result, TableScanType type);
 
-	//! Verify constraints with a chunk from the Append containing all columns of the table
-	void VerifyAppendConstraints(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk,
-	                             ConflictManager *conflict_manager = nullptr);
-
 private:
 	//! Verify the new added constraints against current persistent&local data
 	void VerifyNewConstraint(ClientContext &context, DataTable &parent, const BoundConstraint *constraint);
+	//! Verify constraints with a chunk from the Append containing all columns of the table
+	void VerifyAppendConstraints(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk);
 	//! Verify constraints with a chunk from the Update containing only the specified column_ids
-	void VerifyUpdateConstraints(ClientContext &context, TableCatalogEntry &table, DataChunk &chunk,
-	                             const vector<PhysicalIndex> &column_ids);
+	void VerifyUpdateConstraints(TableCatalogEntry &table, DataChunk &chunk, const vector<column_t> &column_ids);
 	//! Verify constraints with a chunk from the Delete containing all columns of the table
 	void VerifyDeleteConstraints(TableCatalogEntry &table, ClientContext &context, DataChunk &chunk);
 
 	void InitializeScanWithOffset(TableScanState &state, const vector<column_t> &column_ids, idx_t start_row,
 	                              idx_t end_row);
 
-	void VerifyForeignKeyConstraint(const BoundForeignKeyConstraint &bfk, ClientContext &context, DataChunk &chunk,
-	                                VerifyExistenceType verify_type);
-	void VerifyAppendForeignKeyConstraint(const BoundForeignKeyConstraint &bfk, ClientContext &context,
-	                                      DataChunk &chunk);
-	void VerifyDeleteForeignKeyConstraint(const BoundForeignKeyConstraint &bfk, ClientContext &context,
-	                                      DataChunk &chunk);
-
 private:
 	//! Lock for appending entries to the table
 	mutex append_lock;
 	//! The row groups of the table
 	shared_ptr<RowGroupCollection> row_groups;
+	//! Table statistics
+	TableStatistics stats;
 	//! Whether or not the data table is the root DataTable for this table; the root DataTable is the newest version
 	//! that can be appended to
 	atomic<bool> is_root;

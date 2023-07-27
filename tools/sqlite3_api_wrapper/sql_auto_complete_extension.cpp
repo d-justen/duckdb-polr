@@ -17,7 +17,7 @@ namespace duckdb {
 
 struct SQLAutoCompleteFunctionData : public TableFunctionData {
 	explicit SQLAutoCompleteFunctionData(vector<string> suggestions_p, idx_t start_pos)
-	    : suggestions(std::move(suggestions_p)), start_pos(start_pos) {
+	    : suggestions(move(suggestions_p)), start_pos(start_pos) {
 	}
 
 	vector<string> suggestions;
@@ -33,7 +33,7 @@ struct SQLAutoCompleteData : public GlobalTableFunctionState {
 
 struct AutoCompleteCandidate {
 	AutoCompleteCandidate(string candidate_p, int32_t score_bonus = 0)
-	    : candidate(std::move(candidate_p)), score_bonus(score_bonus) {
+	    : candidate(move(candidate_p)), score_bonus(score_bonus) {
 	}
 
 	string candidate;
@@ -44,7 +44,7 @@ struct AutoCompleteCandidate {
 static vector<string> ComputeSuggestions(vector<AutoCompleteCandidate> available_suggestions, const string &prefix,
                                          const unordered_set<string> &extra_keywords, bool add_quotes = false) {
 	for (auto &kw : extra_keywords) {
-		available_suggestions.emplace_back(std::move(kw));
+		available_suggestions.emplace_back(move(kw));
 	}
 	vector<pair<string, idx_t>> scores;
 	scores.reserve(available_suggestions.size());
@@ -102,7 +102,7 @@ static vector<CatalogEntry *> GetAllTables(ClientContext &context, bool for_tabl
 	// scan all the schemas for tables and collect them and collect them
 	// for column names we avoid adding internal entries, because it pollutes the auto-complete too much
 	// for table names this is generally fine, however
-	auto schemas = Catalog::GetAllSchemas(context);
+	auto schemas = Catalog::GetCatalog(context).schemas->GetEntries<SchemaCatalogEntry>(context);
 	for (auto &schema : schemas) {
 		schema->Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry *entry) {
 			if (!entry->internal || for_table_names) {
@@ -121,6 +121,14 @@ static vector<CatalogEntry *> GetAllTables(ClientContext &context, bool for_tabl
 			             [&](CatalogEntry *entry) { result.push_back(entry); });
 		};
 	}
+
+	// check the temp schema as well
+	ClientData::Get(context).temporary_objects->Scan(context, CatalogType::TABLE_ENTRY, [&](CatalogEntry *entry) {
+		if (!entry->internal || for_table_names) {
+			result.push_back(entry);
+		}
+	});
+
 	return result;
 }
 
@@ -141,7 +149,7 @@ static vector<AutoCompleteCandidate> SuggestColumnName(ClientContext &context) {
 	for (auto &entry : all_entries) {
 		if (entry->type == CatalogType::TABLE_ENTRY) {
 			auto &table = (TableCatalogEntry &)*entry;
-			for (auto &col : table.columns.Logical()) {
+			for (auto &col : table.columns) {
 				suggestions.emplace_back(col.GetName(), 1);
 			}
 		} else if (entry->type == CatalogType::VIEW_ENTRY) {
@@ -173,7 +181,6 @@ static vector<AutoCompleteCandidate> SuggestFileName(ClientContext &context, str
 	auto &fs = FileSystem::GetFileSystem(context);
 	string search_dir;
 	D_ASSERT(last_pos >= prefix.size());
-	auto is_path_absolute = FileSystem::IsPathAbsolute(prefix);
 	for (idx_t i = prefix.size(); i > 0; i--, last_pos--) {
 		if (prefix[i - 1] == '/' || prefix[i - 1] == '\\') {
 			search_dir = prefix.substr(0, i - 1);
@@ -182,7 +189,7 @@ static vector<AutoCompleteCandidate> SuggestFileName(ClientContext &context, str
 		}
 	}
 	if (search_dir.empty()) {
-		search_dir = is_path_absolute ? "/" : ".";
+		search_dir = ".";
 	} else {
 		search_dir = fs.ExpandPath(search_dir, FileOpener::Get(context));
 	}
@@ -201,7 +208,7 @@ static vector<AutoCompleteCandidate> SuggestFileName(ClientContext &context, str
 		if (KnownExtension(fname)) {
 			score = 1;
 		}
-		result.emplace_back(std::move(suggestion), score);
+		result.emplace_back(move(suggestion), score);
 	});
 	return result;
 }
@@ -298,8 +305,7 @@ in_string_constant:
 	suggest_state = SuggestionState::SUGGEST_FILE_NAME;
 	goto standard_suggestion;
 process_word : {
-	while ((last_pos < sql.size()) &&
-	       (StringUtil::CharacterIsSpace(sql[last_pos]) || StringUtil::CharacterIsOperator(sql[last_pos]))) {
+	while (StringUtil::CharacterIsSpace(sql[last_pos]) || StringUtil::CharacterIsOperator(sql[last_pos])) {
 		last_pos++;
 	}
 	auto next_word = sql.substr(last_pos, pos - last_pos);
@@ -319,11 +325,8 @@ process_word : {
 	goto regular_scan;
 }
 standard_suggestion:
-	if (suggest_state != SuggestionState::SUGGEST_FILE_NAME) {
-		while ((last_pos < sql.size()) &&
-		       (StringUtil::CharacterIsSpace(sql[last_pos]) || StringUtil::CharacterIsOperator(sql[last_pos]))) {
-			last_pos++;
-		}
+	while (StringUtil::CharacterIsSpace(sql[last_pos]) || StringUtil::CharacterIsOperator(sql[last_pos])) {
+		last_pos++;
 	}
 	auto last_word = sql.substr(last_pos, pos - last_pos);
 	last_pos -= pos_offset;
@@ -346,11 +349,10 @@ standard_suggestion:
 	default:
 		throw InternalException("Unrecognized suggestion state");
 	}
-	if (last_pos > sql.size()) {
-		D_ASSERT(false);
-		throw NotImplementedException("last_pos out of range");
+	if (last_pos >= sql.size()) {
+		throw InternalException("last_pos out of range");
 	}
-	return make_unique<SQLAutoCompleteFunctionData>(std::move(suggestions), last_pos);
+	return make_unique<SQLAutoCompleteFunctionData>(move(suggestions), last_pos);
 }
 
 static unique_ptr<FunctionData> SQLAutoCompleteBind(ClientContext &context, TableFunctionBindInput &input,
@@ -398,7 +400,7 @@ void SQLAutoCompleteExtension::Load(DuckDB &db) {
 
 	auto &context = *con.context;
 
-	Catalog &catalog = Catalog::GetSystemCatalog(context);
+	Catalog &catalog = Catalog::GetCatalog(context);
 	TableFunction auto_complete_fun("sql_auto_complete", {LogicalType::VARCHAR}, SQLAutoCompleteFunction,
 	                                SQLAutoCompleteBind, SQLAutoCompleteInit);
 	CreateTableFunctionInfo auto_complete_info(auto_complete_fun);

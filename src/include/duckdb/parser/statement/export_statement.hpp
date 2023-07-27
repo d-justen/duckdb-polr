@@ -19,7 +19,6 @@ public:
 	explicit ExportStatement(unique_ptr<CopyInfo> info);
 
 	unique_ptr<CopyInfo> info;
-	string database;
 
 protected:
 	ExportStatement(const ExportStatement &other);

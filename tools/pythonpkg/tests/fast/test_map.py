@@ -66,7 +66,7 @@ class TestMap(object):
         with pytest.raises(AttributeError):
             print(testrel.map(evil4).df())
 
-        with pytest.raises(duckdb.InvalidInputException):
+        with pytest.raises(duckdb.Error):
             print(testrel.map(evil5).df())
 
         # not a function
@@ -79,7 +79,7 @@ class TestMap(object):
 
         testrel.map(return_dataframe).df().equals(pd.DataFrame({'A' : [1]}))
         
-        with pytest.raises(duckdb.InvalidInputException, match='UDF returned more than 2048 rows, which is not allowed.'):
+        with pytest.raises(duckdb.InvalidInputException, match='UDF returned more than 1024 rows, which is not allowed.'):
             testrel.map(return_big_dataframe).df()
 
         empty_rel.map(return_dataframe).df().equals(pd.DataFrame({'A' : []}))
@@ -108,5 +108,5 @@ class TestMap(object):
         df = pd.DataFrame({'date': pd.Series([date(2000,1,1), date(2000,1,2)], dtype="datetime64[us]"), 'days_to_add': [1,2]})
         rel = duckdb.from_df(df)
         rel = process(rel)
-        x = rel.fetchdf()
+        x = rel.execute().fetchdf()
         assert x['days_to_add'].to_numpy()[0] == 1

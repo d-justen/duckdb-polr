@@ -1,0 +1,160 @@
+# name: test/polr/imdb.test
+# description: Run IMDB test queries
+# group: [polr]
+
+### CREATE TABLES
+
+statement ok
+CREATE TABLE aka_title (
+    id integer NOT NULL,
+    movie_id integer NOT NULL,
+    title character varying(553) NOT NULL,
+    imdb_index character varying(12),
+    kind_id integer NOT NULL,
+    production_year integer,
+    phonetic_code character varying(5),
+    episode_of_id integer,
+    season_nr integer,
+    episode_nr integer,
+    note character varying(72),
+    md5sum character varying(32)
+)
+
+statement ok
+CREATE TABLE aka_name ( id integer NOT NULL PRIMARY KEY, person_id integer NOT NULL, name text NOT NULL, imdb_index character varying(12), name_pcode_cf character varying(5), name_pcode_nf character varying(5), surname_pcode character varying(5), md5sum character varying(32) )
+
+statement ok
+CREATE TABLE cast_info ( id integer NOT NULL PRIMARY KEY, person_id integer NOT NULL, movie_id integer NOT NULL, person_role_id integer, note text, nr_order integer, role_id integer NOT NULL )
+
+statement ok
+CREATE TABLE char_name ( id integer NOT NULL PRIMARY KEY, name text NOT NULL, imdb_index character varying(12), imdb_id integer, name_pcode_nf character varying(5), surname_pcode character varying(5), md5sum character varying(32) )
+
+statement ok
+CREATE TABLE company_name ( id integer NOT NULL PRIMARY KEY, name text NOT NULL, country_code character varying(255), imdb_id integer, name_pcode_nf character varying(5), name_pcode_sf character varying(5), md5sum character varying(32) )
+
+statement ok
+CREATE TABLE company_type ( id integer NOT NULL PRIMARY KEY, kind character varying(32) NOT NULL )
+
+statement ok
+CREATE TABLE comp_cast_type ( id integer NOT NULL PRIMARY KEY, kind character varying(32) NOT NULL )
+
+statement ok
+CREATE TABLE complete_cast ( id integer NOT NULL PRIMARY KEY, movie_id integer, subject_id integer NOT NULL, status_id integer NOT NULL )
+
+statement ok
+CREATE TABLE info_type ( id integer NOT NULL PRIMARY KEY, info character varying(32) NOT NULL )
+
+statement ok
+CREATE TABLE keyword ( id integer NOT NULL PRIMARY KEY, keyword text NOT NULL, phonetic_code character varying(5) )
+
+statement ok
+CREATE TABLE kind_type ( id integer NOT NULL PRIMARY KEY, kind character varying(15) NOT NULL )
+
+statement ok
+CREATE TABLE movie_companies ( id integer NOT NULL PRIMARY KEY, movie_id integer NOT NULL, company_id integer NOT NULL, company_type_id integer NOT NULL, note text )
+
+statement ok
+CREATE TABLE movie_info ( id integer NOT NULL PRIMARY KEY, movie_id integer NOT NULL, info_type_id integer NOT NULL, info text NOT NULL, note text )
+
+statement ok
+CREATE TABLE movie_info_idx ( id integer NOT NULL PRIMARY KEY, movie_id integer NOT NULL, info_type_id integer NOT NULL, info text NOT NULL, note text )
+
+statement ok
+CREATE TABLE movie_keyword ( id integer NOT NULL PRIMARY KEY, movie_id integer NOT NULL, keyword_id integer NOT NULL )
+
+statement ok
+CREATE TABLE name ( id integer NOT NULL PRIMARY KEY, name text NOT NULL, imdb_index character varying(12), imdb_id integer, gender character varying(1), name_pcode_cf character varying(5), name_pcode_nf character varying(5), surname_pcode character varying(5), md5sum character varying(32) )
+
+statement ok
+CREATE TABLE role_type ( id integer NOT NULL PRIMARY KEY, role character varying(32) NOT NULL )
+
+statement ok
+CREATE TABLE title ( id integer NOT NULL PRIMARY KEY, title text NOT NULL, imdb_index character varying(12), kind_id integer NOT NULL, production_year integer, imdb_id integer, phonetic_code character varying(5), episode_of_id integer, season_nr integer, episode_nr integer, series_years character varying(49), md5sum character varying(32) )
+
+### FILL EM
+
+# statement ok
+# COPY aka_name FROM 'third_party/imdb/data/aka_name.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY aka_title FROM 'third_party/imdb/data/aka_title.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY cast_info FROM 'third_party/imdb/data/cast_info.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY char_name FROM 'third_party/imdb/data/char_name.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY company_name FROM 'third_party/imdb/data/company_name.csv' DELIMITER ',' ESCAPE '\'
+
+statement ok
+COPY company_type FROM 'third_party/imdb/data/company_type.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY comp_cast_type FROM 'third_party/imdb/data/comp_cast_type.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY complete_cast FROM 'third_party/imdb/data/complete_cast.csv' DELIMITER ',' ESCAPE '\'
+
+statement ok
+COPY info_type FROM 'third_party/imdb/data/info_type.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY keyword FROM 'third_party/imdb/data/keyword.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY kind_type FROM 'third_party/imdb/data/kind_type.csv' DELIMITER ',' ESCAPE '\'
+
+statement ok
+COPY movie_companies FROM 'third_party/imdb/data/movie_companies.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY movie_info FROM 'third_party/imdb/data/movie_info.csv' DELIMITER ',' ESCAPE '\'
+
+statement ok
+COPY movie_info_idx FROM 'third_party/imdb/data/movie_info_idx.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY movie_keyword FROM 'third_party/imdb/data/movie_keyword.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY name FROM 'third_party/imdb/data/name.csv' DELIMITER ',' ESCAPE '\'
+
+# statement ok
+# COPY role_type FROM 'third_party/imdb/data/role_type.csv' DELIMITER ',' ESCAPE '\'
+
+statement ok
+COPY title FROM 'third_party/imdb/data/title.csv' DELIMITER ',' ESCAPE '\'
+
+statement ok
+SET threads TO 2
+
+statement ok
+PRAGMA enable_log_tuples_routed
+
+statement ok
+PRAGMA enable_polr_bushy
+
+statement ok
+SET multiplexer_routing TO backpressure
+
+statement ok
+SELECT MIN(mc.note) AS production_note,
+       MIN(t.title) AS movie_title,
+       MIN(t.production_year) AS movie_year
+FROM company_type AS ct,
+     info_type AS it,
+     movie_companies AS mc,
+     movie_info_idx AS mi_idx,
+     title AS t
+WHERE ct.kind = 'production companies'
+  AND it.info = 'top 250 rank'
+  AND mc.note NOT LIKE '%(as Metro-Goldwyn-Mayer Pictures)%'
+  AND (mc.note LIKE '%(co-production)%'
+       OR mc.note LIKE '%(presents)%')
+  AND ct.id = mc.company_type_id
+  AND t.id = mc.movie_id
+  AND t.id = mi_idx.movie_id
+  AND mc.movie_id = mi_idx.movie_id
+  AND it.id = mi_idx.info_type_id;

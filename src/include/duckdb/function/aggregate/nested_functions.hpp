@@ -10,7 +10,6 @@
 
 #include "duckdb/function/aggregate_function.hpp"
 #include "duckdb/function/function_set.hpp"
-#include "duckdb/function/built_in_functions.hpp"
 
 namespace duckdb {
 

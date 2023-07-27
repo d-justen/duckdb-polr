@@ -5,7 +5,6 @@ namespace duckdb {
 void BuiltinFunctions::RegisterEnumFunctions() {
 	Register<EnumFirst>();
 	Register<EnumLast>();
-	Register<EnumCode>();
 	Register<EnumRange>();
 	Register<EnumRangeBoundary>();
 }

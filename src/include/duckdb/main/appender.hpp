@@ -20,11 +20,6 @@ class DuckDB;
 class TableCatalogEntry;
 class Connection;
 
-enum class AppenderType : uint8_t {
-	LOGICAL, // Cast input -> LogicalType
-	PHYSICAL // Cast input -> PhysicalType
-};
-
 //! The Appender class can be used to append elements to a table.
 class BaseAppender {
 protected:
@@ -40,14 +35,10 @@ protected:
 	DataChunk chunk;
 	//! The current column to append to
 	idx_t column = 0;
-	//! The type of the appender
-	AppenderType appender_type;
-
-protected:
-	DUCKDB_API BaseAppender(Allocator &allocator, AppenderType type);
-	DUCKDB_API BaseAppender(Allocator &allocator, vector<LogicalType> types, AppenderType type);
 
 public:
+	DUCKDB_API BaseAppender(Allocator &allocator);
+	DUCKDB_API BaseAppender(Allocator &allocator, vector<LogicalType> types);
 	DUCKDB_API virtual ~BaseAppender();
 
 	//! Begins a new row append, after calling this the other AppendX() functions
@@ -95,8 +86,6 @@ protected:
 	void AppendValueInternal(T value);
 	template <class SRC, class DST>
 	void AppendValueInternal(Vector &vector, SRC input);
-	template <class SRC, class DST>
-	void AppendDecimalValueInternal(Vector &vector, SRC input);
 
 	void AppendRowRecursive() {
 		EndRow();

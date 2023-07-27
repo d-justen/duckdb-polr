@@ -4,7 +4,7 @@ namespace duckdb {
 SwizzleablePointer::~SwizzleablePointer() {
 	if (pointer) {
 		if (!IsSwizzled()) {
-			Node::Delete((Node *)pointer);
+			delete (Node *)pointer;
 		}
 	}
 }
@@ -66,7 +66,7 @@ bool SwizzleablePointer::IsSwizzled() {
 void SwizzleablePointer::Reset() {
 	if (pointer) {
 		if (!IsSwizzled()) {
-			Node::Delete((Node *)pointer);
+			delete (Node *)pointer;
 		}
 	}
 	*this = nullptr;

@@ -6,7 +6,7 @@
 namespace duckdb {
 
 void TableScanState::Initialize(vector<column_t> column_ids, TableFilterSet *table_filters) {
-	this->column_ids = std::move(column_ids);
+	this->column_ids = move(column_ids);
 	this->table_filters = table_filters;
 	if (table_filters) {
 		D_ASSERT(table_filters->filters.size() > 0);
@@ -35,7 +35,7 @@ void ColumnScanState::NextInternal(idx_t count) {
 	}
 	row_index += count;
 	while (row_index >= current->start + current->count) {
-		current = (ColumnSegment *)current->Next();
+		current = (ColumnSegment *)current->next.get();
 		initialized = false;
 		segment_checked = false;
 		if (!current) {
@@ -92,7 +92,7 @@ bool CollectionScanState::Scan(Transaction &transaction, DataChunk &result) {
 			return true;
 		} else {
 			do {
-				current_row_group = row_group_state.row_group = (RowGroup *)current_row_group->Next();
+				current_row_group = row_group_state.row_group = (RowGroup *)current_row_group->next.get();
 				if (current_row_group) {
 					bool scan_row_group = current_row_group->InitializeScan(row_group_state);
 					if (scan_row_group) {
@@ -113,7 +113,7 @@ bool CollectionScanState::ScanCommitted(DataChunk &result, TableScanType type) {
 		if (result.size() > 0) {
 			return true;
 		} else {
-			current_row_group = row_group_state.row_group = (RowGroup *)current_row_group->Next();
+			current_row_group = row_group_state.row_group = (RowGroup *)current_row_group->next.get();
 			if (current_row_group) {
 				current_row_group->InitializeScan(row_group_state);
 			}

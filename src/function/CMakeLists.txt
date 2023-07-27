@@ -7,7 +7,6 @@ add_subdirectory(table)
 add_library_unity(
   duckdb_function
   OBJECT
-  built_in_functions.cpp
   cast_rules.cpp
   compression_config.cpp
   function.cpp

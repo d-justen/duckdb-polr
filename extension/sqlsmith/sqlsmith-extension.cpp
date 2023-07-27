@@ -51,7 +51,7 @@ static unique_ptr<FunctionData> SQLSmithBind(ClientContext &context, TableFuncti
 	}
 	return_types.emplace_back(LogicalType::BOOLEAN);
 	names.emplace_back("Success");
-	return std::move(result);
+	return move(result);
 }
 
 static void SQLSmithFunction(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
@@ -120,7 +120,7 @@ static void ReduceSQLFunction(ClientContext &context, TableFunctionInput &data_p
 void SQLSmithExtension::Load(DuckDB &db) {
 	Connection con(db);
 	con.BeginTransaction();
-	auto &catalog = Catalog::GetSystemCatalog(*con.context);
+	auto &catalog = Catalog::GetCatalog(*con.context);
 
 	TableFunction sqlsmith_func("sqlsmith", {}, SQLSmithFunction, SQLSmithBind);
 	sqlsmith_func.named_parameters["seed"] = LogicalType::INTEGER;

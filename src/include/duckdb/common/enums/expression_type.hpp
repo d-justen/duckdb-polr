@@ -143,8 +143,7 @@ enum class ExpressionType : uint8_t {
 	BOUND_UNNEST = 229,
 	COLLATE = 230,
 	LAMBDA = 231,
-	POSITIONAL_REFERENCE = 232,
-	BOUND_LAMBDA_REF = 233
+	POSITIONAL_REFERENCE = 232
 };
 
 //===--------------------------------------------------------------------===//
@@ -193,7 +192,6 @@ enum class ExpressionClass : uint8_t {
 	BOUND_BETWEEN = 39,
 	BOUND_UNNEST = 40,
 	BOUND_LAMBDA = 41,
-	BOUND_LAMBDA_REF = 42,
 	//===--------------------------------------------------------------------===//
 	// Miscellaneous
 	//===--------------------------------------------------------------------===//

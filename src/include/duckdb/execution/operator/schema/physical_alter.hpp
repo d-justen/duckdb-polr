@@ -18,7 +18,7 @@ class PhysicalAlter : public PhysicalOperator {
 public:
 	explicit PhysicalAlter(unique_ptr<AlterInfo> info, idx_t estimated_cardinality)
 	    : PhysicalOperator(PhysicalOperatorType::ALTER, {LogicalType::BOOLEAN}, estimated_cardinality),
-	      info(std::move(info)) {
+	      info(move(info)) {
 	}
 
 	unique_ptr<AlterInfo> info;

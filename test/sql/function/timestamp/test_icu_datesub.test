@@ -5,9 +5,6 @@
 require icu
 
 statement ok
-SET Calendar = 'gregorian';
-
-statement ok
 SET TimeZone = 'America/Los_Angeles';
 
 #
@@ -261,15 +258,13 @@ CREATE TABLE dateparts AS SELECT datepart FROM (VALUES
 	('isoyear')
 ) tbl(datepart)
 
-# ICU field difference is almost symmetric, 
-# but the clamping to the end of a month only works forward.
 query II
 SELECT DATESUB(datepart, startdate, enddate) + DATESUB(datepart, enddate, startdate), datepart
 FROM datetime1, dateparts
 ----
 0	year
 0	quarter
-1	month
+0	month
 0	day
 0	dayofyear
 0	hour

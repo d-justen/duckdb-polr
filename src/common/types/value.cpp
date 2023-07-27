@@ -27,14 +27,13 @@
 #include "duckdb/common/types/cast_helpers.hpp"
 #include "duckdb/common/types/hash.hpp"
 #include "duckdb/function/cast/cast_function_set.hpp"
-#include "duckdb/main/error_manager.hpp"
 
 #include <utility>
 #include <cmath>
 
 namespace duckdb {
 
-Value::Value(LogicalType type) : type_(std::move(type)), is_null(true) {
+Value::Value(LogicalType type) : type_(move(type)), is_null(true) {
 }
 
 Value::Value(int32_t val) : type_(LogicalType::INTEGER), is_null(false) {
@@ -62,9 +61,9 @@ Value::Value(std::nullptr_t val) : Value(LogicalType::VARCHAR) {
 Value::Value(string_t val) : Value(string(val.GetDataUnsafe(), val.GetSize())) {
 }
 
-Value::Value(string val) : type_(LogicalType::VARCHAR), is_null(false), str_value(std::move(val)) {
+Value::Value(string val) : type_(LogicalType::VARCHAR), is_null(false), str_value(move(val)) {
 	if (!Value::StringIsValid(str_value.c_str(), str_value.size())) {
-		throw Exception(ErrorManager::InvalidUnicodeError(str_value, "value construction"));
+		throw Exception("String value is not valid UTF8");
 	}
 }
 
@@ -77,9 +76,8 @@ Value::Value(const Value &other)
 }
 
 Value::Value(Value &&other) noexcept
-    : type_(std::move(other.type_)), is_null(other.is_null), value_(other.value_),
-      str_value(std::move(other.str_value)), struct_value(std::move(other.struct_value)),
-      list_value(std::move(other.list_value)) {
+    : type_(move(other.type_)), is_null(other.is_null), value_(other.value_), str_value(move(other.str_value)),
+      struct_value(move(other.struct_value)), list_value(move(other.list_value)) {
 }
 
 Value &Value::operator=(const Value &other) {
@@ -93,12 +91,12 @@ Value &Value::operator=(const Value &other) {
 }
 
 Value &Value::operator=(Value &&other) noexcept {
-	type_ = std::move(other.type_);
+	type_ = move(other.type_);
 	is_null = other.is_null;
 	value_ = other.value_;
-	str_value = std::move(other.str_value);
-	struct_value = std::move(other.struct_value);
-	list_value = std::move(other.list_value);
+	str_value = move(other.str_value);
+	struct_value = move(other.struct_value);
+	list_value = move(other.list_value);
 	return *this;
 }
 
@@ -520,55 +518,32 @@ Value Value::STRUCT(child_list_t<Value> values) {
 	Value result;
 	child_list_t<LogicalType> child_types;
 	for (auto &child : values) {
-		child_types.push_back(make_pair(std::move(child.first), child.second.type()));
-		result.struct_value.push_back(std::move(child.second));
+		child_types.push_back(make_pair(move(child.first), child.second.type()));
+		result.struct_value.push_back(move(child.second));
 	}
-	result.type_ = LogicalType::STRUCT(std::move(child_types));
+	result.type_ = LogicalType::STRUCT(move(child_types));
 
 	result.is_null = false;
 	return result;
 }
 
-Value Value::MAP(LogicalType child_type, vector<Value> values) {
+Value Value::MAP(Value key, Value value) {
 	Value result;
+	child_list_t<LogicalType> child_types;
+	child_types.push_back({"key", key.type()});
+	child_types.push_back({"value", value.type()});
 
-	result.type_ = LogicalType::MAP(std::move(child_type));
+	result.type_ = LogicalType::MAP(move(child_types));
+
+	result.struct_value.push_back(move(key));
+	result.struct_value.push_back(move(value));
 	result.is_null = false;
-	if (values.empty()) {
-		return result;
-	}
-	result.list_value = std::move(values);
-	return result;
-}
-
-Value Value::UNION(child_list_t<LogicalType> members, uint8_t tag, Value value) {
-	D_ASSERT(members.size() > 0);
-	D_ASSERT(members.size() <= UnionType::MAX_UNION_MEMBERS);
-	D_ASSERT(members.size() > tag);
-
-	D_ASSERT(value.type() == members[tag].second);
-
-	Value result;
-	result.is_null = false;
-	// add the tag to the front of the struct
-	result.struct_value.emplace_back(Value::TINYINT(tag));
-	for (idx_t i = 0; i < members.size(); i++) {
-		if (i != tag) {
-			result.struct_value.emplace_back(members[i].second);
-		} else {
-			result.struct_value.emplace_back(nullptr);
-		}
-	}
-	result.struct_value[tag + 1] = std::move(value);
-
-	result.type_ = LogicalType::UNION(std::move(members));
 	return result;
 }
 
 Value Value::LIST(vector<Value> values) {
 	if (values.empty()) {
-		throw InternalException("Value::LIST without providing a child-type requires a non-empty list of values. Use "
-		                        "Value::LIST(child_type, list) instead.");
+		throw InternalException("Value::LIST requires a non-empty list of values. Use Value::EMPTYLIST instead.");
 	}
 #ifdef DEBUG
 	for (idx_t i = 1; i < values.size(); i++) {
@@ -577,24 +552,24 @@ Value Value::LIST(vector<Value> values) {
 #endif
 	Value result;
 	result.type_ = LogicalType::LIST(values[0].type());
-	result.list_value = std::move(values);
+	result.list_value = move(values);
 	result.is_null = false;
 	return result;
 }
 
 Value Value::LIST(LogicalType child_type, vector<Value> values) {
 	if (values.empty()) {
-		return Value::EMPTYLIST(std::move(child_type));
+		return Value::EMPTYLIST(move(child_type));
 	}
 	for (auto &val : values) {
 		val = val.DefaultCastAs(child_type);
 	}
-	return Value::LIST(std::move(values));
+	return Value::LIST(move(values));
 }
 
 Value Value::EMPTYLIST(LogicalType child_type) {
 	Value result;
-	result.type_ = LogicalType::LIST(std::move(child_type));
+	result.type_ = LogicalType::LIST(move(child_type));
 	result.is_null = false;
 	return result;
 }
@@ -613,6 +588,24 @@ Value Value::BLOB(const string &data) {
 	return result;
 }
 
+Value Value::JSON(const char *val) {
+	auto result = Value(val);
+	result.type_ = LogicalTypeId::JSON;
+	return result;
+}
+
+Value Value::JSON(string_t val) {
+	auto result = Value(val);
+	result.type_ = LogicalTypeId::JSON;
+	return result;
+}
+
+Value Value::JSON(string val) {
+	auto result = Value(move(val));
+	result.type_ = LogicalTypeId::JSON;
+	return result;
+}
+
 Value Value::ENUM(uint64_t value, const LogicalType &original_type) {
 	D_ASSERT(original_type.id() == LogicalTypeId::ENUM);
 	Value result(original_type);
@@ -625,6 +618,9 @@ Value Value::ENUM(uint64_t value, const LogicalType &original_type) {
 		break;
 	case PhysicalType::UINT32:
 		result.value_.uinteger = value;
+		break;
+	case PhysicalType::UINT64: //  DEDUP_POINTER_ENUM
+		result.value_.ubigint = value;
 		break;
 	default:
 		throw InternalException("Incorrect Physical Type for ENUM");
@@ -1402,21 +1398,6 @@ const vector<Value> &ListValue::GetChildren(const Value &value) {
 	return value.list_value;
 }
 
-const Value &UnionValue::GetValue(const Value &value) {
-	D_ASSERT(value.type() == LogicalTypeId::UNION);
-	auto &children = StructValue::GetChildren(value);
-	auto tag = children[0].GetValueUnsafe<uint8_t>();
-	D_ASSERT(tag < children.size() - 1);
-	return children[tag + 1];
-}
-
-uint8_t UnionValue::GetTag(const Value &value) {
-	D_ASSERT(value.type() == LogicalTypeId::UNION);
-	auto children = StructValue::GetChildren(value);
-	auto tag = children[0].GetValueUnsafe<uint8_t>();
-	return tag;
-}
-
 hugeint_t IntegralValue::Get(const Value &value) {
 	switch (value.type().InternalType()) {
 	case PhysicalType::INT8:
@@ -1701,17 +1682,6 @@ bool Value::NotDistinctFrom(const Value &lvalue, const Value &rvalue) {
 	return ValueOperations::NotDistinctFrom(lvalue, rvalue);
 }
 
-static string SanitizeValue(string input) {
-	// some results might contain padding spaces, e.g. when rendering
-	// VARCHAR(10) and the string only has 6 characters, they will be padded
-	// with spaces to 10 in the rendering. We don't do that here yet as we
-	// are looking at internal structures. So just ignore any extra spaces
-	// on the right
-	StringUtil::RTrim(input);
-	// for result checking code, replace null bytes with their escaped value (\0)
-	return StringUtil::Replace(input, string("\0", 1), "\\0");
-}
-
 bool Value::ValuesAreEqual(CastFunctionSet &set, GetCastFunctionInput &get_input, const Value &result_value,
                            const Value &value) {
 	if (result_value.IsNull() != value.IsNull()) {
@@ -1736,8 +1706,15 @@ bool Value::ValuesAreEqual(CastFunctionSet &set, GetCastFunctionInput &get_input
 	}
 	case LogicalTypeId::VARCHAR: {
 		auto other = result_value.CastAs(set, get_input, LogicalType::VARCHAR);
-		string left = SanitizeValue(other.str_value);
-		string right = SanitizeValue(value.str_value);
+		// some results might contain padding spaces, e.g. when rendering
+		// VARCHAR(10) and the string only has 6 characters, they will be padded
+		// with spaces to 10 in the rendering. We don't do that here yet as we
+		// are looking at internal structures. So just ignore any extra spaces
+		// on the right
+		string left = other.str_value;
+		string right = value.str_value;
+		StringUtil::RTrim(left);
+		StringUtil::RTrim(right);
 		return left == right;
 	}
 	default:

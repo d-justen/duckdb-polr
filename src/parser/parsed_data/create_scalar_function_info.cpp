@@ -6,28 +6,26 @@ namespace duckdb {
 CreateScalarFunctionInfo::CreateScalarFunctionInfo(ScalarFunction function)
     : CreateFunctionInfo(CatalogType::SCALAR_FUNCTION_ENTRY), functions(function.name) {
 	name = function.name;
-	functions.AddFunction(std::move(function));
-	internal = true;
+	functions.AddFunction(move(function));
 }
 CreateScalarFunctionInfo::CreateScalarFunctionInfo(ScalarFunctionSet set)
-    : CreateFunctionInfo(CatalogType::SCALAR_FUNCTION_ENTRY), functions(std::move(set)) {
+    : CreateFunctionInfo(CatalogType::SCALAR_FUNCTION_ENTRY), functions(move(set)) {
 	name = functions.name;
 	for (auto &func : functions.functions) {
 		func.name = functions.name;
 	}
-	internal = true;
 }
 
 unique_ptr<CreateInfo> CreateScalarFunctionInfo::Copy() const {
 	ScalarFunctionSet set(name);
 	set.functions = functions.functions;
-	auto result = make_unique<CreateScalarFunctionInfo>(std::move(set));
+	auto result = make_unique<CreateScalarFunctionInfo>(move(set));
 	CopyProperties(*result);
-	return std::move(result);
+	return move(result);
 }
 
 unique_ptr<AlterInfo> CreateScalarFunctionInfo::GetAlterInfo() const {
-	return make_unique_base<AlterInfo, AddFunctionOverloadInfo>(AlterEntryData(catalog, schema, name, true), functions);
+	return make_unique_base<AlterInfo, AddFunctionOverloadInfo>(schema, name, true, functions);
 }
 
 } // namespace duckdb

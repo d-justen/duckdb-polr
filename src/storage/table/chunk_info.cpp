@@ -95,7 +95,7 @@ unique_ptr<ChunkInfo> ChunkConstantInfo::Deserialize(Deserializer &source) {
 	auto info = make_unique<ChunkConstantInfo>(start);
 	info->insert_id = 0;
 	info->delete_id = 0;
-	return std::move(info);
+	return move(info);
 }
 
 //===--------------------------------------------------------------------===//
@@ -180,6 +180,9 @@ idx_t ChunkVectorInfo::Delete(transaction_t transaction_id, row_t rows[], idx_t 
 			// tuple was already deleted by another transaction
 			throw TransactionException("Conflict on tuple deletion!");
 		}
+		if (inserted[rows[i]] >= TRANSACTION_ID_START) {
+			throw TransactionException("Deleting non-committed tuples is not supported (for now...)");
+		}
 		// after verifying that there are no conflicts we mark the tuple as deleted
 		deleted[rows[i]] = transaction_id;
 		rows[deleted_tuples] = rows[i];
@@ -256,7 +259,7 @@ unique_ptr<ChunkInfo> ChunkVectorInfo::Deserialize(Deserializer &source) {
 			result->deleted[i] = 0;
 		}
 	}
-	return std::move(result);
+	return move(result);
 }
 
 } // namespace duckdb

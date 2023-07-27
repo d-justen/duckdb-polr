@@ -10,8 +10,6 @@
 
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/limits.hpp"
-#include "duckdb/common/mutex.hpp"
-
 #include <random>
 
 namespace duckdb {
@@ -33,8 +31,6 @@ public:
 	void SetSeed(uint32_t seed);
 
 	static RandomEngine &Get(ClientContext &context);
-
-	mutex lock;
 
 private:
 	unique_ptr<RandomState> random_state;

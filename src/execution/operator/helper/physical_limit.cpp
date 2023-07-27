@@ -12,9 +12,8 @@ namespace duckdb {
 PhysicalLimit::PhysicalLimit(vector<LogicalType> types, idx_t limit, idx_t offset,
                              unique_ptr<Expression> limit_expression, unique_ptr<Expression> offset_expression,
                              idx_t estimated_cardinality)
-    : PhysicalOperator(PhysicalOperatorType::LIMIT, std::move(types), estimated_cardinality), limit_value(limit),
-      offset_value(offset), limit_expression(std::move(limit_expression)),
-      offset_expression(std::move(offset_expression)) {
+    : PhysicalOperator(PhysicalOperatorType::LIMIT, move(types), estimated_cardinality), limit_value(limit),
+      offset_value(offset), limit_expression(move(limit_expression)), offset_expression(move(offset_expression)) {
 }
 
 //===--------------------------------------------------------------------===//
@@ -209,7 +208,7 @@ Value PhysicalLimit::GetDelimiter(ExecutionContext &context, DataChunk &input, E
 	vector<LogicalType> types {expr->return_type};
 	auto &allocator = Allocator::Get(context.client);
 	limit_chunk.Initialize(allocator, types);
-	ExpressionExecutor limit_executor(context.client, expr);
+	ExpressionExecutor limit_executor(allocator, expr);
 	auto input_size = input.size();
 	input.SetCardinality(1);
 	limit_executor.Execute(input, limit_chunk);

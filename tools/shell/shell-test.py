@@ -18,32 +18,23 @@ def test_exception(command, input, stdout, stderr, errmsg):
      print(stderr)
      raise Exception(errmsg)
 
-def test(cmd, out=None, err=None, extra_commands=None, input_file=None, output_file=None):
+def test(cmd, out=None, err=None, extra_commands=None, input_file=None):
      command = [sys.argv[1], '--batch', '-init', '/dev/null']
      if extra_commands:
           command += extra_commands
-
      if input_file:
           command += [cmd]
-          input_data = open(input_file, 'rb').read()
+          res = subprocess.run(command, input=open(input_file, 'rb').read(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
      else:
-          input_data = bytearray(cmd, 'utf8')
-     output_pipe = subprocess.PIPE
-     if output_file:
-          output_pipe = open(output_file, 'w+')
-
-     res = subprocess.run(command, input=input_data, stdout=output_pipe, stderr=subprocess.PIPE)
-     if output_file:
-          stdout = open(output_file, 'r').read()
-     else:
-          stdout = res.stdout.decode('utf8').strip()
+          res = subprocess.run(command, input=bytearray(cmd, 'utf8'), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+     stdout = res.stdout.decode('utf8').strip()
      stderr = res.stderr.decode('utf8').strip()
 
      if out and out not in stdout:
           test_exception(command, cmd, stdout, stderr, 'out test failed')
 
      if err and err not in stderr:
-          test_exception(command, cmd, stdout, stderr, f"err test failed, error does not contain: '{err}'")
+          test_exception(command, cmd, stdout, stderr, 'err test failed')
 
      if not err and stderr != '':
           test_exception(command, cmd, stdout, stderr, 'got err test failed')
@@ -485,7 +476,7 @@ SELECT 42;
 
 
 
-test('.databases', out='memory')
+test('.databases', out='main:')
 
 # .dump test
 test('''
@@ -852,34 +843,6 @@ SELECT * FROM sql_auto_complete('SELECT MyColumn FROM My') LIMIT 1;
 """, out="MyTable"
 )
 
-# duckbox renderer displays the number of rows if there are none
-test('''
-.mode duckbox
-select 42 limit 0;
-''', out='0 rows')
-
-# #5411 - with maxrows=2, we still display all 4 rows (hiding them would take up more space)
-test('''
-.maxrows 2
-select * from range(4);
-''', out='1')
-
-outfile = tf()
-test('''
-.maxrows 2
-.output %s
-SELECT * FROM range(100);
-''' % outfile)
-outstr = open(outfile,'rb').read().decode('utf8')
-if '50' not in outstr:
-     raise Exception('.output test failed')
-
-# test null-byte rendering
-test('select varchar from test_all_types();', out='goo\\0se')
-
-# null byte in error message
-test('select chr(0)::int', err='INT32')
-
 if os.name != 'nt':
      shell_test_dir = 'shell_test_dir'
      try:
@@ -916,14 +879,6 @@ if os.name != 'nt':
 
      shutil.rmtree(shell_test_dir)
 
-# test backwards compatibility
-test('.open test/storage/bc/db_dev.db', err='older development version')
-test('.open test/storage/bc/db_031.db', err='v0.3.1')
-test('.open test/storage/bc/db_032.db', err='v0.3.2')
-test('.open test/storage/bc/db_04.db', err='v0.4.0')
-test('.open test/storage/bc/db_051.db', err='v0.5.1')
-test('.open test/storage/bc/db_060.db', err='v0.6.0')
-
 if os.name != 'nt':
      test('''
 create table mytable as select * from
@@ -955,32 +910,6 @@ select channel,i_brand_id,sum_sales,number_sales from mytable;
           input_file='data/csv/tpcds_14.csv',
           out='''web,8006004,844.21,21''')
 
-     test('''create table mytable as select * from
-read_json_objects('/dev/stdin');
-select * from mytable;
-          ''',
-          extra_commands=['-list', ':memory:'],
-          input_file='data/json/example_rn.ndjson',
-          out='''json
-{"id":1,"name":"O Brother, Where Art Thou?"}
-{"id":2,"name":"Home for the Holidays"}
-{"id":3,"name":"The Firm"}
-{"id":4,"name":"Broadcast News"}
-{"id":5,"name":"Raising Arizona"}''')
-
-     test('''create table mytable as select * from
-read_ndjson_objects('/dev/stdin');
-select * from mytable;
-          ''',
-          extra_commands=['-list', ':memory:'],
-          input_file='data/json/example_rn.ndjson',
-          out='''json
-{"id":1,"name":"O Brother, Where Art Thou?"}
-{"id":2,"name":"Home for the Holidays"}
-{"id":3,"name":"The Firm"}
-{"id":4,"name":"Broadcast News"}
-{"id":5,"name":"Raising Arizona"}''')
-
      test('''
      COPY (SELECT 42) TO '/dev/stdout' WITH (FORMAT 'csv');
      ''',
@@ -1003,10 +932,3 @@ select * from mytable;
      copy (select 42) to '/dev/stdout'
      ''',
      out='''42''')
-
-     test('''
-     select list(concat('thisisalongstring', range::VARCHAR)) i from range(10000)
-     ''',
-     out='''thisisalongstring''')
-
-     test("copy (select * from range(10000) tbl(i)) to '/dev/stdout' (format csv)", out='9999', output_file=tf())

@@ -117,7 +117,7 @@ struct ICUStrptime : public ICUDateFunc {
 		if (!arguments[1]->IsFoldable()) {
 			throw InvalidInputException("strptime format must be a constant");
 		}
-		Value options_str = ExpressionExecutor::EvaluateScalar(context, *arguments[1]);
+		Value options_str = ExpressionExecutor::EvaluateScalar(*arguments[1]);
 		StrpTimeFormat format;
 		if (!options_str.IsNull()) {
 			auto format_string = options_str.ToString();
@@ -142,7 +142,7 @@ struct ICUStrptime : public ICUDateFunc {
 
 	static void AddBinaryTimestampFunction(const string &name, ClientContext &context) {
 		// Find the old function
-		auto &catalog = Catalog::GetSystemCatalog(context);
+		auto &catalog = Catalog::GetCatalog(context);
 		auto entry = catalog.GetEntry(context, CatalogType::SCALAR_FUNCTION_ENTRY, DEFAULT_SCHEMA, name);
 		D_ASSERT(entry && entry->type == CatalogType::SCALAR_FUNCTION_ENTRY);
 		auto &func = (ScalarFunctionCatalogEntry &)*entry;
@@ -172,19 +172,14 @@ struct ICUStrptime : public ICUDateFunc {
 			    const auto str = input.GetDataUnsafe();
 			    const auto len = input.GetSize();
 			    string_t tz(nullptr, 0);
-			    bool has_offset = false;
-			    if (!Timestamp::TryConvertTimestampTZ(str, len, result, has_offset, tz)) {
+			    if (!Timestamp::TryConvertTimestampTZ(str, len, result, tz)) {
 				    auto msg = Timestamp::ConversionError(string(str, len));
 				    HandleCastError::AssignError(msg, parameters.error_message);
 				    mask.SetInvalid(idx);
-			    } else if (!has_offset) {
-				    // Convert parts to a TZ (default or parsed) if no offset was provided
+			    } else if (tz.GetSize()) {
+				    // Convert parts to TZ
 				    auto calendar = cal.get();
-
-				    // Change TZ if one was provided.
-				    if (tz.GetSize()) {
-					    SetTimeZone(calendar, tz);
-				    }
+				    SetTimeZone(calendar, tz);
 
 				    // Now get the parts in the given time zone
 				    date_t d;
@@ -222,7 +217,7 @@ struct ICUStrptime : public ICUDateFunc {
 
 		auto cast_data = make_unique<CastData>(make_unique<BindData>(*input.context));
 
-		return BoundCastInfo(CastFromVarchar, std::move(cast_data));
+		return BoundCastInfo(CastFromVarchar, move(cast_data));
 	}
 
 	static void AddCasts(ClientContext &context) {
@@ -330,11 +325,11 @@ struct ICUStrftime : public ICUDateFunc {
 		                               ICUStrftimeFunction, Bind));
 
 		CreateScalarFunctionInfo func_info(set);
-		auto &catalog = Catalog::GetSystemCatalog(context);
+		auto &catalog = Catalog::GetCatalog(context);
 		catalog.AddFunction(context, &func_info);
 	}
 
-	static string_t CastOperation(icu::Calendar *calendar, timestamp_t input, Vector &result) {
+	static string_t CastOperation(icu::Calendar *calendar, timestamp_t input, const string &tz_name, Vector &result) {
 		// Infinity is always formatted the same way
 		if (!Timestamp::IsFinite(input)) {
 			return StringVector::AddString(result, Timestamp::ToString(input));
@@ -361,15 +356,9 @@ struct ICUStrftime : public ICUDateFunc {
 		char micro_buffer[6];
 		const auto time_len = TimeToStringCast::Length(time_units, micro_buffer);
 
-		auto offset = ExtractField(calendar, UCAL_ZONE_OFFSET) + ExtractField(calendar, UCAL_DST_OFFSET);
-		offset /= Interval::MSECS_PER_SEC;
-		offset /= Interval::SECS_PER_MINUTE;
-		int hour_offset = offset / 60;
-		int minute_offset = offset % 60;
-		auto offset_str = Time::ToUTCOffset(hour_offset, minute_offset);
-		const auto offset_len = offset_str.size();
+		const auto tz_len = tz_name.size();
 
-		const auto len = date_len + 1 + time_len + offset_len;
+		const auto len = date_len + 1 + time_len + 1 + tz_len;
 		string_t target = StringVector::EmptyString(result, len);
 		auto buffer = target.GetDataWriteable();
 
@@ -379,9 +368,10 @@ struct ICUStrftime : public ICUDateFunc {
 
 		TimeToStringCast::Format(buffer, time_len, time_units, micro_buffer);
 		buffer += time_len;
+		*buffer++ = ' ';
 
-		memcpy(buffer, offset_str.c_str(), offset_len);
-		buffer += offset_len;
+		memcpy(buffer, tz_name.c_str(), tz_len);
+		buffer += tz_len;
 
 		target.Finalize();
 
@@ -392,11 +382,12 @@ struct ICUStrftime : public ICUDateFunc {
 		auto &cast_data = (CastData &)*parameters.cast_data;
 		auto info = (BindData *)cast_data.info.get();
 		CalendarPtr calendar(info->calendar->clone());
+		const auto tz_name = info->tz_setting.c_str();
 
-		UnaryExecutor::ExecuteWithNulls<timestamp_t, string_t>(source, result, count,
-		                                                       [&](timestamp_t input, ValidityMask &mask, idx_t idx) {
-			                                                       return CastOperation(calendar.get(), input, result);
-		                                                       });
+		UnaryExecutor::ExecuteWithNulls<timestamp_t, string_t>(
+		    source, result, count, [&](timestamp_t input, ValidityMask &mask, idx_t idx) {
+			    return CastOperation(calendar.get(), input, tz_name, result);
+		    });
 		return true;
 	}
 
@@ -407,7 +398,7 @@ struct ICUStrftime : public ICUDateFunc {
 
 		auto cast_data = make_unique<CastData>(make_unique<BindData>(*input.context));
 
-		return BoundCastInfo(CastToVarchar, std::move(cast_data));
+		return BoundCastInfo(CastToVarchar, move(cast_data));
 	}
 
 	static void AddCasts(ClientContext &context) {

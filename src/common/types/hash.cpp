@@ -2,10 +2,8 @@
 
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/types/string_type.hpp"
-#include "duckdb/common/types/interval.hpp"
 
 #include <functional>
-#include <cmath>
 
 namespace duckdb {
 
@@ -24,31 +22,17 @@ hash_t Hash(hugeint_t val) {
 	return murmurhash64(val.lower) ^ murmurhash64(val.upper);
 }
 
-template <class T>
-struct FloatingPointEqualityTransform {
-	static void OP(T &val) {
-		if (val == (T)0.0) {
-			// Turn negative zero into positive zero
-			val = (T)0.0;
-		} else if (std::isnan(val)) {
-			val = std::numeric_limits<T>::quiet_NaN();
-		}
-	}
-};
-
 template <>
 hash_t Hash(float val) {
 	static_assert(sizeof(float) == sizeof(uint32_t), "");
-	FloatingPointEqualityTransform<float>::OP(val);
-	uint32_t uval = Load<uint32_t>((const_data_ptr_t)&val);
+	uint32_t uval = *((uint32_t *)&val);
 	return murmurhash64(uval);
 }
 
 template <>
 hash_t Hash(double val) {
 	static_assert(sizeof(double) == sizeof(uint64_t), "");
-	FloatingPointEqualityTransform<double>::OP(val);
-	uint64_t uval = Load<uint64_t>((const_data_ptr_t)&val);
+	uint64_t uval = *((uint64_t *)&val);
 	return murmurhash64(uval);
 }
 

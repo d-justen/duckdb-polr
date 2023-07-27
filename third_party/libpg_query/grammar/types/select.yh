@@ -7,8 +7,6 @@
 
 %type <node> opt_collate_clause
 
-%type <node> indirection_expr
-
 
 
 
@@ -28,7 +26,7 @@
 				qualified_name_list any_name 				any_operator expr_list	attrs expr_list_opt_comma opt_expr_list_opt_comma
 				target_list			 			 indirection opt_indirection target_list_opt_comma opt_target_list_opt_comma
 			 group_clause select_limit
-				opt_select_limit 			 			 TableFuncElementList opt_type_modifiers opt_select
+				opt_select_limit 			 			 TableFuncElementList opt_type_modifiers
 %type <list>	group_by_list group_by_list_opt_comma
 %type <node>	group_by_item empty_grouping_set rollup_clause cube_clause grouping_sets_clause grouping_or_grouping_id
 %type <range>	OptTempTableName
@@ -127,4 +125,3 @@
 %type <windef>	window_definition over_clause window_specification
 				opt_frame_clause frame_extent frame_bound
 %type <str>		opt_existing_window_name
-%type <str>		named_param

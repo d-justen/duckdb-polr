@@ -2,7 +2,6 @@ add_library_unity(
   duckdb_parallel
   OBJECT
   base_pipeline_event.cpp
-  meta_pipeline.cpp
   executor_task.cpp
   executor.cpp
   event.cpp
@@ -11,7 +10,9 @@ add_library_unity(
   pipeline_event.cpp
   pipeline_executor.cpp
   pipeline_finish_event.cpp
-  pipeline_initialize_event.cpp
+  polar_config.cpp
+  polar_enumeration_algo.cpp
+  polar_pipeline_executor.cpp
   task_scheduler.cpp
   thread_context.cpp)
 set(ALL_OBJECT_FILES

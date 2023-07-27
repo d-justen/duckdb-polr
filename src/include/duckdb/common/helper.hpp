@@ -67,14 +67,6 @@ struct UniqueConstructor {
 	}
 };
 
-#ifdef DUCKDB_DEBUG_MOVE
-template<class T>
-typename std::remove_reference<T>::type&& move(T&& t) noexcept {
-	// the nonsensical sizeof check ensures this is never instantiated
-	static_assert(sizeof(T) == 0, "Use std::move instead of unqualified move or duckdb::move");
-}
-#endif
-
 template <typename T>
 T MaxValue(T a, T b) {
 	return a > b ? a : b;
@@ -90,7 +82,6 @@ T AbsValue(T a) {
 	return a < 0 ? -a : a;
 }
 
-//Align value (ceiling)
 template<class T, T val=8>
 static inline T AlignValue(T n) {
 	return ((n + (val - 1)) / val) * val;

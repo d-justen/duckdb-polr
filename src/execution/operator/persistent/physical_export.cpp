@@ -4,7 +4,6 @@
 #include "duckdb/catalog/catalog_entry/schema_catalog_entry.hpp"
 #include "duckdb/common/file_system.hpp"
 #include "duckdb/common/string_util.hpp"
-#include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parser/keyword_helper.hpp"
 #include "duckdb/transaction/transaction.hpp"
@@ -115,7 +114,7 @@ void PhysicalExport::GetData(ExecutionContext &context, DataChunk &chunk, Global
 	vector<CatalogEntry *> indexes;
 	vector<CatalogEntry *> macros;
 
-	auto schema_list = Catalog::GetSchemas(ccontext, info->catalog);
+	auto schema_list = Catalog::GetCatalog(ccontext).schemas->GetEntries<SchemaCatalogEntry>(context.client);
 	for (auto &schema : schema_list) {
 		if (!schema->internal) {
 			schemas.push_back(schema);
@@ -192,15 +191,14 @@ SinkResultType PhysicalExport::Sink(ExecutionContext &context, GlobalSinkState &
 //===--------------------------------------------------------------------===//
 // Pipeline Construction
 //===--------------------------------------------------------------------===//
-void PhysicalExport::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) {
+void PhysicalExport::BuildPipelines(Executor &executor, Pipeline &current, PipelineBuildState &state) {
 	// EXPORT has an optional child
 	// we only need to schedule child pipelines if there is a child
-	auto &state = meta_pipeline.GetState();
 	state.SetPipelineSource(current, this);
 	if (children.empty()) {
 		return;
 	}
-	PhysicalOperator::BuildPipelines(current, meta_pipeline);
+	PhysicalOperator::BuildPipelines(executor, current, state);
 }
 
 vector<const PhysicalOperator *> PhysicalExport::GetSources() const {

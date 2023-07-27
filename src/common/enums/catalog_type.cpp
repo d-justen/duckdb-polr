@@ -15,8 +15,6 @@ string CatalogTypeToString(CatalogType type) {
 		return "Table";
 	case CatalogType::SCHEMA_ENTRY:
 		return "Schema";
-	case CatalogType::DATABASE_ENTRY:
-		return "Database";
 	case CatalogType::TABLE_FUNCTION_ENTRY:
 		return "Table Function";
 	case CatalogType::SCALAR_FUNCTION_ENTRY:

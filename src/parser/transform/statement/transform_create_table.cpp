@@ -44,7 +44,7 @@ OnCreateConflict Transformer::TransformOnConflict(duckdb_libpgquery::PGOnCreateC
 unique_ptr<ParsedExpression> Transformer::TransformCollateExpr(duckdb_libpgquery::PGCollateClause *collate) {
 	auto child = TransformExpression(collate->arg);
 	auto collation = TransformCollation(collate);
-	return make_unique<CollateExpression>(collation, std::move(child));
+	return make_unique<CollateExpression>(collation, move(child));
 }
 
 ColumnDefinition Transformer::TransformColumnDefinition(duckdb_libpgquery::PGColumnDef *cdef) {
@@ -78,11 +78,11 @@ unique_ptr<CreateStatement> Transformer::TransformCreateTable(duckdb_libpgquery:
 	}
 	D_ASSERT(stmt->relation);
 
-	info->catalog = INVALID_CATALOG;
-	auto qname = TransformQualifiedName(stmt->relation);
-	info->catalog = qname.catalog;
-	info->schema = qname.schema;
-	info->table = qname.name;
+	info->schema = INVALID_SCHEMA;
+	if (stmt->relation->schemaname) {
+		info->schema = stmt->relation->schemaname;
+	}
+	info->table = stmt->relation->relname;
 	info->on_conflict = TransformOnConflict(stmt->onconflict);
 	info->temporary =
 	    stmt->relation->relpersistence == duckdb_libpgquery::PGPostgresRelPersistence::PG_RELPERSISTENCE_TEMP;
@@ -104,13 +104,13 @@ unique_ptr<CreateStatement> Transformer::TransformCreateTable(duckdb_libpgquery:
 			auto centry = TransformColumnDefinition(cdef);
 			if (cdef->constraints) {
 				for (auto constr = cdef->constraints->head; constr != nullptr; constr = constr->next) {
-					auto constraint = TransformConstraint(constr, centry, info->columns.LogicalColumnCount());
+					auto constraint = TransformConstraint(constr, centry, info->columns.size());
 					if (constraint) {
-						info->constraints.push_back(std::move(constraint));
+						info->constraints.push_back(move(constraint));
 					}
 				}
 			}
-			info->columns.AddColumn(std::move(centry));
+			info->columns.push_back(move(centry));
 			column_count++;
 			break;
 		}
@@ -127,7 +127,7 @@ unique_ptr<CreateStatement> Transformer::TransformCreateTable(duckdb_libpgquery:
 		throw ParserException("Table must have at least one column!");
 	}
 
-	result->info = std::move(info);
+	result->info = move(info);
 	return result;
 }
 

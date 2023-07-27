@@ -20,6 +20,10 @@ concurrency:
 
 env:
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
+  AWS_ACCESS_KEY_ID: AKIAVBLKPL2ZW2T7TYFQ
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.NODE_PRE_GYP_SECRETACCESSKEY }}
+  NODE_AUTH_TOKEN: ${{secrets.NODE_AUTH_TOKEN}}
 
 jobs:
 #  This is just a sanity check of Python 3.9 running with Arrow
@@ -31,6 +35,7 @@ jobs:
       CIBW_BUILD: 'cp39-manylinux_x86_64'
       CIBW_TEST_COMMAND: 'python -m pytest {project}/tests'
       SETUPTOOLS_SCM_NO_LOCAL: 'yes'
+      TWINE_USERNAME: 'hfmuehleisen'
       PYTEST_TIMEOUT: '600'
 
     steps:
@@ -85,25 +90,24 @@ jobs:
         aws --version
 
       # the weird openssl findreplace fix with version numbers is from: https://github.com/h2o/h2o/issues/213
-    - name: Download OpenSSL 1.1.1s
+    - name: Download OpenSSL 1.1.1k
       shell: bash
       run: |
-        wget https://github.com/openssl/openssl/archive/refs/tags/OpenSSL_1_1_1s.tar.gz
-        tar -xzvf OpenSSL_1_1_1s.tar.gz
-        mv openssl-OpenSSL_1_1_1s openssl-1.1.1s
-        cd openssl-1.1.1s
+        wget https://ftp.openssl.org/source/openssl-1.1.1k.tar.gz --no-check-certificate
+        tar -xzvf openssl-1.1.1k.tar.gz
+        cd openssl-1.1.1k
         find ./ -type f -exec sed -i -e 's/\#\ define\ OPENSSL\_VERSION\_NUMBER/\#define\ OPENSSL\_VERSION\_NUMBER/g' {} \;
 
     - name: Configure OpenSSL
       shell: bash
       run: |
-        cd openssl-1.1.1s
+        cd openssl-1.1.1k
         ./config --prefix=/usr --openssldir=/etc/ssl --libdir=lib no-shared zlib-dynamic
 
     - name: Build OpenSSL
       shell: bash
       run: |
-        cd openssl-1.1.1s
+        cd openssl-1.1.1k
         make
         make install
 
@@ -148,13 +152,12 @@ jobs:
             python_build: 'cp38-*'
           - isRelease: false
             python_build: 'cp39-*'
-          - isRelease: false
-            python_build: 'cp311-*'
     needs: manylinux-extensions
     env:
       CIBW_BUILD: ${{ matrix.python_build}}
       CIBW_ARCHS: ${{ matrix.arch == 'i686' && 'auto32' || 'auto64'}}
       SETUPTOOLS_SCM_NO_LOCAL: 'yes'
+      TWINE_USERNAME: 'hfmuehleisen'
       PYTEST_TIMEOUT: '600'
       DUCKDB_BUILD_UNITY: 1
 
@@ -200,9 +203,6 @@ jobs:
         ls wheelhouse
 
     - name: Deploy
-      env:
-        TWINE_USERNAME: 'hfmuehleisen'
-        TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
       shell: bash
       run: |
         python scripts/asset-upload-gha.py duckdb_python_src.tar.gz=tools/pythonpkg/dist/duckdb-*.tar.gz
@@ -255,9 +255,6 @@ jobs:
           cibuildwheel --output-dir wheelhouse --config-file cibw.toml duckdb_tarball
 
       - name: Deploy
-        env:
-          TWINE_USERNAME: 'hfmuehleisen'
-          TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
         shell: bash
         run: |
           if [[ "$GITHUB_REF" =~ ^(refs/heads/master|refs/tags/v.+)$ && "$GITHUB_REPOSITORY" = "duckdb/duckdb" ]] ; then
@@ -279,8 +276,6 @@ jobs:
             python_build: 'cp38-*'
           - isRelease: false
             python_build: 'cp39-*'
-          - isRelease: false
-            python_build: 'cp311-*'
       needs: linux-python3-9
 
       env:
@@ -319,9 +314,6 @@ jobs:
           cibuildwheel --output-dir wheelhouse --config-file cibw.toml duckdb_tarball
 
       - name: Deploy
-        env:
-          TWINE_USERNAME: 'hfmuehleisen'
-          TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
         shell: bash
         run: |
           if [[ "$GITHUB_REF" =~ ^(refs/heads/master|refs/tags/v.+)$ && "$GITHUB_REPOSITORY" = "duckdb/duckdb" ]] ; then

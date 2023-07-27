@@ -13,27 +13,20 @@ namespace duckdb {
 unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalCreate &op) {
 	switch (op.type) {
 	case LogicalOperatorType::LOGICAL_CREATE_SEQUENCE:
-		return make_unique<PhysicalCreateSequence>(unique_ptr_cast<CreateInfo, CreateSequenceInfo>(std::move(op.info)),
+		return make_unique<PhysicalCreateSequence>(unique_ptr_cast<CreateInfo, CreateSequenceInfo>(move(op.info)),
 		                                           op.estimated_cardinality);
 	case LogicalOperatorType::LOGICAL_CREATE_VIEW:
-		return make_unique<PhysicalCreateView>(unique_ptr_cast<CreateInfo, CreateViewInfo>(std::move(op.info)),
+		return make_unique<PhysicalCreateView>(unique_ptr_cast<CreateInfo, CreateViewInfo>(move(op.info)),
 		                                       op.estimated_cardinality);
 	case LogicalOperatorType::LOGICAL_CREATE_SCHEMA:
-		return make_unique<PhysicalCreateSchema>(unique_ptr_cast<CreateInfo, CreateSchemaInfo>(std::move(op.info)),
+		return make_unique<PhysicalCreateSchema>(unique_ptr_cast<CreateInfo, CreateSchemaInfo>(move(op.info)),
 		                                         op.estimated_cardinality);
 	case LogicalOperatorType::LOGICAL_CREATE_MACRO:
-		return make_unique<PhysicalCreateFunction>(unique_ptr_cast<CreateInfo, CreateMacroInfo>(std::move(op.info)),
+		return make_unique<PhysicalCreateFunction>(unique_ptr_cast<CreateInfo, CreateMacroInfo>(move(op.info)),
 		                                           op.estimated_cardinality);
-	case LogicalOperatorType::LOGICAL_CREATE_TYPE: {
-		unique_ptr<PhysicalOperator> create = make_unique<PhysicalCreateType>(
-		    unique_ptr_cast<CreateInfo, CreateTypeInfo>(std::move(op.info)), op.estimated_cardinality);
-		if (!op.children.empty()) {
-			D_ASSERT(op.children.size() == 1);
-			auto plan = CreatePlan(*op.children[0]);
-			create->children.push_back(std::move(plan));
-		}
-		return create;
-	}
+	case LogicalOperatorType::LOGICAL_CREATE_TYPE:
+		return make_unique<PhysicalCreateType>(unique_ptr_cast<CreateInfo, CreateTypeInfo>(move(op.info)),
+		                                       op.estimated_cardinality);
 	default:
 		throw NotImplementedException("Unimplemented type for logical simple create");
 	}

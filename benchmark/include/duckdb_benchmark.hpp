@@ -28,6 +28,13 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 		auto &instance = BenchmarkRunner::GetInstance();
 		auto res = conn.Query("PRAGMA threads=" + to_string(instance.threads));
 		D_ASSERT(!res->HasError());
+
+		res = conn.Query("SET regret_budget TO " + to_string(instance.regret_budget));
+		D_ASSERT(!res->HasError());
+
+		res = conn.Query("SET max_join_orders TO " + to_string(instance.max_join_orders));
+		D_ASSERT(!res->HasError());
+
 		string profiling_mode;
 		switch (instance.configuration.profile_info) {
 		case BenchmarkProfileInfo::NONE:
@@ -45,6 +52,63 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 		if (!profiling_mode.empty()) {
 			res = conn.Query("PRAGMA profiling_mode=" + profiling_mode);
 			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_polr) {
+			res = conn.Query("PRAGMA enable_polr");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_polr_bushy) {
+			res = conn.Query("PRAGMA enable_polr_bushy");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.enable_random_cardinalities) {
+			res = conn.Query("PRAGMA enable_random_cardinalities");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.log_tuples_routed) {
+			res = conn.Query("PRAGMA enable_log_tuples_routed");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.measure_pipeline) {
+			res = conn.Query("PRAGMA enable_measure_pipeline");
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.multiplexer_routing.empty()) {
+			res = conn.Query("SET multiplexer_routing TO " + instance.multiplexer_routing);
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.enumerator.empty()) {
+			res = conn.Query("SET join_enumerator TO " + instance.enumerator);
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.caching) {
+			res = conn.Query("PRAGMA disable_caching");
+			D_ASSERT(!res->HasError());
+		}
+		if (!instance.optimizer_mode.empty()) {
+			if (instance.optimizer_mode == "dphyp-constant") {
+				res = conn.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-equisets") {
+				res = conn.Query("PRAGMA enable_greedy_ordering");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-constant") {
+				res = conn.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+				res = conn.Query("PRAGMA enabbele_greedy_ordering");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-equisets-ldt") {
+				res = conn.Query("PRAGMA enable_greedy_ordering_ldt");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "greedy-constant-ldt") {
+				res = conn.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+				res = conn.Query("PRAGMA enable_greedy_ordering_ldt");
+				D_ASSERT(!res->HasError());
+			} else if (instance.optimizer_mode == "nostats") {
+				res = conn.Query("PRAGMA disable_cardinality_estimator");
+				D_ASSERT(!res->HasError());
+			}
 		}
 	}
 	virtual ~DuckDBBenchmarkState() {

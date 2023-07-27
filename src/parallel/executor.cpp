@@ -2,16 +2,13 @@
 
 #include "duckdb/execution/execution_context.hpp"
 #include "duckdb/execution/operator/helper/physical_result_collector.hpp"
-#include "duckdb/execution/operator/set/physical_recursive_cte.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/client_data.hpp"
-#include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline_complete_event.hpp"
 #include "duckdb/parallel/pipeline_event.hpp"
 #include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/parallel/pipeline_finish_event.hpp"
-#include "duckdb/parallel/pipeline_initialize_event.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
@@ -34,11 +31,10 @@ void Executor::AddEvent(shared_ptr<Event> event) {
 	if (cancelled) {
 		return;
 	}
-	events.push_back(std::move(event));
+	events.push_back(move(event));
 }
 
 struct PipelineEventStack {
-	Event *pipeline_initialize_event;
 	Event *pipeline_event;
 	Event *pipeline_finish_event;
 	Event *pipeline_complete_event;
@@ -47,106 +43,156 @@ struct PipelineEventStack {
 using event_map_t = unordered_map<const Pipeline *, PipelineEventStack>;
 
 struct ScheduleEventData {
-	ScheduleEventData(const vector<shared_ptr<MetaPipeline>> &meta_pipelines, vector<shared_ptr<Event>> &events,
-	                  bool initial_schedule)
-	    : meta_pipelines(meta_pipelines), events(events), initial_schedule(initial_schedule) {
+	ScheduleEventData(const vector<shared_ptr<Pipeline>> &pipelines,
+	                  unordered_map<Pipeline *, vector<shared_ptr<Pipeline>>> &child_pipelines,
+	                  unordered_map<Pipeline *, vector<shared_ptr<Pipeline>>> &union_pipelines,
+	                  vector<shared_ptr<Event>> &events, bool initial_schedule)
+	    : pipelines(pipelines), child_pipelines(child_pipelines), union_pipelines(union_pipelines), events(events),
+	      initial_schedule(initial_schedule) {
 	}
 
-	const vector<shared_ptr<MetaPipeline>> &meta_pipelines;
+	const vector<shared_ptr<Pipeline>> &pipelines;
+	unordered_map<Pipeline *, vector<shared_ptr<Pipeline>>> &child_pipelines;
+	unordered_map<Pipeline *, vector<shared_ptr<Pipeline>>> &union_pipelines;
+	unordered_map<Pipeline *, vector<Pipeline *>> scheduled_pipelines;
 	vector<shared_ptr<Event>> &events;
 	bool initial_schedule;
 	event_map_t event_map;
 };
 
-void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, ScheduleEventData &event_data) {
-	D_ASSERT(meta_pipeline);
-	auto &events = event_data.events;
+void Executor::SchedulePipeline(const shared_ptr<Pipeline> &pipeline, ScheduleEventData &event_data,
+                                vector<Pipeline *> &scheduled_pipelines) {
+	D_ASSERT(pipeline);
+
 	auto &event_map = event_data.event_map;
+	auto &events = event_data.events;
+	auto &union_pipelines = event_data.union_pipelines;
+	pipeline->Ready();
 
-	// create events/stack for the base pipeline
-	auto base_pipeline = meta_pipeline->GetBasePipeline();
-	auto base_initialize_event = make_shared<PipelineInitializeEvent>(base_pipeline);
-	auto base_event = make_shared<PipelineEvent>(base_pipeline);
-	auto base_finish_event = make_shared<PipelineFinishEvent>(base_pipeline);
-	auto base_complete_event = make_shared<PipelineCompleteEvent>(base_pipeline->executor, event_data.initial_schedule);
-	PipelineEventStack base_stack {base_initialize_event.get(), base_event.get(), base_finish_event.get(),
-	                               base_complete_event.get()};
-	events.push_back(std::move(base_initialize_event));
-	events.push_back(std::move(base_event));
-	events.push_back(std::move(base_finish_event));
-	events.push_back(std::move(base_complete_event));
+	auto pipeline_event = make_shared<PipelineEvent>(pipeline);
 
-	// dependencies: initialize -> event -> finish -> complete
-	base_stack.pipeline_event->AddDependency(*base_stack.pipeline_initialize_event);
-	base_stack.pipeline_finish_event->AddDependency(*base_stack.pipeline_event);
-	base_stack.pipeline_complete_event->AddDependency(*base_stack.pipeline_finish_event);
+	PipelineEventStack stack;
+	stack.pipeline_event = pipeline_event.get();
+	if (!scheduled_pipelines.empty()) {
+		// this pipeline has a parent pipeline - i.e. it is scheduled as part of a `UNION`
+		// set up the events
+		auto parent = scheduled_pipelines.back();
+		auto parent_stack_entry = event_map.find(parent);
+		D_ASSERT(parent_stack_entry != event_map.end());
 
-	// create an event and stack for all pipelines in the MetaPipeline
-	vector<shared_ptr<Pipeline>> pipelines;
-	meta_pipeline->GetPipelines(pipelines, false);
-	for (idx_t i = 1; i < pipelines.size(); i++) { // loop starts at 1 because 0 is the base pipeline
-		auto &pipeline = pipelines[i];
-		D_ASSERT(pipeline);
+		auto &parent_stack = parent_stack_entry->second;
+		stack.pipeline_finish_event = parent_stack.pipeline_finish_event;
+		stack.pipeline_complete_event = parent_stack.pipeline_complete_event;
 
-		// create events/stack for this pipeline
-		auto pipeline_event = make_shared<PipelineEvent>(pipeline);
-		Event *pipeline_finish_event_ptr;
-		if (meta_pipeline->HasFinishEvent(pipeline.get())) {
-			// this pipeline has its own finish event (despite going into the same sink - Finalize twice!)
-			auto pipeline_finish_event = make_unique<PipelineFinishEvent>(pipeline);
-			pipeline_finish_event_ptr = pipeline_finish_event.get();
-			events.push_back(std::move(pipeline_finish_event));
-			base_stack.pipeline_complete_event->AddDependency(*pipeline_finish_event_ptr);
-		} else {
-			pipeline_finish_event_ptr = base_stack.pipeline_finish_event;
-		}
-		PipelineEventStack pipeline_stack {base_stack.pipeline_initialize_event, pipeline_event.get(),
-		                                   pipeline_finish_event_ptr, base_stack.pipeline_complete_event};
-		events.push_back(std::move(pipeline_event));
+		stack.pipeline_event->AddDependency(*parent_stack.pipeline_event);
+		parent_stack.pipeline_finish_event->AddDependency(*pipeline_event);
+	} else {
+		// stand-alone pipeline
+		auto pipeline_finish_event = make_shared<PipelineFinishEvent>(pipeline);
+		auto pipeline_complete_event =
+		    make_shared<PipelineCompleteEvent>(pipeline->executor, event_data.initial_schedule);
 
-		// dependencies: base_initialize -> pipeline_event -> base_finish
-		pipeline_stack.pipeline_event->AddDependency(*base_stack.pipeline_initialize_event);
-		pipeline_stack.pipeline_finish_event->AddDependency(*pipeline_stack.pipeline_event);
+		pipeline_finish_event->AddDependency(*pipeline_event);
+		pipeline_complete_event->AddDependency(*pipeline_finish_event);
 
-		// add pipeline stack to event map
-		event_map.insert(make_pair(pipeline.get(), pipeline_stack));
+		stack.pipeline_finish_event = pipeline_finish_event.get();
+		stack.pipeline_complete_event = pipeline_complete_event.get();
+
+		events.push_back(move(pipeline_finish_event));
+		events.push_back(move(pipeline_complete_event));
 	}
 
-	// add base stack to the event data too
-	event_map.insert(make_pair(base_pipeline.get(), base_stack));
+	events.push_back(move(pipeline_event));
+	event_map.insert(make_pair(pipeline.get(), stack));
 
-	// set up the dependencies within this MetaPipeline
-	for (auto &pipeline : pipelines) {
-		auto source = pipeline->GetSource();
-		if (source->type == PhysicalOperatorType::TABLE_SCAN) {
-			// we have to reset the source here (in the main thread), because some of our clients (looking at you, R)
-			// do not like it when threads other than the main thread call into R, for e.g., arrow scans
-			pipeline->ResetSource(true);
+	scheduled_pipelines.push_back(pipeline.get());
+	auto union_entry = union_pipelines.find(pipeline.get());
+	if (union_entry != union_pipelines.end()) {
+		for (auto &entry : union_entry->second) {
+			SchedulePipeline(entry, event_data, scheduled_pipelines);
 		}
+	}
+}
 
-		auto dependencies = meta_pipeline->GetDependencies(pipeline.get());
-		if (!dependencies) {
+void Executor::ScheduleChildPipeline(Pipeline *parent, const shared_ptr<Pipeline> &pipeline,
+                                     ScheduleEventData &event_data) {
+	auto &events = event_data.events;
+	pipeline->Ready();
+
+	auto child_ptr = pipeline.get();
+	D_ASSERT(event_data.union_pipelines.find(child_ptr) == event_data.union_pipelines.end());
+	// create the pipeline event and the event stack
+	auto pipeline_event = make_shared<PipelineEvent>(pipeline);
+
+	auto &event_map = event_data.event_map;
+	auto parent_entry = event_map.find(parent);
+	D_ASSERT(parent_entry != event_map.end());
+
+	PipelineEventStack stack;
+	stack.pipeline_event = pipeline_event.get();
+	stack.pipeline_finish_event = parent_entry->second.pipeline_finish_event;
+	stack.pipeline_complete_event = parent_entry->second.pipeline_complete_event;
+	// set up the dependencies for this child pipeline
+	unordered_set<Event *> finish_events;
+
+	vector<Pipeline *> remaining_pipelines;
+	unordered_set<Pipeline *> already_scheduled;
+	remaining_pipelines.push_back(parent);
+	for (idx_t i = 0; i < remaining_pipelines.size(); i++) {
+		auto dep = remaining_pipelines[i];
+		if (already_scheduled.find(dep) != already_scheduled.end()) {
 			continue;
 		}
-		auto &pipeline_stack = event_map[pipeline.get()];
-		for (auto &dependency : *dependencies) {
-			auto &dependency_stack = event_map[dependency];
-			pipeline_stack.pipeline_event->AddDependency(*dependency_stack.pipeline_event);
+		already_scheduled.insert(dep);
+
+		auto dep_scheduled = event_data.scheduled_pipelines.find(dep);
+		if (dep_scheduled != event_data.scheduled_pipelines.end()) {
+			for (auto &next_dep : dep_scheduled->second) {
+				remaining_pipelines.push_back(next_dep);
+			}
 		}
+
+		auto dep_entry = event_map.find(dep);
+		D_ASSERT(dep_entry != event_map.end());
+		D_ASSERT(dep_entry->second.pipeline_event);
+		D_ASSERT(dep_entry->second.pipeline_finish_event);
+
+		auto finish_event = dep_entry->second.pipeline_finish_event;
+		stack.pipeline_event->AddDependency(*dep_entry->second.pipeline_event);
+		if (finish_events.find(finish_event) == finish_events.end()) {
+			finish_event->AddDependency(*stack.pipeline_event);
+			finish_events.insert(finish_event);
+		}
+
+		event_data.scheduled_pipelines[dep].push_back(child_ptr);
 	}
+
+	events.push_back(move(pipeline_event));
+	event_map.insert(make_pair(child_ptr, stack));
 }
 
 void Executor::ScheduleEventsInternal(ScheduleEventData &event_data) {
 	auto &events = event_data.events;
 	D_ASSERT(events.empty());
-
 	// create all the required pipeline events
-	for (auto &pipeline : event_data.meta_pipelines) {
-		SchedulePipeline(pipeline, event_data);
-	}
-
-	// set up the dependencies across MetaPipelines
 	auto &event_map = event_data.event_map;
+	for (auto &pipeline : event_data.pipelines) {
+		vector<Pipeline *> scheduled_pipelines;
+		SchedulePipeline(pipeline, event_data, scheduled_pipelines);
+
+		event_data.scheduled_pipelines[pipeline.get()] = move(scheduled_pipelines);
+	}
+	// schedule child pipelines
+	for (auto &entry : event_data.child_pipelines) {
+		// iterate in reverse order
+		// since child entries are added from top to bottom
+		// dependencies are in reverse order (bottom to top)
+		for (idx_t i = entry.second.size(); i > 0; i--) {
+			auto &child_entry = entry.second[i - 1];
+			ScheduleChildPipeline(entry.first, child_entry, event_data);
+		}
+	}
+	// set up the dependencies between pipeline events
 	for (auto &entry : event_map) {
 		auto pipeline = entry.first;
 		for (auto &dependency : pipeline->dependencies) {
@@ -159,10 +205,6 @@ void Executor::ScheduleEventsInternal(ScheduleEventData &event_data) {
 			entry.second.pipeline_event->AddDependency(*dep_entry.pipeline_complete_event);
 		}
 	}
-
-	// verify that we have no cyclic dependencies
-	VerifyScheduledEvents(event_data);
-
 	// schedule the pipelines that do not have dependencies
 	for (auto &event : events) {
 		if (!event->HasDependencies()) {
@@ -171,74 +213,38 @@ void Executor::ScheduleEventsInternal(ScheduleEventData &event_data) {
 	}
 }
 
-void Executor::ScheduleEvents(const vector<shared_ptr<MetaPipeline>> &meta_pipelines) {
-	ScheduleEventData event_data(meta_pipelines, events, true);
+void Executor::ScheduleEvents() {
+	ScheduleEventData event_data(pipelines, child_pipelines, union_pipelines, events, true);
 	ScheduleEventsInternal(event_data);
 }
 
-void Executor::VerifyScheduledEvents(const ScheduleEventData &event_data) {
-#ifdef DEBUG
-	const idx_t count = event_data.events.size();
-	vector<Event *> vertices;
-	vertices.reserve(count);
-	for (const auto &event : event_data.events) {
-		vertices.push_back(event.get());
-	}
-	vector<bool> visited(count, false);
-	vector<bool> recursion_stack(count, false);
-	for (idx_t i = 0; i < count; i++) {
-		VerifyScheduledEventsInternal(i, vertices, visited, recursion_stack);
-	}
-#endif
+void Executor::ReschedulePipelines(const vector<shared_ptr<Pipeline>> &pipelines, vector<shared_ptr<Event>> &events) {
+	unordered_map<Pipeline *, vector<shared_ptr<Pipeline>>> child_pipelines;
+	unordered_map<Pipeline *, vector<shared_ptr<Pipeline>>> union_pipelines;
+	ScheduleEventData event_data(pipelines, child_pipelines, union_pipelines, events, false);
+	ScheduleEventsInternal(event_data);
 }
 
-void Executor::VerifyScheduledEventsInternal(const idx_t vertex, const vector<Event *> &vertices, vector<bool> &visited,
-                                             vector<bool> &recursion_stack) {
-	D_ASSERT(!recursion_stack[vertex]); // this vertex is in the recursion stack: circular dependency!
-	if (visited[vertex]) {
-		return; // early out: we already visited this vertex
-	}
+void Executor::ExtractPipelines(shared_ptr<Pipeline> &pipeline, vector<shared_ptr<Pipeline>> &result) {
+	pipeline->Ready();
 
-	auto &parents = vertices[vertex]->GetParentsVerification();
-	if (parents.empty()) {
-		return; // early out: outgoing edges
-	}
-
-	// create a vector the indices of the adjacent events
-	vector<idx_t> adjacent;
-	const idx_t count = vertices.size();
-	for (auto parent : parents) {
-		idx_t i;
-		for (i = 0; i < count; i++) {
-			if (vertices[i] == parent) {
-				adjacent.push_back(i);
-				break;
-			}
+	auto pipeline_ptr = pipeline.get();
+	result.push_back(move(pipeline));
+	auto union_entry = union_pipelines.find(pipeline_ptr);
+	if (union_entry != union_pipelines.end()) {
+		auto &union_pipeline_list = union_entry->second;
+		for (auto &pipeline : union_pipeline_list) {
+			ExtractPipelines(pipeline, result);
 		}
-		D_ASSERT(i != count); // dependency must be in there somewhere
+		union_pipelines.erase(pipeline_ptr);
 	}
-
-	// mark vertex as visited and add to recursion stack
-	visited[vertex] = true;
-	recursion_stack[vertex] = true;
-
-	// recurse into adjacent vertices
-	for (const auto &i : adjacent) {
-		VerifyScheduledEventsInternal(i, vertices, visited, recursion_stack);
+	auto child_entry = child_pipelines.find(pipeline_ptr);
+	if (child_entry != child_pipelines.end()) {
+		for (auto entry = child_entry->second.rbegin(); entry != child_entry->second.rend(); ++entry) {
+			ExtractPipelines(*entry, result);
+		}
+		child_pipelines.erase(pipeline_ptr);
 	}
-
-	// remove vertex from recursion stack
-	recursion_stack[vertex] = false;
-}
-
-void Executor::AddRecursiveCTE(PhysicalOperator *rec_cte) {
-	recursive_ctes.push_back(rec_cte);
-}
-
-void Executor::ReschedulePipelines(const vector<shared_ptr<MetaPipeline>> &pipelines_p,
-                                   vector<shared_ptr<Event>> &events_p) {
-	ScheduleEventData event_data(pipelines_p, events_p, false);
-	ScheduleEventsInternal(event_data);
 }
 
 bool Executor::NextExecutor() {
@@ -275,12 +281,15 @@ void Executor::VerifyPipelines() {
 	for (auto &pipeline : pipelines) {
 		VerifyPipeline(*pipeline);
 	}
+	for (auto &pipeline : root_pipelines) {
+		VerifyPipeline(*pipeline);
+	}
 #endif
 }
 
 void Executor::Initialize(unique_ptr<PhysicalOperator> physical_plan) {
 	Reset();
-	owned_plan = std::move(physical_plan);
+	owned_plan = move(physical_plan);
 	InitializeInternal(owned_plan.get());
 }
 
@@ -300,36 +309,20 @@ void Executor::InitializeInternal(PhysicalOperator *plan) {
 		profiler->Initialize(physical_plan);
 		this->producer = scheduler.CreateProducer();
 
-		// build and ready the pipelines
+		auto root_pipeline = make_shared<Pipeline>(*this);
+		root_pipeline->sink = nullptr;
+
 		PipelineBuildState state;
-		auto root_pipeline = make_shared<MetaPipeline>(*this, state, nullptr);
-		root_pipeline->Build(physical_plan);
-		root_pipeline->Ready();
+		physical_plan->BuildPipelines(*this, *root_pipeline, state);
 
-		// ready recursive cte pipelines too
-		for (auto &rec_cte : recursive_ctes) {
-			D_ASSERT(rec_cte->type == PhysicalOperatorType::RECURSIVE_CTE);
-			auto &rec_cte_op = (PhysicalRecursiveCTE &)*rec_cte;
-			rec_cte_op.recursive_meta_pipeline->Ready();
-		}
+		this->total_pipelines = pipelines.size();
 
-		// set root pipelines, i.e., all pipelines that end in the final sink
-		root_pipeline->GetPipelines(root_pipelines, false);
 		root_pipeline_idx = 0;
+		ExtractPipelines(root_pipeline, root_pipelines);
 
-		// collect all meta-pipelines from the root pipeline
-		vector<shared_ptr<MetaPipeline>> to_schedule;
-		root_pipeline->GetMetaPipelines(to_schedule, true, true);
-
-		// number of 'PipelineCompleteEvent's is equal to the number of meta pipelines, so we have to set it here
-		total_pipelines = to_schedule.size();
-
-		// collect all pipelines from the root pipelines (recursively) for the progress bar and verify them
-		root_pipeline->GetPipelines(pipelines, true);
-
-		// finally, verify and schedule
 		VerifyPipelines();
-		ScheduleEvents(to_schedule);
+
+		ScheduleEvents();
 	}
 }
 
@@ -341,18 +334,24 @@ void Executor::CancelTasks() {
 	vector<weak_ptr<Pipeline>> weak_references;
 	{
 		lock_guard<mutex> elock(executor_lock);
-		weak_references.reserve(pipelines.size());
 		cancelled = true;
+		weak_references.reserve(pipelines.size());
 		for (auto &pipeline : pipelines) {
 			weak_references.push_back(weak_ptr<Pipeline>(pipeline));
 		}
-		for (auto op : recursive_ctes) {
-			D_ASSERT(op->type == PhysicalOperatorType::RECURSIVE_CTE);
-			auto &rec_cte = (PhysicalRecursiveCTE &)*op;
-			rec_cte.recursive_meta_pipeline.reset();
+		for (auto &kv : union_pipelines) {
+			for (auto &pipeline : kv.second) {
+				weak_references.push_back(weak_ptr<Pipeline>(pipeline));
+			}
+		}
+		for (auto &kv : child_pipelines) {
+			for (auto &pipeline : kv.second) {
+				weak_references.push_back(weak_ptr<Pipeline>(pipeline));
+			}
 		}
 		pipelines.clear();
-		root_pipelines.clear();
+		union_pipelines.clear();
+		child_pipelines.clear();
 		events.clear();
 	}
 	WorkOnTasks();
@@ -434,27 +433,25 @@ void Executor::Reset() {
 	exceptions.clear();
 	pipelines.clear();
 	events.clear();
+	union_pipelines.clear();
+	child_pipelines.clear();
 	execution_result = PendingExecutionResult::RESULT_NOT_READY;
 }
 
-shared_ptr<Pipeline> Executor::CreateChildPipeline(Pipeline *current, PhysicalOperator *op) {
+void Executor::AddChildPipeline(Pipeline *current) {
 	D_ASSERT(!current->operators.empty());
-	D_ASSERT(op->IsSource());
-	// found another operator that is a source, schedule a child pipeline
-	// 'op' is the source, and the sink is the same
+	// found another operator that is a source
+	// schedule a child pipeline
 	auto child_pipeline = make_shared<Pipeline>(*this);
 	child_pipeline->sink = current->sink;
-	child_pipeline->source = op;
+	child_pipeline->operators = current->operators;
+	child_pipeline->source = current->operators.back();
+	D_ASSERT(child_pipeline->source->IsSource());
+	child_pipeline->operators.pop_back();
 
-	// the child pipeline has the same operators up until 'op'
-	for (auto current_op : current->operators) {
-		if (current_op == op) {
-			break;
-		}
-		child_pipeline->operators.push_back(current_op);
-	}
-
-	return child_pipeline;
+	vector<Pipeline *> dependencies;
+	dependencies.push_back(current);
+	child_pipelines[current].push_back(move(child_pipeline));
 }
 
 vector<LogicalType> Executor::GetTypes() {
@@ -467,7 +464,7 @@ void Executor::PushError(PreservedError exception) {
 	// interrupt execution of any other pipelines that belong to this executor
 	context.interrupted = true;
 	// push the exception onto the stack
-	exceptions.push_back(std::move(exception));
+	exceptions.push_back(move(exception));
 }
 
 bool Executor::HasError() {
@@ -495,7 +492,6 @@ bool Executor::GetPipelinesProgress(double &current_progress) { // LCOV_EXCL_STA
 	for (auto &pipeline : pipelines) {
 		double child_percentage;
 		idx_t child_cardinality;
-
 		if (!pipeline->GetProgress(child_percentage, child_cardinality)) {
 			return false;
 		}
