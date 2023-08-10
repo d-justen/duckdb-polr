@@ -776,7 +776,7 @@ Value MaxJoinOrdersSetting::GetSetting(ClientContext &context) {
 // Dir Prefix Setting
 //===--------------------------------------------------------------------===//
 void DirPrefixSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
-	auto parameter = input.ToString();
+	auto parameter = input.ToString() + "/";
 	config.options.dir_prefix = parameter;
 }
 Value DirPrefixSetting::GetSetting(ClientContext &context) {
