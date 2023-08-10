@@ -227,10 +227,11 @@ bool POLARConfig::GenerateJoinOrders() {
 
 		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;
+		string &prefix = DBConfig::GetConfig(executor.context).options.dir_prefix;
 		char tmp[256];
 		getcwd(tmp, 256);
 
-		file.open(std::string(tmp) + "/tmp/" + filename + "-enumeration.csv");
+		file.open(std::string(tmp) + "/tmp/" + prefix + filename + "-enumeration.csv");
 
 		double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
 		file << "num_joins,enumeration_time_ms\n";
