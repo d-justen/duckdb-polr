@@ -110,6 +110,10 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 				D_ASSERT(!res->HasError());
 			}
 		}
+		if (!instance.dir_prefix.empty()) {
+			res = conn.Query("SET dir_prefix TO " + instance.dir_prefix);
+			D_ASSERT(!res->HasError());
+		}
 	}
 	virtual ~DuckDBBenchmarkState() {
 	}

@@ -1,6 +1,7 @@
 #include "duckdb/parallel/polar_pipeline_executor.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/limits.hpp"
+#include "duckdb/main/config.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -89,15 +90,16 @@ bool POLARPipelineExecutor::Execute(idx_t max_chunks) {
 		polar->multiplexer->PrintStatistics(*multiplexer_state);
 		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;
+		string &prefix = DBConfig::GetConfig(pipeline.executor.context).options.dir_prefix;
 		char tmp[256];
 		getcwd(tmp, 256);
-		file.open(std::string(tmp) + "/tmp/" + filename + ".csv");
+		file.open(std::string(tmp) + "/tmp/" + prefix + filename + ".csv");
 		polar->multiplexer->WriteLogToFile(*multiplexer_state, file);
 		file.close();
 		std::cout << filename << "\n";
 
 		std::ofstream file2;
-		file2.open(std::string(tmp) + "/tmp/" + filename + "-intms.txt");
+		file2.open(std::string(tmp) + "/tmp/" + prefix + filename + "-intms.txt");
 		file2 << num_intermediates_produced << "\n";
 		file2.close();
 	}

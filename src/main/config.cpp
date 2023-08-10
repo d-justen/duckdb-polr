@@ -66,6 +66,7 @@ static ConfigurationOption internal_options[] = {DUCKDB_GLOBAL(AccessModeSetting
                                                  DUCKDB_GLOBAL(RoutingStrategySetting),
                                                  DUCKDB_LOCAL(JoinEnumeratorSetting),
                                                  DUCKDB_LOCAL(MaxJoinOrdersSetting),
+                                                 DUCKDB_GLOBAL(DirPrefixSetting),
                                                  DUCKDB_GLOBAL_ALIAS("wal_autocheckpoint", CheckpointThresholdSetting),
                                                  DUCKDB_GLOBAL_ALIAS("worker_threads", ThreadsSetting),
                                                  FINAL_SETTING};

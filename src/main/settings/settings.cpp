@@ -772,4 +772,16 @@ Value MaxJoinOrdersSetting::GetSetting(ClientContext &context) {
 	return Value::INTEGER(config.max_join_orders);
 }
 
+//===--------------------------------------------------------------------===//
+// Dir Prefix Setting
+//===--------------------------------------------------------------------===//
+void DirPrefixSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto parameter = input.ToString();
+	config.options.dir_prefix = parameter;
+}
+Value DirPrefixSetting::GetSetting(ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return config.options.dir_prefix;
+}
+
 } // namespace duckdb

@@ -238,6 +238,7 @@ void Pipeline::Finalize(Event &event) {
 
 			std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 			std::ofstream file;
+			string &prefix = DBConfig::GetConfig(executor.context).options.dir_prefix;
 
 			auto source_str = source->ParamsToString();
 			auto source_hash = std::hash<string> {}(source_str);

@@ -109,6 +109,10 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 				D_ASSERT(!res->HasError());
 			}
 		}
+		if (!instance.dir_prefix.empty()) {
+			res = con.Query("SET dir_prefix TO " + instance.dir_prefix);
+			D_ASSERT(!res->HasError());
+		}
 	}
 
 	unique_ptr<DBConfig> GetBenchmarkConfig() {

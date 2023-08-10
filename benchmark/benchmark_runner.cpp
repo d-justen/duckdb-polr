@@ -317,6 +317,13 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				print_help();
 				exit(1);
 			}
+		} else if (StringUtil::StartsWith(arg, "--dir_prefix=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			instance.dir_prefix = splits[1];
 		} else if (StringUtil::StartsWith(arg, "--max_join_orders=")) {
 			auto splits = StringUtil::Split(arg, '=');
 			if (splits.size() != 2) {

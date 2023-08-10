@@ -138,8 +138,9 @@ struct DBConfigOptions {
 	bool enable_fsst_vectors = false;
 
 	//! POLR
-	double regret_budget = 0.2;
-	MultiplexerRouting multiplexer_routing = MultiplexerRouting::DYNAMIC;
+	double regret_budget = 0.1;
+	MultiplexerRouting multiplexer_routing = MultiplexerRouting::ADAPTIVE_REINIT;
+	string dir_prefix = "";
 
 	bool operator==(const DBConfigOptions &other) const;
 };

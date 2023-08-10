@@ -63,6 +63,7 @@ public:
 	bool caching = true;
 	string enumerator = "";
 	uint32_t max_join_orders = 24;
+	string dir_prefix = "";
 };
 
 } // namespace duckdb

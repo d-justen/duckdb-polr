@@ -356,4 +356,12 @@ struct MaxJoinOrdersSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct DirPrefixSetting {
+	static constexpr const char *Name = "dir_prefix";
+	static constexpr const char *Description = "Set the direction prefix for POLAR logging";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::VARCHAR;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static Value GetSetting(ClientContext &context);
+};
+
 } // namespace duckdb
