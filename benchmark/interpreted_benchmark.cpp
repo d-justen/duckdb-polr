@@ -118,6 +118,7 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 	unique_ptr<DBConfig> GetBenchmarkConfig() {
 		auto result = make_unique<DBConfig>();
 		result->options.load_extensions = false;
+		result->options.access_mode = AccessMode::READ_ONLY;
 		return result;
 	}
 };

@@ -244,7 +244,7 @@ void Pipeline::Finalize(Event &event) {
 			auto source_hash = std::hash<string> {}(source_str);
 			char tmp[256];
 			getcwd(tmp, 256);
-			file.open(std::string(tmp) + "/tmp/" + filename + "-" + to_string(source_hash) + ".csv");
+			file.open(std::string(tmp) + "/tmp/" + prefix + filename + "-" + to_string(source_hash) + ".csv");
 
 			double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
 			file << duration_ms;
