@@ -123,6 +123,35 @@ protected:
 	idx_t DetermineNextTupleCount() const override;
 };
 
+class ExponentialBackoffRoutingStrategyState : public RoutingStrategyState {
+public:
+	ExponentialBackoffRoutingStrategyState(vector<double> *path_resistances, idx_t max_window_size_p)
+	    : RoutingStrategyState(path_resistances), max_window_size(max_window_size_p) {
+	}
+
+	const idx_t max_window_size;
+	const idx_t init_tuple_count = 64;
+	const double resistance_tolerance = 1.1;
+	idx_t min_resistance_path_idx = -1;
+	double min_resistance = std::numeric_limits<double>::max();
+	bool init_phase_done = false;
+
+	idx_t window_offset = 0;
+	idx_t window_size = 0;
+};
+
+class ExponentialBackoffRoutingStrategy : public RoutingStrategy {
+public:
+	explicit ExponentialBackoffRoutingStrategy(vector<double> *path_resistances, idx_t max_window_size_p)
+	    : RoutingStrategy(path_resistances,
+	                      make_unique<ExponentialBackoffRoutingStrategyState>(path_resistances, max_window_size_p)) {
+	}
+
+protected:
+	idx_t DetermineNextPath() const override;
+	idx_t DetermineNextTupleCount() const override;
+};
+
 class DynamicRoutingStrategyState : public RoutingStrategyState {
 public:
 	DynamicRoutingStrategyState(vector<double> *path_resistances, double regret_budget_p)

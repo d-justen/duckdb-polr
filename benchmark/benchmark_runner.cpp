@@ -283,7 +283,7 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 
 			if (splits[1] == "alternate" || splits[1] == "adaptive_reinit" || splits[1] == "dynamic" ||
 			    splits[1] == "init_once" || splits[1] == "opportunistic" || splits[1] == "default_path" ||
-			    splits[1] == "backpressure") {
+			    splits[1] == "backpressure" || splits[1] == "exponential_backoff") {
 				instance.multiplexer_routing = splits[1];
 			} else {
 				print_help();

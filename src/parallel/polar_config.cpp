@@ -113,6 +113,12 @@ bool POLARConfig::GenerateJoinOrders() {
 	adaptive_union->op_state = adaptive_union->GetGlobalOperatorState(executor.context);
 
 	double regret_budget = DBConfig::GetConfig(executor.context).options.regret_budget;
+	if (DBConfig::GetConfig(executor.context).options.multiplexer_routing == MultiplexerRouting::EXPONENTIAL_BACKOFF) {
+		idx_t max_threads = std::min((int32_t)pipeline->source_state->MaxThreads(),
+		                             TaskScheduler::GetScheduler(executor.context).NumberOfThreads());
+		regret_budget = pipeline->source->estimated_cardinality / 10240.0 / 10 / max_threads;
+	}
+
 	multiplexer = make_unique<PhysicalMultiplexer>(prev_types, joins.front()->children[0]->estimated_cardinality,
 	                                               join_paths.size(), regret_budget, routing);
 	multiplexer->op_state = multiplexer->GetGlobalOperatorState(executor.context);

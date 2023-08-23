@@ -188,6 +188,75 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextTupleCount() const {
 	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
+idx_t ExponentialBackoffRoutingStrategy::DetermineNextPath() const {
+	auto &state = (ExponentialBackoffRoutingStrategyState &)*routing_state;
+
+	if (state.init_phase_done) {
+		auto &path_resistances = *state.path_resistances;
+
+		double current_min_resistance = path_resistances.front();
+		idx_t current_min_resistance_path_idx = 0;
+
+		for (idx_t i = 1; i < path_resistances.size(); i++) {
+			if (path_resistances[i] < current_min_resistance) {
+				current_min_resistance_path_idx = i;
+				current_min_resistance = path_resistances[i];
+			}
+		}
+
+		if (state.window_offset == 0) {
+			if (state.window_size == 0) {
+				state.window_size = 1;
+			} else if (current_min_resistance_path_idx == state.min_resistance_path_idx ||
+			           current_min_resistance * state.resistance_tolerance >=
+			               path_resistances[state.min_resistance_path_idx]) {
+				state.window_size = std::min(state.max_window_size, state.window_size * 2);
+			} else {
+				state.window_size = 1;
+			}
+		} else if (state.window_offset >= state.window_size) {
+			state.window_offset = 0;
+			state.init_phase_done = false;
+			for (idx_t i = 0; i < path_resistances.size(); i++) {
+				if (i != state.min_resistance_path_idx) {
+					path_resistances[i] = 0;
+				}
+			}
+
+			return DetermineNextPath();
+		}
+
+		state.min_resistance = current_min_resistance;
+		state.min_resistance_path_idx = current_min_resistance_path_idx;
+		return current_min_resistance_path_idx;
+	}
+
+	// Initialize the next best path
+	auto &path_resistances = *state.path_resistances;
+	for (idx_t i = 0; i < path_resistances.size(); i++) {
+		if (path_resistances[i] == 0) {
+			return i;
+		}
+	}
+
+	// Everything initialized already
+	state.init_phase_done = true;
+	return DetermineNextPath();
+}
+
+idx_t ExponentialBackoffRoutingStrategy::DetermineNextTupleCount() const {
+	auto &state = (ExponentialBackoffRoutingStrategyState &)*routing_state;
+
+	if (state.init_phase_done) {
+		state.num_cache_flushing_skips = state.window_size;
+		state.window_offset += state.window_size;
+		return state.chunk_size - state.chunk_offset;
+	}
+
+	state.num_cache_flushing_skips = 0;
+	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
+}
+
 void CalculateJoinPathWeights(const vector<double> &join_path_costs, vector<double> &path_weights,
                               double regret_budget) {
 	// Order join path costs ascending by emplacing them in an (ordered) map, with the time per tuple as key

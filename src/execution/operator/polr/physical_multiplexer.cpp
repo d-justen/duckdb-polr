@@ -45,6 +45,9 @@ public:
 		case MultiplexerRouting::BACKPRESSURE:
 			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
 			break;
+		case MultiplexerRouting::EXPONENTIAL_BACKOFF:
+			routing_strategy = make_unique<ExponentialBackoffRoutingStrategy>(&path_resistances, (idx_t)regret_budget);
+			break;
 		default:
 			D_ASSERT(false); // TODO throw
 		}

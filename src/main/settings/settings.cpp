@@ -682,6 +682,8 @@ void RoutingStrategySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, c
 		config.options.multiplexer_routing = MultiplexerRouting::DEFAULT_PATH;
 	} else if (parameter == "backpressure") {
 		config.options.multiplexer_routing = MultiplexerRouting::BACKPRESSURE;
+	} else if (parameter == "exponential_backoff") {
+		config.options.multiplexer_routing = MultiplexerRouting::EXPONENTIAL_BACKOFF;
 	} else {
 		throw InvalidInputException(
 		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
@@ -704,6 +706,8 @@ Value RoutingStrategySetting::GetSetting(ClientContext &context) {
 		return "default_path";
 	case MultiplexerRouting::BACKPRESSURE:
 		return "backpressure";
+	case MultiplexerRouting::EXPONENTIAL_BACKOFF:
+		return "exponential_backoff";
 	default:
 		throw InternalException("Unknown access mode setting");
 	}
