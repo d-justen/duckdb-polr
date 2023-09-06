@@ -84,9 +84,6 @@ bool POLARPipelineExecutor::Execute(idx_t max_chunks) {
 	auto &polar = pipeline.polar_config;
 
 	if (polar->log_tuples_routed) {
-		if (!polar->multiplexer->WasExecuted(*multiplexer_state)) {
-			return true;
-		}
 		polar->multiplexer->PrintStatistics(*multiplexer_state);
 		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;
@@ -94,7 +91,18 @@ bool POLARPipelineExecutor::Execute(idx_t max_chunks) {
 		char tmp[256];
 		getcwd(tmp, 256);
 		file.open(std::string(tmp) + "/tmp/" + prefix + filename + ".csv");
-		polar->multiplexer->WriteLogToFile(*multiplexer_state, file);
+
+		if (!polar->multiplexer->WasExecuted(*multiplexer_state)) {
+			auto routing = DBConfig::GetConfig(pipeline.executor.context).options.multiplexer_routing;
+			if (routing == MultiplexerRouting::ALTERNATE) {
+				file << "path_0\n0\n";
+			} else {
+				file << "intermediates\n0\n";
+			}
+		} else {
+			polar->multiplexer->WriteLogToFile(*multiplexer_state, file);
+		}
+
 		file.close();
 		std::cout << filename << "\n";
 
