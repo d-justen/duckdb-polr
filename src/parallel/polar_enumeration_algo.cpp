@@ -350,7 +350,7 @@ void BFSEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
 			predecessors.push_back(join_candidates.front());
 			join_orders.push_back(predecessors);
 		} else {
-			idx_t num_candidates = std::max(2, 4 - (int)predecessors.size()); // TODO: make constant
+			idx_t num_candidates = std::max(1, 4 - (int)predecessors.size()); // TODO: make constant
 			num_candidates = std::min((idx_t)num_candidates, (idx_t)join_candidates.size());
 			for (idx_t i = 0; i < num_candidates; i++) {
 				idx_t candidate = selector->SelectNextCandidate(join_candidates, joins);

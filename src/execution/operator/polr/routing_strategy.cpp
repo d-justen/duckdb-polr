@@ -329,7 +329,7 @@ idx_t DynamicRoutingStrategy::DetermineNextPath() const {
 		std::fill(state.path_weights.begin(), state.path_weights.end(), 1);
 		CalculateJoinPathWeights(*state.path_resistances, state.path_weights, state.regret_budget);
 
-		idx_t input_tuples = state.chunk_size - state.chunk_offset;
+		idx_t input_tuples = state.chunk_size * state.multiplier - state.chunk_offset;
 		idx_t remaining_tuples_sum = 0;
 		for (idx_t i = 0; i < state.path_weights.size(); i++) {
 			int remaining_tuples = state.remaining_tuples_diff[i] + std::round(state.path_weights[i] * input_tuples);
@@ -400,6 +400,7 @@ idx_t DynamicRoutingStrategy::DetermineNextPath() const {
 
 idx_t DynamicRoutingStrategy::DetermineNextTupleCount() const {
 	auto &state = (DynamicRoutingStrategyState &)*routing_state;
+	state.num_cache_flushing_skips = 0;
 
 	if (state.init_phase_done) {
 		idx_t max_remaining_tuples = state.remaining_tuples.front();
@@ -415,7 +416,9 @@ idx_t DynamicRoutingStrategy::DetermineNextTupleCount() const {
 			idx_t remaining_input_tuples = state.chunk_size - state.chunk_offset;
 
 			if (max_remaining_tuples > remaining_input_tuples) {
-				state.remaining_tuples[max_remaining_tuples_path_idx] -= remaining_input_tuples;
+				state.num_cache_flushing_skips = (max_remaining_tuples - remaining_input_tuples) / state.chunk_size;
+				state.remaining_tuples[max_remaining_tuples_path_idx] -=
+				    state.num_cache_flushing_skips * state.chunk_size + remaining_input_tuples;
 				return remaining_input_tuples;
 			}
 

@@ -161,6 +161,7 @@ public:
 		path_weights.resize(path_resistances->size(), 0);
 	}
 
+	const idx_t multiplier = 10;
 	const idx_t init_tuple_count = 16;
 	const double regret_budget;
 	bool init_phase_done = false;

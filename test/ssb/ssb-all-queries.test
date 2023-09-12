@@ -99,7 +99,7 @@ statement ok
 PRAGMA enable_polr_bushy
 
 statement ok
-SET multiplexer_routing TO adaptive_reinit
+SET multiplexer_routing TO dynamic
 
 statement ok
 SET threads TO 1
