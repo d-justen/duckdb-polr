@@ -1,0 +1,8 @@
+# name: benchmark/stack/q15/q15-730.benchmark
+# description: Run query 15-730 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q15
+QUERY_NUMBER=730
+QUERY_NUMBER_PADDED=730

@@ -1,0 +1,8 @@
+# name: benchmark/stack/q16/q16-926.benchmark
+# description: Run query 16-926 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q16
+QUERY_NUMBER=926
+QUERY_NUMBER_PADDED=926

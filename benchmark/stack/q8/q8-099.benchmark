@@ -1,0 +1,8 @@
+# name: benchmark/stack/q8/q8-099.benchmark
+# description: Run query 8-099 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q8
+QUERY_NUMBER=099
+QUERY_NUMBER_PADDED=099

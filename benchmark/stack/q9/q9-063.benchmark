@@ -1,0 +1,8 @@
+# name: benchmark/stack/q9/q9-063.benchmark
+# description: Run query 9-063 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q9
+QUERY_NUMBER=063
+QUERY_NUMBER_PADDED=063

@@ -1,0 +1,8 @@
+# name: benchmark/stack/q2/q2-016.benchmark
+# description: Run query 2-016 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q2
+QUERY_NUMBER=016
+QUERY_NUMBER_PADDED=016

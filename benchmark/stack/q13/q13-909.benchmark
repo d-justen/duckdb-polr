@@ -1,0 +1,8 @@
+# name: benchmark/stack/q13/q13-909.benchmark
+# description: Run query 13-909 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q13
+QUERY_NUMBER=909
+QUERY_NUMBER_PADDED=909

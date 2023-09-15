@@ -1,0 +1,14 @@
+# name: ${FILE_PATH}
+# description: ${DESCRIPTION}
+# group: [stack]
+
+name Q${QUERY_NUMBER_PADDED}
+group stack
+
+#require httpfs
+
+cache stack.duckdb
+
+load benchmark/stack/init/load.sql
+
+run benchmark/stack/queries/${QUERY_GROUP}/${QUERY_GROUP}-${QUERY_NUMBER_PADDED}.sql

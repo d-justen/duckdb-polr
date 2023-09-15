@@ -1,0 +1,8 @@
+# name: benchmark/stack/q7/q7-044.benchmark
+# description: Run query 7-044 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q7
+QUERY_NUMBER=044
+QUERY_NUMBER_PADDED=044

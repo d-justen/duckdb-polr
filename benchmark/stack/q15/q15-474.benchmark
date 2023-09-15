@@ -1,0 +1,8 @@
+# name: benchmark/stack/q15/q15-474.benchmark
+# description: Run query 15-474 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q15
+QUERY_NUMBER=474
+QUERY_NUMBER_PADDED=474

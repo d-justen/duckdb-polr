@@ -1,0 +1,8 @@
+# name: benchmark/stack/q13/q13-421.benchmark
+# description: Run query 13-421 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q13
+QUERY_NUMBER=421
+QUERY_NUMBER_PADDED=421

@@ -1,0 +1,8 @@
+# name: benchmark/stack/q6/q6-077.benchmark
+# description: Run query 6-077 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q6
+QUERY_NUMBER=077
+QUERY_NUMBER_PADDED=077

@@ -1,0 +1,8 @@
+# name: benchmark/stack/q12/q12-802.benchmark
+# description: Run query 12-802 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q12
+QUERY_NUMBER=802
+QUERY_NUMBER_PADDED=802

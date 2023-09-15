@@ -1,0 +1,8 @@
+# name: benchmark/stack/q1/q1-078.benchmark
+# description: Run query 1-078 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q1
+QUERY_NUMBER=078
+QUERY_NUMBER_PADDED=078

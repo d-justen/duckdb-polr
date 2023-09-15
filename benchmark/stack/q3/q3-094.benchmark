@@ -1,0 +1,8 @@
+# name: benchmark/stack/q3/q3-094.benchmark
+# description: Run query 3-094 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q3
+QUERY_NUMBER=094
+QUERY_NUMBER_PADDED=094

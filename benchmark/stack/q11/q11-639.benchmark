@@ -1,0 +1,8 @@
+# name: benchmark/stack/q11/q11-639.benchmark
+# description: Run query 11-639 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q11
+QUERY_NUMBER=639
+QUERY_NUMBER_PADDED=639

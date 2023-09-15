@@ -1,0 +1,8 @@
+# name: benchmark/stack/q7/q7-024.benchmark
+# description: Run query 7-024 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q7
+QUERY_NUMBER=024
+QUERY_NUMBER_PADDED=024

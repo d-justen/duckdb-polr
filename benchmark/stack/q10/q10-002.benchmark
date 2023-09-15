@@ -1,0 +1,8 @@
+# name: benchmark/stack/q10/q10-002.benchmark
+# description: Run query 10-002 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q10
+QUERY_NUMBER=002
+QUERY_NUMBER_PADDED=002

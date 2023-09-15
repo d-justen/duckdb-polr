@@ -1,0 +1,8 @@
+# name: benchmark/stack/q11/q11-182.benchmark
+# description: Run query 11-182 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q11
+QUERY_NUMBER=182
+QUERY_NUMBER_PADDED=182

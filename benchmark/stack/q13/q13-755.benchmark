@@ -1,0 +1,8 @@
+# name: benchmark/stack/q13/q13-755.benchmark
+# description: Run query 13-755 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q13
+QUERY_NUMBER=755
+QUERY_NUMBER_PADDED=755

@@ -1,0 +1,8 @@
+# name: benchmark/stack/q9/q9-020.benchmark
+# description: Run query 9-020 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q9
+QUERY_NUMBER=020
+QUERY_NUMBER_PADDED=020

@@ -1,0 +1,8 @@
+# name: benchmark/stack/q9/q9-031.benchmark
+# description: Run query 9-031 from the stack benchmark
+# group: [stack]
+
+template benchmark/stack/stack.benchmark.in
+QUERY_GROUP=q9
+QUERY_NUMBER=031
+QUERY_NUMBER_PADDED=031
