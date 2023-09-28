@@ -74,6 +74,7 @@ public:
 
 	shared_ptr<POLARConfig> polar_config;
 	bool is_backpressure_pipeline = false;
+	bool is_lip_pipeline = false;
 	unique_ptr<vector<idx_t>> backpressure_join_order;
 
 public:

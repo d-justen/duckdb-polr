@@ -1,8 +1,0 @@
-# name: benchmark/stack/q2/q2-088.benchmark
-# description: Run query 2-088 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q2
-QUERY_NUMBER=088
-QUERY_NUMBER_PADDED=088

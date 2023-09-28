@@ -49,8 +49,51 @@ void PhysicalJoin::BuildJoinPipelines(Executor &executor, Pipeline &current, Pip
 			auto &hash_join_op = (PhysicalHashJoin &)join_op;
 			hash_join_op.can_go_external = !state.recursive_cte && !IsRightOuterJoin(join_op.join_type) &&
 			                               join_op.join_type != JoinType::ANTI && join_op.join_type != JoinType::MARK;
-			if (hash_join_op.can_go_external) {
+			if (hash_join_op.can_go_external && !executor.context.config.enable_polr) {
 				add_child_pipeline = true;
+			}
+			if (executor.context.config.lip) {
+				if (hash_join_op.children[1]->type != PhysicalOperatorType::TABLE_SCAN) {
+					hash_join_op.build_bloom_filter = true;
+				} else {
+					auto &scan = (PhysicalTableScan &)*hash_join_op.children[1];
+					if (scan.table_filters && !scan.table_filters->filters.empty()) {
+						hash_join_op.build_bloom_filter = true;
+					}
+				}
+
+				PhysicalOperator *leftmost_child = &*hash_join_op.children[0];
+				while (!leftmost_child->children.empty()) {
+					leftmost_child = &*leftmost_child->children[0];
+				}
+
+				// Check if probe column comes from source table
+				idx_t max_index = 0;
+
+				for (auto &condition : hash_join_op.conditions) {
+					auto *left_expr = &*condition.left;
+					if (left_expr->type != ExpressionType::BOUND_REF) {
+						if (left_expr->type != ExpressionType::CAST) {
+							max_index = idx_t(-1);
+							break;
+						}
+						auto &cast_expression = dynamic_cast<BoundCastExpression &>(*left_expr);
+						left_expr = &*cast_expression.child;
+					}
+
+					auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*left_expr);
+					if (left_bound_expression.index > max_index) {
+						max_index = left_bound_expression.index;
+					}
+				}
+
+				if (max_index > leftmost_child->GetTypes().size() - 1) {
+					hash_join_op.build_bloom_filter = false;
+				}
+
+				if (hash_join_op.conditions.size() > 1) {
+					hash_join_op.build_bloom_filter = false;
+				}
 			}
 		}
 

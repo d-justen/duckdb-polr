@@ -85,6 +85,7 @@ struct ClientConfig {
 	bool measure_polr_pipeline = false;
 	bool greedy_ordering_ldt = false;
 	bool caching = true;
+	bool lip = false;
 	JoinEnumerator join_enumerator = JoinEnumerator::BFS_MIN_CARD;
 	idx_t max_join_orders = 24;
 

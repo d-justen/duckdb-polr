@@ -1,8 +1,0 @@
-# name: benchmark/stack/q7/q7-065.benchmark
-# description: Run query 7-065 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q7
-QUERY_NUMBER=065
-QUERY_NUMBER_PADDED=065

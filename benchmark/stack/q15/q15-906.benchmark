@@ -1,8 +1,0 @@
-# name: benchmark/stack/q15/q15-906.benchmark
-# description: Run query 15-906 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q15
-QUERY_NUMBER=906
-QUERY_NUMBER_PADDED=906

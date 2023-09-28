@@ -1,8 +1,0 @@
-# name: benchmark/stack/q8/q8-074.benchmark
-# description: Run query 8-074 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q8
-QUERY_NUMBER=074
-QUERY_NUMBER_PADDED=074

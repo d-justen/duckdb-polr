@@ -52,6 +52,7 @@ public:
 	bool can_go_external;
 
 	bool is_polr_root_join = false;
+	bool build_bloom_filter = false;
 
 public:
 	// Operator Interface
@@ -60,6 +61,7 @@ public:
 	                                                       std::map<idx_t, idx_t> &bindings) const;
 	OperatorResultType Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
 	                           GlobalOperatorState &gstate, OperatorState &state) const override;
+	void ProbeBloomFilter(DataChunk &input, DataChunk &chunk, OperatorState &state_p) const;
 
 	bool ParallelOperator() const override {
 		return true;

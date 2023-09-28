@@ -1,8 +1,0 @@
-# name: benchmark/stack/q15/q15-401.benchmark
-# description: Run query 15-401 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q15
-QUERY_NUMBER=401
-QUERY_NUMBER_PADDED=401

@@ -3,6 +3,7 @@
 #include "duckdb/common/types/column_data_collection.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/execution/operator/join/bloom_filter.hpp"
 #include "duckdb/function/aggregate/distributive_functions.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/query_profiler.hpp"
@@ -53,6 +54,15 @@ public:
 	HashJoinGlobalSinkState(const PhysicalHashJoin &op, ClientContext &context)
 	    : finalized(false), scanned_data(false) {
 		hash_table = op.InitializeHashTable(context);
+		if (op.build_bloom_filter) {
+			bloom_parameters params;
+			params.projected_element_count = op.estimated_cardinality;
+			params.maximum_size = 10 * op.estimated_cardinality;
+			params.maximum_number_of_hashes = 1;
+			D_ASSERT(!!params);
+			params.compute_optimal_parameters();
+			bfilter = make_unique<bloom_filter>(params);
+		}
 
 		// for perfect hash join
 		perfect_join_executor = make_unique<PerfectHashJoinExecutor>(op, *hash_table, op.perfect_join_statistics);
@@ -76,6 +86,7 @@ public:
 public:
 	//! Global HT used by the join
 	unique_ptr<JoinHashTable> hash_table;
+	unique_ptr<bloom_filter> bfilter;
 	//! The perfect hash join executor (if any)
 	unique_ptr<PerfectHashJoinExecutor> perfect_join_executor;
 	//! Whether or not the hash table has been finalized
@@ -89,6 +100,7 @@ public:
 
 	//! Hash tables built by each thread
 	mutex lock;
+	vector<unique_ptr<bloom_filter>> local_bfilters;
 	vector<unique_ptr<JoinHashTable>> local_hash_tables;
 
 	//! Excess probe data gathered during Sink
@@ -113,6 +125,15 @@ public:
 		join_keys.Initialize(allocator, op.condition_types);
 
 		hash_table = op.InitializeHashTable(context);
+		if (op.build_bloom_filter) {
+			bloom_parameters params;
+			params.projected_element_count = op.estimated_cardinality;
+			params.maximum_size = 10 * op.estimated_cardinality;
+			params.maximum_number_of_hashes = 1;
+			D_ASSERT(!!params);
+			params.compute_optimal_parameters();
+			bfilter = make_unique<bloom_filter>(params);
+		}
 	}
 
 public:
@@ -122,6 +143,7 @@ public:
 
 	//! Thread-local HT
 	unique_ptr<JoinHashTable> hash_table;
+	unique_ptr<bloom_filter> bfilter;
 };
 
 unique_ptr<JoinHashTable> PhysicalHashJoin::InitializeHashTable(ClientContext &context) const {
@@ -181,6 +203,18 @@ unique_ptr<LocalSinkState> PhysicalHashJoin::GetLocalSinkState(ExecutionContext 
 	return make_unique<HashJoinLocalSinkState>(*this, context.client);
 }
 
+template <class T>
+void InsertBloom(Vector &input, idx_t count, bloom_filter &bf) {
+	UnifiedVectorFormat idata;
+	input.ToUnifiedFormat(count, idata);
+	auto *data = (T *)idata.data;
+	auto *sel = idata.sel;
+	for (idx_t i = 0; i < count; i++) {
+		auto entry = data[sel->get_index(i)];
+		bf.insert(data[sel->get_index(i)]);
+	}
+}
+
 SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, GlobalSinkState &gstate_p, LocalSinkState &lstate_p,
                                       DataChunk &input) const {
 	auto &gstate = (HashJoinGlobalSinkState &)gstate_p;
@@ -189,6 +223,40 @@ SinkResultType PhysicalHashJoin::Sink(ExecutionContext &context, GlobalSinkState
 	// resolve the join keys for the right chunk
 	lstate.join_keys.Reset();
 	lstate.build_executor.Execute(input, lstate.join_keys);
+
+	if (build_bloom_filter && lstate.join_keys.ColumnCount() == 1) {
+		auto type = lstate.join_keys.data[0].GetType().InternalType();
+		switch (type) {
+		case PhysicalType::BOOL:
+		case PhysicalType::INT8:
+			InsertBloom<int8_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		case PhysicalType::INT16:
+			InsertBloom<int16_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		case PhysicalType::INT32:
+			InsertBloom<int32_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		case PhysicalType::INT64:
+			InsertBloom<int64_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		case PhysicalType::UINT8:
+			InsertBloom<uint8_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		case PhysicalType::UINT16:
+			InsertBloom<uint16_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		case PhysicalType::UINT32:
+			InsertBloom<uint32_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		case PhysicalType::UINT64:
+			InsertBloom<uint64_t>(lstate.join_keys.data[0], lstate.join_keys.size(), *lstate.bfilter);
+			break;
+		default:
+			break;
+		}
+	}
+
 	// build the HT
 	auto &ht = *lstate.hash_table;
 	if (!right_projection_map.empty()) {
@@ -224,6 +292,9 @@ void PhysicalHashJoin::Combine(ExecutionContext &context, GlobalSinkState &gstat
 	if (lstate.hash_table) {
 		lock_guard<mutex> local_ht_lock(gstate.lock);
 		gstate.local_hash_tables.push_back(move(lstate.hash_table));
+		if (build_bloom_filter) {
+			gstate.local_bfilters.push_back(move(lstate.bfilter));
+		}
 	}
 	auto &client_profiler = QueryProfiler::Get(context.client);
 	context.thread.profiler.Flush(this, &lstate.build_executor, "build_executor", 1);
@@ -381,6 +452,14 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 		sink.local_hash_tables.clear();
 	}
 
+	if (build_bloom_filter) {
+		auto &sink_bfilter = *sink.bfilter;
+		for (auto &bfilter : sink.local_bfilters) {
+			sink_bfilter |= *bfilter;
+		}
+		sink.local_bfilters.clear();
+	}
+
 	// check for possible perfect hash table
 	auto use_perfect_hash = sink.perfect_join_executor->CanDoPerfectHashJoin();
 	if (use_perfect_hash) {
@@ -409,6 +488,8 @@ public:
 	}
 
 	DataChunk join_keys;
+	DataChunk bloom_keys;
+	SelectionVector sel;
 	ExpressionExecutor probe_executor;
 	unique_ptr<JoinHashTable::ScanStructure> scan_structure;
 	unique_ptr<OperatorState> perfect_hash_join_state;
@@ -429,6 +510,15 @@ unique_ptr<OperatorState> PhysicalHashJoin::GetOperatorState(ExecutionContext &c
 	auto &allocator = Allocator::Get(context.client);
 	auto &sink = (HashJoinGlobalSinkState &)*sink_state;
 	auto state = make_unique<HashJoinOperatorState>(allocator);
+	if (build_bloom_filter) {
+		state->sel.Initialize();
+		state->bloom_keys.Initialize(allocator, condition_types);
+		if (sink.perfect_join_executor) {
+			for (auto &cond : conditions) {
+				state->probe_executor.AddExpression(*cond.left);
+			}
+		}
+	}
 	if (sink.perfect_join_executor) {
 		state->perfect_hash_join_state = sink.perfect_join_executor->GetOperatorState(context);
 	} else {
@@ -454,6 +544,15 @@ unique_ptr<OperatorState> PhysicalHashJoin::GetOperatorStateWithBindings(Executi
 	auto &allocator = Allocator::Get(context.client);
 	auto &sink = (HashJoinGlobalSinkState &)*sink_state;
 	auto state = make_unique<HashJoinOperatorState>(allocator);
+	if (build_bloom_filter) {
+		state->sel.Initialize();
+		state->bloom_keys.Initialize(allocator, condition_types);
+		if (sink.perfect_join_executor) {
+			for (auto &cond : conditions) {
+				state->probe_executor.AddExpression(*cond.left);
+			}
+		}
+	}
 	if (sink.perfect_join_executor) {
 		state->perfect_hash_join_state = sink.perfect_join_executor->GetOperatorStateWithBindings(context, bindings);
 	} else {
@@ -478,13 +577,73 @@ unique_ptr<OperatorState> PhysicalHashJoin::GetOperatorStateWithBindings(Executi
 	return move(state);
 }
 
+template <class T>
+void ProbeBloom(Vector &keys, DataChunk &input, DataChunk &chunk, SelectionVector &sel, idx_t count, bloom_filter &bf) {
+	UnifiedVectorFormat idata;
+	keys.ToUnifiedFormat(count, idata);
+	auto *data = (T *)idata.data;
+	auto *lsel = idata.sel;
+	auto *sel_vector = sel.data();
+
+	idx_t tuple_count = 0;
+	for (idx_t i = 0; i < count; i++) {
+		auto entry = data[lsel->get_index(i)];
+		if (bf.contains(data[lsel->get_index(i)])) {
+			sel_vector[tuple_count++] = i;
+		}
+	}
+
+	if (tuple_count > 0) {
+		chunk.Slice(input, sel, tuple_count);
+	}
+}
+
+void PhysicalHashJoin::ProbeBloomFilter(DataChunk &input, DataChunk &chunk, OperatorState &state_p) const {
+	auto &state = (HashJoinOperatorState &)state_p;
+	auto &sink = (HashJoinGlobalSinkState &)*sink_state;
+
+	D_ASSERT(state.probe_executor.expressions.size() == 1); // TODO: just skip if more than 1
+	state.bloom_keys.Reset();
+	state.probe_executor.Execute(input, state.bloom_keys);
+
+	auto type = state.bloom_keys.data[0].GetType().InternalType();
+	switch (type) {
+	case PhysicalType::BOOL:
+	case PhysicalType::INT8:
+		ProbeBloom<int8_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	case PhysicalType::INT16:
+		ProbeBloom<int16_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	case PhysicalType::INT32:
+		ProbeBloom<int32_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	case PhysicalType::INT64:
+		ProbeBloom<int64_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	case PhysicalType::UINT8:
+		ProbeBloom<uint8_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	case PhysicalType::UINT16:
+		ProbeBloom<uint16_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	case PhysicalType::UINT32:
+		ProbeBloom<uint32_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	case PhysicalType::UINT64:
+		ProbeBloom<uint64_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		break;
+	default:
+		break;
+	}
+}
+
 OperatorResultType PhysicalHashJoin::Execute(ExecutionContext &context, DataChunk &input, DataChunk &chunk,
                                              GlobalOperatorState &gstate, OperatorState &state_p) const {
 	auto &state = (HashJoinOperatorState &)state_p;
 	auto &sink = (HashJoinGlobalSinkState &)*sink_state;
 	D_ASSERT(sink.finalized);
 	D_ASSERT(!sink.scanned_data);
-
 	if (sink.hash_table->Count() == 0 && EmptyResultIfRHSIsEmpty()) {
 		return OperatorResultType::FINISHED;
 	}

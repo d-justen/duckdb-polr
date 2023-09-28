@@ -1,8 +1,0 @@
-# name: benchmark/stack/q4/q4-087.benchmark
-# description: Run query 4-087 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q4
-QUERY_NUMBER=087
-QUERY_NUMBER_PADDED=087

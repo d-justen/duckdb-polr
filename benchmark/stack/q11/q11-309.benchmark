@@ -1,8 +1,0 @@
-# name: benchmark/stack/q11/q11-309.benchmark
-# description: Run query 11-309 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q11
-QUERY_NUMBER=309
-QUERY_NUMBER_PADDED=309

@@ -203,6 +203,14 @@ static void PragmaDisableCaching(ClientContext &context, const FunctionParameter
 	ClientConfig::GetConfig(context).caching = false;
 }
 
+static void PragmaEnableLIP(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).lip = true;
+}
+
+static void PragmaDisableLIP(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).lip = false;
+}
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -270,6 +278,9 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_caching", PragmaEnableCaching));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_caching", PragmaDisableCaching));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_lip", PragmaEnableLIP));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_lip", PragmaDisableLIP));
 }
 
 } // namespace duckdb

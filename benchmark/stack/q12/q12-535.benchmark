@@ -1,8 +1,0 @@
-# name: benchmark/stack/q12/q12-535.benchmark
-# description: Run query 12-535 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q12
-QUERY_NUMBER=535
-QUERY_NUMBER_PADDED=535

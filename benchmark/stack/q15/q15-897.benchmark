@@ -1,8 +1,0 @@
-# name: benchmark/stack/q15/q15-897.benchmark
-# description: Run query 15-897 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q15
-QUERY_NUMBER=897
-QUERY_NUMBER_PADDED=897

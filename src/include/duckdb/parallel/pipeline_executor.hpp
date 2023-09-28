@@ -84,6 +84,14 @@ protected:
 	//! Cached chunks for any operators that require caching
 	vector<unique_ptr<DataChunk>> cached_chunks;
 
+	vector<unique_ptr<DataChunk>> lip_chunks;
+	vector<idx_t> lip_join_idxs;
+	using LIPCount = idx_t;
+	using LIPMiss = idx_t;
+	unordered_map<idx_t, pair<LIPCount, LIPMiss>> lip_statistics;
+	idx_t lip_counter = 0;
+
+	static constexpr const idx_t LIP_THRESHOLD = 64;
 	static constexpr const idx_t CACHE_THRESHOLD = 64;
 
 protected:

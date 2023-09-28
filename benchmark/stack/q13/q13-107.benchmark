@@ -1,8 +1,0 @@
-# name: benchmark/stack/q13/q13-107.benchmark
-# description: Run query 13-107 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q13
-QUERY_NUMBER=107
-QUERY_NUMBER_PADDED=107

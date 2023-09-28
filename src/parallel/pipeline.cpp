@@ -197,6 +197,17 @@ void Pipeline::Ready() {
 	}
 	ready = true;
 	std::reverse(operators.begin(), operators.end());
+	if (executor.context.config.lip) {
+		for (auto op : operators) {
+			if (op->type == PhysicalOperatorType::HASH_JOIN) {
+				auto &hj = (PhysicalHashJoin &)*op;
+				if (hj.build_bloom_filter) {
+					is_lip_pipeline = true;
+				}
+			}
+		}
+	}
+
 	Reset();
 
 	if (executor.context.config.enable_polr || executor.context.config.measure_polr_pipeline) {

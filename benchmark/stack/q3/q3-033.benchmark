@@ -1,8 +1,0 @@
-# name: benchmark/stack/q3/q3-033.benchmark
-# description: Run query 3-033 from the stack benchmark
-# group: [stack]
-
-template benchmark/stack/stack.benchmark.in
-QUERY_GROUP=q3
-QUERY_NUMBER=033
-QUERY_NUMBER_PADDED=033
