@@ -53,6 +53,7 @@ public:
 
 	bool is_polr_root_join = false;
 	bool build_bloom_filter = false;
+	idx_t bloom_probe_idx;
 
 public:
 	// Operator Interface

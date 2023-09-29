@@ -1,4 +1,5 @@
 #include "duckdb/execution/operator/join/physical_comparison_join.hpp"
+#include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/common/types/chunk_collection.hpp"
 
 namespace duckdb {
@@ -23,6 +24,7 @@ PhysicalComparisonJoin::PhysicalComparisonJoin(LogicalOperator &op, PhysicalOper
 	}
 }
 
+class PhysicalHashJoin;
 string PhysicalComparisonJoin::ParamsToString() const {
 	string extra_info = JoinTypeToString(join_type) + "\n";
 	for (auto &it : conditions) {

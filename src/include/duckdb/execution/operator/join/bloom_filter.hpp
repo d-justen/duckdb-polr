@@ -164,7 +164,8 @@ public:
 
 		generate_unique_salt();
 
-		bit_table_.resize(table_size_ / bits_per_char, static_cast<unsigned char>(0x00));
+		bit_table_.resize(std::ceil(static_cast<double>(table_size_)) / bits_per_char,
+		                  static_cast<unsigned char>(0x00));
 	}
 
 	bloom_filter(const bloom_filter &filter) {

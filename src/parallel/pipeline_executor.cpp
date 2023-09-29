@@ -395,9 +395,9 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 
 void PipelineExecutor::FetchFromSource(DataChunk &result) {
 	D_ASSERT(in_process_operators.empty());
+	StartOperator(pipeline.source);
 
 	bool fetch_data = true;
-
 	while (fetch_data) {
 		fetch_data = pipeline.is_lip_pipeline;
 
@@ -406,7 +406,6 @@ void PipelineExecutor::FetchFromSource(DataChunk &result) {
 			source_result.Reset();
 		}
 
-		StartOperator(pipeline.source);
 		auto &global_source_state =
 		    pipeline.is_backpressure_pipeline ? *pipeline.polar_config->source_state : *pipeline.source_state;
 		pipeline.source->GetData(context, source_result, global_source_state, *local_source_state);
@@ -418,7 +417,6 @@ void PipelineExecutor::FetchFromSource(DataChunk &result) {
 			         local_sink_state->batch_index == DConstants::INVALID_INDEX);
 			local_sink_state->batch_index = next_batch_index;
 		}
-		EndOperator(pipeline.source, &source_result);
 
 		if (source_result.size() == 0) {
 			break;
@@ -463,6 +461,7 @@ void PipelineExecutor::FetchFromSource(DataChunk &result) {
 			fetch_data = result.size() == 0;
 		}
 	}
+	EndOperator(pipeline.source, &result);
 }
 
 void PipelineExecutor::InitializeChunk(DataChunk &chunk) {

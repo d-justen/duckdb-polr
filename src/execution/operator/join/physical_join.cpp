@@ -1,6 +1,7 @@
 #include "duckdb/execution/operator/join/physical_join.hpp"
 
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
+#include "duckdb/execution/operator/projection/physical_projection.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 
 namespace duckdb {
@@ -52,7 +53,8 @@ void PhysicalJoin::BuildJoinPipelines(Executor &executor, Pipeline &current, Pip
 			if (hash_join_op.can_go_external && !executor.context.config.enable_polr) {
 				add_child_pipeline = true;
 			}
-			if (executor.context.config.lip) {
+			if (executor.context.config.lip && hash_join_op.join_type != JoinType::MARK &&
+			    hash_join_op.conditions.size() == 1) {
 				if (hash_join_op.children[1]->type != PhysicalOperatorType::TABLE_SCAN) {
 					hash_join_op.build_bloom_filter = true;
 				} else {
@@ -62,37 +64,47 @@ void PhysicalJoin::BuildJoinPipelines(Executor &executor, Pipeline &current, Pip
 					}
 				}
 
+				auto *left_expr = &*hash_join_op.conditions[0].left;
+				idx_t probe_idx = 0;
+
+				if (left_expr->type == ExpressionType::CAST) {
+					left_expr = &*(dynamic_cast<BoundCastExpression *>(left_expr)->child);
+				}
+
+				if (left_expr->type == ExpressionType::BOUND_REF) {
+					auto *ref_expression = dynamic_cast<BoundReferenceExpression *>(left_expr);
+					probe_idx = ref_expression->index;
+				} else {
+					hash_join_op.build_bloom_filter = false;
+				}
+
 				PhysicalOperator *leftmost_child = &*hash_join_op.children[0];
-				while (!leftmost_child->children.empty()) {
+				while (hash_join_op.build_bloom_filter && !leftmost_child->children.empty()) {
+					if (leftmost_child->type == PhysicalOperatorType::PROJECTION) {
+						auto *proj = (PhysicalProjection *)leftmost_child;
+						if (probe_idx >= proj->select_list.size()) {
+							hash_join_op.build_bloom_filter = false;
+						} else {
+							Expression *expr = &*proj->select_list[probe_idx];
+							if (expr->type == ExpressionType::CAST) {
+								auto *cast = dynamic_cast<BoundCastExpression *>(&*proj->select_list[probe_idx]);
+								expr = &*cast->child;
+							}
+							if (expr->type == ExpressionType::BOUND_REF) {
+								auto *ref = dynamic_cast<BoundReferenceExpression *>(expr);
+								probe_idx = ref->index;
+							} else {
+								hash_join_op.build_bloom_filter = false;
+							}
+						}
+					}
 					leftmost_child = &*leftmost_child->children[0];
 				}
 
-				// Check if probe column comes from source table
-				idx_t max_index = 0;
-
-				for (auto &condition : hash_join_op.conditions) {
-					auto *left_expr = &*condition.left;
-					if (left_expr->type != ExpressionType::BOUND_REF) {
-						if (left_expr->type != ExpressionType::CAST) {
-							max_index = idx_t(-1);
-							break;
-						}
-						auto &cast_expression = dynamic_cast<BoundCastExpression &>(*left_expr);
-						left_expr = &*cast_expression.child;
-					}
-
-					auto &left_bound_expression = dynamic_cast<BoundReferenceExpression &>(*left_expr);
-					if (left_bound_expression.index > max_index) {
-						max_index = left_bound_expression.index;
-					}
-				}
-
-				if (max_index > leftmost_child->GetTypes().size() - 1) {
+				if (probe_idx >= leftmost_child->GetTypes().size()) {
 					hash_join_op.build_bloom_filter = false;
-				}
-
-				if (hash_join_op.conditions.size() > 1) {
-					hash_join_op.build_bloom_filter = false;
+				} else {
+					hash_join_op.bloom_probe_idx = probe_idx;
 				}
 			}
 		}

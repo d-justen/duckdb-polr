@@ -57,7 +57,7 @@ public:
 		if (op.build_bloom_filter) {
 			bloom_parameters params;
 			params.projected_element_count = op.estimated_cardinality;
-			params.maximum_size = 10 * op.estimated_cardinality;
+			params.maximum_size = 8 * op.estimated_cardinality;
 			params.maximum_number_of_hashes = 1;
 			D_ASSERT(!!params);
 			params.compute_optimal_parameters();
@@ -128,7 +128,7 @@ public:
 		if (op.build_bloom_filter) {
 			bloom_parameters params;
 			params.projected_element_count = op.estimated_cardinality;
-			params.maximum_size = 10 * op.estimated_cardinality;
+			params.maximum_size = 8 * op.estimated_cardinality;
 			params.maximum_number_of_hashes = 1;
 			D_ASSERT(!!params);
 			params.compute_optimal_parameters();
@@ -210,7 +210,6 @@ void InsertBloom(Vector &input, idx_t count, bloom_filter &bf) {
 	auto *data = (T *)idata.data;
 	auto *sel = idata.sel;
 	for (idx_t i = 0; i < count; i++) {
-		auto entry = data[sel->get_index(i)];
 		bf.insert(data[sel->get_index(i)]);
 	}
 }
@@ -587,7 +586,6 @@ void ProbeBloom(Vector &keys, DataChunk &input, DataChunk &chunk, SelectionVecto
 
 	idx_t tuple_count = 0;
 	for (idx_t i = 0; i < count; i++) {
-		auto entry = data[lsel->get_index(i)];
 		if (bf.contains(data[lsel->get_index(i)])) {
 			sel_vector[tuple_count++] = i;
 		}
@@ -603,35 +601,33 @@ void PhysicalHashJoin::ProbeBloomFilter(DataChunk &input, DataChunk &chunk, Oper
 	auto &sink = (HashJoinGlobalSinkState &)*sink_state;
 
 	D_ASSERT(state.probe_executor.expressions.size() == 1); // TODO: just skip if more than 1
-	state.bloom_keys.Reset();
-	state.probe_executor.Execute(input, state.bloom_keys);
 
 	auto type = state.bloom_keys.data[0].GetType().InternalType();
 	switch (type) {
 	case PhysicalType::BOOL:
 	case PhysicalType::INT8:
-		ProbeBloom<int8_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<int8_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	case PhysicalType::INT16:
-		ProbeBloom<int16_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<int16_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	case PhysicalType::INT32:
-		ProbeBloom<int32_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<int32_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	case PhysicalType::INT64:
-		ProbeBloom<int64_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<int64_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	case PhysicalType::UINT8:
-		ProbeBloom<uint8_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<uint8_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	case PhysicalType::UINT16:
-		ProbeBloom<uint16_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<uint16_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	case PhysicalType::UINT32:
-		ProbeBloom<uint32_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<uint32_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	case PhysicalType::UINT64:
-		ProbeBloom<uint64_t>(state.bloom_keys.data[0], input, chunk, state.sel, state.bloom_keys.size(), *sink.bfilter);
+		ProbeBloom<uint64_t>(input.data[bloom_probe_idx], input, chunk, state.sel, input.size(), *sink.bfilter);
 		break;
 	default:
 		break;
