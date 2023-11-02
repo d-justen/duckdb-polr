@@ -290,8 +290,8 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_lip", PragmaEnableLIP));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_lip", PragmaDisableLIP));
 
-	set.AddFunction(PragmaFunction::PragmaStatement("enable_time_resistance", PragmaEnableLIP));
-	set.AddFunction(PragmaFunction::PragmaStatement("disable_time_resistance", PragmaDisableLIP));
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_time_resistance", PragmaEnableTimeResistance));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_time_resistance", PragmaDisableTimeResistance));
 }
 
 } // namespace duckdb
