@@ -144,13 +144,16 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			state.window_offset = 0;
 
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
-				if (!state.visited_paths[i]) {
+				/*if (!state.visited_paths[i]) {
 					path_resistances[i] = 0;
 					state.init_phase_done = false;
 				} else {
 					state.visited_paths[i] = false;
-				}
+				}*/
+				path_resistances[i] = 0;
+				state.visited_paths[i] = false;
 			}
+			state.init_phase_done = false;
 
 			return DetermineNextPath();
 		}
