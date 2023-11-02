@@ -211,6 +211,14 @@ static void PragmaDisableLIP(ClientContext &context, const FunctionParameters &p
 	ClientConfig::GetConfig(context).lip = false;
 }
 
+static void PragmaEnableTimeResistance(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).time_resistance = true;
+}
+
+static void PragmaDisableTimeResistance(ClientContext &context, const FunctionParameters &parameters) {
+	ClientConfig::GetConfig(context).time_resistance = false;
+}
+
 void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 	RegisterEnableProfiling(set);
 
@@ -281,6 +289,9 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
 
 	set.AddFunction(PragmaFunction::PragmaStatement("enable_lip", PragmaEnableLIP));
 	set.AddFunction(PragmaFunction::PragmaStatement("disable_lip", PragmaDisableLIP));
+
+	set.AddFunction(PragmaFunction::PragmaStatement("enable_time_resistance", PragmaEnableLIP));
+	set.AddFunction(PragmaFunction::PragmaStatement("disable_time_resistance", PragmaDisableLIP));
 }
 
 } // namespace duckdb

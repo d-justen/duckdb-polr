@@ -5,11 +5,9 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <map>
 #include <iostream>
 #include <fstream>
-#include <queue>
 
 namespace duckdb {
 
@@ -68,13 +66,22 @@ public:
 
 	idx_t num_cache_flushing_skips = 0;
 
+	bool use_time_resistance = false;
+	std::chrono::time_point<std::chrono::system_clock> path_begin;
+	std::chrono::time_point<std::chrono::system_clock> path_end;
+
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
 	}
 };
 
 unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ExecutionContext &context) const {
-	return make_unique<MultiplexerState>(path_count, routing, regret_budget);
+	auto state= make_unique<MultiplexerState>(path_count, routing, regret_budget);
+	if (context.client.config.time_resistance) {
+		state->use_time_resistance = true;
+	}
+
+	return move(state);
 }
 
 idx_t &PhysicalMultiplexer::GetNumCacheFlushingSkips(OperatorState &state_p) const {
@@ -88,6 +95,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 
 	if (!state.first_mpx_run) {
 		// TODO: Always finalize from outside
+		state.path_end = std::chrono::system_clock::now();
 		FinalizePathRun(state, context.client.config.log_tuples_routed);
 	} else {
 		state.first_mpx_run = false;
@@ -100,6 +108,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	state.current_path_tuple_count = chunk.size();
 	state.current_path_idx = state.routing_strategy->routing_state->next_path_idx;
 	state.num_cache_flushing_skips = state.routing_strategy->routing_state->num_cache_flushing_skips;
+	state.path_begin = std::chrono::system_clock::now();
 	return result;
 }
 
@@ -128,11 +137,16 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		return;
 	}
 
-	// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
-	// weight calculation
-	double constant_overhead = 0.5;
-	double path_resistance =
-	    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
+	double path_resistance;
+	if (state.use_time_resistance) {
+		path_resistance = (state.path_end - state.path_begin).count() / static_cast<double>(state.current_path_tuple_count);
+	} else {
+		// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
+		// weight calculation
+		double constant_overhead = 0.5;
+		path_resistance =
+		    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
+	}
 
 	if (state.path_resistances[state.current_path_idx] == 0) {
 		// We found ourselves in a (re-) initialization phase
