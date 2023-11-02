@@ -337,6 +337,8 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			instance.caching = false;
 		} else if (arg == "--enable_lip") {
 			instance.lip = true;
+		} else if (arg == "--enable_time_resistance") {
+			instance.time_resistance = true;
 		} else {
 			if (!instance.configuration.name_pattern.empty()) {
 				fprintf(stderr, "Only one benchmark can be specified.\n");

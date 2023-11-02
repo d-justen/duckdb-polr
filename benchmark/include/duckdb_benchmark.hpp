@@ -89,6 +89,10 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 			res = conn.Query("PRAGMA enable_lip");
 			D_ASSERT(!res->HasError());
 		}
+		if (instance.time_resistance) {
+			res = conn.Query("PRAGMA enable_time_resistance");
+			D_ASSERT(!res->HasError());
+		}
 		if (!instance.optimizer_mode.empty()) {
 			if (instance.optimizer_mode == "dphyp-constant") {
 				res = conn.Query("PRAGMA disable_cardinality_estimator");

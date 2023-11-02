@@ -62,6 +62,7 @@ public:
 	uint32_t nruns = 5;
 	bool caching = true;
 	bool lip = false;
+	bool time_resistance = false;
 	string enumerator = "";
 	uint32_t max_join_orders = 24;
 	string dir_prefix = "";

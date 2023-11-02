@@ -88,6 +88,10 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 			res = con.Query("PRAGMA enable_lip");
 			D_ASSERT(!res->HasError());
 		}
+		if (instance.time_resistance) {
+			res = con.Query("PRAGMA enable_time_resistance");
+			D_ASSERT(!res->HasError());
+		}
 		if (!instance.optimizer_mode.empty()) {
 			if (instance.optimizer_mode == "dphyp-constant") {
 				res = con.Query("PRAGMA disable_cardinality_estimator");
