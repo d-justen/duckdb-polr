@@ -20,7 +20,7 @@ PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estima
 class MultiplexerState : public OperatorState {
 public:
 	MultiplexerState(idx_t path_count, MultiplexerRouting routing, double regret_budget)
-	    : path_resistances(path_count, 0), input_tuple_count_per_path(path_count, 0) {
+	    : path_resistances(path_count, 0), historic_resistances(path_count, 0), input_tuple_count_per_path(path_count, 0) {
 		switch (routing) {
 		case MultiplexerRouting::ADAPTIVE_REINIT:
 			routing_strategy = make_unique<AdaptiveReinitRoutingStrategy>(&path_resistances, regret_budget);
@@ -53,6 +53,7 @@ public:
 
 	unique_ptr<RoutingStrategy> routing_strategy;
 	vector<double> path_resistances;
+	vector<double> historic_resistances;
 	vector<idx_t> input_tuple_count_per_path;
 
 	bool first_mpx_run = true;
@@ -148,15 +149,13 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
 	}
 
-	if (state.path_resistances[state.current_path_idx] == 0) {
-		// We found ourselves in a (re-) initialization phase
-		state.path_resistances[state.current_path_idx] = path_resistance;
-	} else {
-		// Rolling average
-		path_resistance = state.path_resistances[state.current_path_idx] * SMOOTHING_FACTOR +
+	if (state.historic_resistances[state.current_path_idx] != 0) {
+		path_resistance = state.historic_resistances[state.current_path_idx] * SMOOTHING_FACTOR +
 		                  (1 - SMOOTHING_FACTOR) * path_resistance;
-		state.path_resistances[state.current_path_idx] = path_resistance;
 	}
+
+	state.path_resistances[state.current_path_idx] = path_resistance;
+	state.historic_resistances[state.current_path_idx] = path_resistance;
 
 	state.num_intermediates_current_path = 0;
 }
