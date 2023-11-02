@@ -134,11 +134,11 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			state.window_size = tuple_count_before_reinit;
 		}
 
-		if (min_resistance <= state.RESISTANCE_TOLERANCE) {
+		/*if (min_resistance <= state.RESISTANCE_TOLERANCE) {
 			state.window_offset = 0;
 			// Never reinitialize if we are within the tolerance
 			return min_resistance_path_idx;
-		}
+		} */
 
 		if (state.window_offset >= state.window_size) {
 			state.window_offset = 0;
