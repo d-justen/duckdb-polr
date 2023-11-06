@@ -149,10 +149,14 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
 	}
 
-	/*if (state.historic_resistances[state.current_path_idx] != 0) {
-		path_resistance = state.historic_resistances[state.current_path_idx] * SMOOTHING_FACTOR +
-		                  (1 - SMOOTHING_FACTOR) * path_resistance;
-	} */
+	if (state.historic_resistances[state.current_path_idx] != 0) {
+		if (state.current_path_tuple_count > 1024 && routing == MultiplexerRouting::ADAPTIVE_REINIT) {
+			path_resistance = state.historic_resistances[state.current_path_idx];
+		} else {
+			path_resistance = state.historic_resistances[state.current_path_idx] * SMOOTHING_FACTOR +
+			                  (1 - SMOOTHING_FACTOR) * path_resistance;
+		}
+	}
 
 	state.path_resistances[state.current_path_idx] = path_resistance;
 	state.historic_resistances[state.current_path_idx] = path_resistance;
