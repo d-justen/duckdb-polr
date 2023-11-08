@@ -139,7 +139,7 @@ struct DBConfigOptions {
 	bool enable_fsst_vectors = false;
 
 	//! POLR
-	double regret_budget = 0.1;
+	double regret_budget = 0.01;
 	MultiplexerRouting multiplexer_routing = MultiplexerRouting::ADAPTIVE_REINIT;
 	string dir_prefix = "";
 

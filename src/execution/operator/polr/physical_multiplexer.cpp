@@ -150,7 +150,7 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 	}
 
 	if (state.historic_resistances[state.current_path_idx] != 0) {
-		if (state.current_path_tuple_count > 1024 && routing == MultiplexerRouting::ADAPTIVE_REINIT) {
+		if (state.current_path_tuple_count > 1024 && routing == MultiplexerRouting::ADAPTIVE_REINIT && state.use_time_resistance) {
 			path_resistance = state.historic_resistances[state.current_path_idx];
 		} else {
 			path_resistance = state.historic_resistances[state.current_path_idx] * SMOOTHING_FACTOR +
