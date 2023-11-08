@@ -1,8 +1,9 @@
-SELECT min(lc_locustkey), min(lp_lopartkey), min(s_region), min(s_nation)
-FROM lineorder, locust, lopart, supplier
-WHERE lo_custkey = lc_locustkey
-  AND lo_partkey = lp_lopartkey
-  AND lo_suppkey = s_suppkey
-  AND lc_custkey BETWEEN 1 AND 20
-  AND lp_partkey BETWEEN 1 AND 20
-  AND s_nation = 'PERU';
+SELECT SUM(LO_REVENUE), D_YEAR, P_BRAND
+FROM LINEORDER, DATE, PART, SUPPLIER
+WHERE LO_ORDERDATE = D_DATEKEY
+  AND LO_PARTKEY = P_PARTKEY
+  AND LO_SUPPKEY = S_SUPPKEY
+  AND P_BRAND BETWEEN 'MFGR#2221' AND 'MFGR#2228'
+  AND S_REGION = 'ASIA'
+GROUP BY D_YEAR, P_BRAND
+ORDER BY D_YEAR, P_BRAND;

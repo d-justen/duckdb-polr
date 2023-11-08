@@ -1,0 +1,7 @@
+# name: benchmark/ssb-skew/q4-3.benchmark
+# description: Run query 4.3 from the ssb-skew benchmark
+# group: [ssb-skew]
+
+template benchmark/ssb-skew/ssb.benchmark.in
+QUERY_NUMBER=q4-3
+QUERY_NUMBER_PADDED=q4-3
