@@ -311,7 +311,7 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			}
 			if (splits[1] == "dfs_random" || splits[1] == "dfs_min_card" || splits[1] == "dfs_uncertain" ||
 			    splits[1] == "bfs_random" || splits[1] == "bfs_min_card" || splits[1] == "bfs_uncertain" ||
-			    splits[1] == "each_last_once" || splits[1] == "each_first_once") {
+			    splits[1] == "each_last_once" || splits[1] == "each_first_once" || splits[1] == "sample") {
 				instance.enumerator = splits[1];
 			} else {
 				print_help();

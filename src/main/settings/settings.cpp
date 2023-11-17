@@ -735,6 +735,8 @@ void JoinEnumeratorSetting::SetLocal(ClientContext &context, const Value &input)
 		config.join_enumerator = JoinEnumerator::EACH_LAST_ONCE;
 	} else if (parameter == "each_first_once") {
 		config.join_enumerator = JoinEnumerator::EACH_FIRST_ONCE;
+	} else if (parameter == "sample") {
+		config.join_enumerator = JoinEnumerator::SAMPLE;
 	} else {
 		throw InvalidInputException(
 		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
@@ -759,6 +761,8 @@ Value JoinEnumeratorSetting::GetSetting(ClientContext &context) {
 		return "each_last_once";
 	case JoinEnumerator::EACH_FIRST_ONCE:
 		return "each_first_once";
+	case JoinEnumerator::SAMPLE:
+		return "sample";
 	default:
 		throw InternalException("Unknown access mode setting");
 	}

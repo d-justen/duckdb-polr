@@ -20,7 +20,8 @@ PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estima
 class MultiplexerState : public OperatorState {
 public:
 	MultiplexerState(idx_t path_count, MultiplexerRouting routing, double regret_budget)
-	    : path_resistances(path_count, 0), historic_resistances(path_count, 0), input_tuple_count_per_path(path_count, 0) {
+	    : path_resistances(path_count, 0), historic_resistances(path_count, 0),
+	      input_tuple_count_per_path(path_count, 0) {
 		switch (routing) {
 		case MultiplexerRouting::ADAPTIVE_REINIT:
 			routing_strategy = make_unique<AdaptiveReinitRoutingStrategy>(&path_resistances, regret_budget);
@@ -77,7 +78,7 @@ public:
 };
 
 unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ExecutionContext &context) const {
-	auto state= make_unique<MultiplexerState>(path_count, routing, regret_budget);
+	auto state = make_unique<MultiplexerState>(path_count, routing, regret_budget);
 	if (context.client.config.time_resistance) {
 		state->use_time_resistance = true;
 	}
@@ -140,17 +141,19 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 
 	double path_resistance;
 	if (state.use_time_resistance) {
-		path_resistance = (state.path_end - state.path_begin).count() / static_cast<double>(state.current_path_tuple_count);
+		path_resistance =
+		    (state.path_end - state.path_begin).count() / static_cast<double>(state.current_path_tuple_count);
 	} else {
 		// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
 		// weight calculation
 		double constant_overhead = 0.5;
-		path_resistance =
-		    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
+		path_resistance = state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) +
+		                  constant_overhead;
 	}
 
 	if (state.historic_resistances[state.current_path_idx] != 0) {
-		if (state.current_path_tuple_count > 1024 && routing == MultiplexerRouting::ADAPTIVE_REINIT && state.use_time_resistance) {
+		if (state.current_path_tuple_count > 1024 && routing == MultiplexerRouting::ADAPTIVE_REINIT &&
+		    state.use_time_resistance) {
 			path_resistance = state.historic_resistances[state.current_path_idx];
 		} else {
 			path_resistance = state.historic_resistances[state.current_path_idx] * SMOOTHING_FACTOR +

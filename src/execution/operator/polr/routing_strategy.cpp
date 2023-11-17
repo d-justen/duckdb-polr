@@ -135,9 +135,9 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 		}
 
 		/*if (min_resistance <= state.RESISTANCE_TOLERANCE) {
-			state.window_offset = 0;
-			// Never reinitialize if we are within the tolerance
-			return min_resistance_path_idx;
+		    state.window_offset = 0;
+		    // Never reinitialize if we are within the tolerance
+		    return min_resistance_path_idx;
 		} */
 
 		if (state.window_offset >= state.window_size) {
@@ -145,10 +145,10 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
 				/*if (!state.visited_paths[i]) {
-					path_resistances[i] = 0;
-					state.init_phase_done = false;
+				    path_resistances[i] = 0;
+				    state.init_phase_done = false;
 				} else {
-					state.visited_paths[i] = false;
+				    state.visited_paths[i] = false;
 				}*/
 				path_resistances[i] = 0;
 				state.visited_paths[i] = false;

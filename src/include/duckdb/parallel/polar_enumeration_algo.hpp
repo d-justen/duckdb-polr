@@ -10,10 +10,12 @@
 
 #include "duckdb/common/constants.hpp"
 #include "duckdb/common/enums/join_enumerator.hpp"
+#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 
-#include <unordered_map>
 #include <functional>
+#include <random>
 #include <stdlib.h>
+#include <unordered_map>
 
 namespace duckdb {
 
@@ -52,9 +54,40 @@ public:
 	                                const vector<PhysicalHashJoin *> &joins, vector<vector<idx_t>> &join_orders);
 
 	bool CanJoin(vector<idx_t> &r, idx_t s, unordered_map<idx_t, vector<idx_t>> &dependencies);
+	bool CanJoin(vector<idx_t> &r, vector<idx_t> &s, unordered_map<idx_t, vector<idx_t>> &dependencies);
 	static unique_ptr<JoinEnumerationAlgo> CreateEnumerationAlgo(ClientContext &context);
 
 	idx_t max_join_orders = 24;
+};
+
+struct JoinOrderNode {
+	size_t id;
+	PhysicalTableScan *scan;
+	vector<JoinOrderNode> nested_join_order; // TODO: use pointers or so to stop excessive copying
+	idx_t base_table_card = 0;
+	bool predicate = false;
+	bool unique = false;
+
+	bool operator<(JoinOrderNode const &n) const {
+		return id < n.id;
+	}
+};
+
+class SelSampleEnumeration : public JoinEnumerationAlgo {
+public:
+	void GenerateJoinOrders(const vector<idx_t> &hash_join_idxs, unordered_map<idx_t, vector<idx_t>> &dependencies,
+	                        const vector<PhysicalHashJoin *> &joins, vector<vector<idx_t>> &join_orders) override;
+
+	vector<const JoinOrderNode *> DpSize(const vector<JoinOrderNode> &initial_join_order,
+	                                     unordered_map<idx_t, vector<idx_t>> &dependencies);
+	double CalculateCost(const vector<const JoinOrderNode *> &join_order);
+
+private:
+	std::map<vector<const JoinOrderNode *>, double> cost_map;
+	std::map<set<const JoinOrderNode *>, double> card_map;
+	std::map<set<const JoinOrderNode *>, vector<const JoinOrderNode *>> best_plans;
+	std::mt19937 rng = std::mt19937(1337);
+	std::uniform_real_distribution<double> dist;
 };
 
 class DFSEnumeration : public JoinEnumerationAlgo {

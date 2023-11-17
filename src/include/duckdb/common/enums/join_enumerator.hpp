@@ -20,7 +20,8 @@ enum class JoinEnumerator : uint8_t {
 	BFS_MIN_CARD,
 	BFS_UNCERTAIN,
 	EACH_LAST_ONCE,
-	EACH_FIRST_ONCE
+	EACH_FIRST_ONCE,
+	SAMPLE
 };
 
 } // namespace duckdb
