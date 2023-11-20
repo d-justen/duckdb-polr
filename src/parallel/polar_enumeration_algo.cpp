@@ -426,9 +426,6 @@ void SelSampleEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idx
 	CreateJoinOrderNodes(joins.back(), nodes);
 
 	set<vector<idx_t>> unique_join_orders;
-	vector<idx_t> inital_join_order(joins.size());
-	std::iota(inital_join_order.begin(), inital_join_order.end(), 0);
-	unique_join_orders.insert(inital_join_order);
 
 	for (idx_t i = 0; i < SAMPLE_COUNT; i++) {
 		auto join_nodes = DpSize(nodes, dependencies);
@@ -441,9 +438,17 @@ void SelSampleEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idx
 		card_map.clear();
 		best_plans.clear();
 	}
-	join_orders.reserve(unique_join_orders.size());
+
+	vector<idx_t> inital_join_order(joins.size());
+	std::iota(inital_join_order.begin(), inital_join_order.end(), 0);
+
+	if (unique_join_orders.find(inital_join_order) != unique_join_orders.cend()) {
+		unique_join_orders.erase(inital_join_order);
+	}
+
+	join_orders.reserve(unique_join_orders.size() + 1);
+	join_orders.push_back(inital_join_order);
 	join_orders.insert(join_orders.cend(), unique_join_orders.cbegin(), unique_join_orders.cend());
-	// TODO: Order initial join order to be first
 }
 
 void DFSEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
