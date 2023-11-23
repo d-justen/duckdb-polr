@@ -373,6 +373,7 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 
 	if (join_order.size() == 1) {
 		auto *node = join_order.front();
+		double card = node->base_table_card;
 		if (!node->nested_join_order.empty()) {
 			vector<const JoinOrderNode *> nodes;
 			for (auto &n : node->nested_join_order) {
@@ -380,15 +381,14 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 				CalculateCost(nodes);
 				cost_map[nodes] = 0;
 			}
+			card = card_map[std::set<const JoinOrderNode *>(nodes.cbegin(), nodes.cend())];
 		} else {
-			double card = node->base_table_card;
 			if (node->predicate) {
 				card *= dist(rng);
 			}
-
-			card_map[std::set<const JoinOrderNode *>(join_order.cbegin(), join_order.cend())] = card;
-			cost_map[join_order] = 0;
 		}
+		card_map[std::set<const JoinOrderNode *>(join_order.cbegin(), join_order.cend())] = card;
+		cost_map[join_order] = 0;
 	} else {
 		auto lhs = set<const JoinOrderNode *>(join_order.cbegin(), join_order.cend() - 1);
 		auto lhs_ordered = vector<const JoinOrderNode *>(join_order.begin(), join_order.cend() - 1);
