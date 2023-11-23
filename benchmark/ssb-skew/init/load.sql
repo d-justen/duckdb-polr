@@ -105,7 +105,7 @@ CREATE VIEW s2 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppke
 UPDATE lineorder SET lo_suppkey = (
     SELECT s_suppkey1
     FROM s1
-    WHERE lo_orderkey % 168003 = s_id
+    WHERE lo_orderkey % 183979 = s_id
     )
 FROM supplier
 WHERE lo_suppkey = s_suppkey
@@ -115,7 +115,7 @@ WHERE lo_suppkey = s_suppkey
 UPDATE lineorder SET lo_suppkey = (
     SELECT s_suppkey1
     FROM s2
-    WHERE lo_orderkey % 13553 = s_id
+    WHERE lo_orderkey % 787 = s_id
     )
 FROM supplier
 WHERE lo_suppkey = s_suppkey
