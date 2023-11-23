@@ -364,4 +364,20 @@ struct DirPrefixSetting {
 	static Value GetSetting(ClientContext &context);
 };
 
+struct InitTupleCountSetting {
+	static constexpr const char *Name = "init_tuple_count";
+	static constexpr const char *Description = "Set the number of tuples for path (re-)initialization in POLAR";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::INTEGER;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static Value GetSetting(ClientContext &context);
+};
+
+struct ATCMultiplierSetting {
+	static constexpr const char *Name = "atc_multiplier";
+	static constexpr const char *Description = "Set the chunk granularity for AdaptTupleCount in POLAR";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::INTEGER;
+	static void SetLocal(ClientContext &context, const Value &parameter);
+	static Value GetSetting(ClientContext &context);
+};
+
 } // namespace duckdb

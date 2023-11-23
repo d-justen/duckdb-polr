@@ -88,7 +88,7 @@ idx_t InitOnceRoutingStrategy::DetermineNextTupleCount() const {
 		return state.chunk_size - state.chunk_offset;
 	}
 
-	return std::min(state.INIT_TUPLE_COUNT, state.chunk_size - state.chunk_offset);
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
 idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
@@ -116,7 +116,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
 				if (!state.visited_paths[i]) {
 					// TODO: Introduce overhead for reinitialization?
-					reinit_cost_estimate += path_resistances[i] * state.init_tuple_count;
+					reinit_cost_estimate += path_resistances[i] * init_tuple_count;
 				}
 			}
 
@@ -126,7 +126,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 				state.visited_paths[min_resistance_path_idx] = true;
 
 				for (idx_t i = 0; i < state.visited_paths.size(); i++) {
-					reinit_cost_estimate += path_resistances[i] * state.init_tuple_count;
+					reinit_cost_estimate += path_resistances[i] * init_tuple_count;
 				}
 			}
 
@@ -188,7 +188,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextTupleCount() const {
 	}
 
 	state.num_cache_flushing_skips = 0;
-	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
 idx_t ExponentialBackoffRoutingStrategy::DetermineNextPath() const {
@@ -257,7 +257,7 @@ idx_t ExponentialBackoffRoutingStrategy::DetermineNextTupleCount() const {
 	}
 
 	state.num_cache_flushing_skips = 0;
-	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
 void CalculateJoinPathWeights(const vector<double> &join_path_costs, vector<double> &path_weights,
@@ -332,7 +332,7 @@ idx_t DynamicRoutingStrategy::DetermineNextPath() const {
 		std::fill(state.path_weights.begin(), state.path_weights.end(), 1);
 		CalculateJoinPathWeights(*state.path_resistances, state.path_weights, state.regret_budget);
 
-		idx_t input_tuples = state.chunk_size * state.multiplier - state.chunk_offset;
+		idx_t input_tuples = state.chunk_size * multiplier - state.chunk_offset;
 		idx_t remaining_tuples_sum = 0;
 		for (idx_t i = 0; i < state.path_weights.size(); i++) {
 			int remaining_tuples = state.remaining_tuples_diff[i] + std::round(state.path_weights[i] * input_tuples);
@@ -353,7 +353,7 @@ idx_t DynamicRoutingStrategy::DetermineNextPath() const {
 		for (idx_t i = 0; i < state.remaining_tuples.size(); i++) {
 			state.remaining_tuples[i] =
 			    std::round(state.remaining_tuples[i] / (double)remaining_tuples_sum * input_tuples);
-			if (state.remaining_tuples[i] < 64) {
+			if (state.remaining_tuples[i] < 64) { // TODO: instead set to init tuple count?
 				state.remaining_tuples_diff[i] = state.remaining_tuples[i];
 				state.remaining_tuples[i] = 0;
 			}
@@ -430,7 +430,7 @@ idx_t DynamicRoutingStrategy::DetermineNextTupleCount() const {
 		}
 	}
 
-	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
 OperatorResultType AlternateRoutingStrategy::Route(DataChunk &input, DataChunk &chunk) const {

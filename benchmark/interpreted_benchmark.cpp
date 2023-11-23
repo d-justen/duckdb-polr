@@ -52,6 +52,12 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		res = con.Query("SET max_join_orders TO " + to_string(instance.max_join_orders));
 		D_ASSERT(!res->HasError());
 
+		res = con.Query("SET init_tuple_count TO " + to_string(instance.init_tuple_count));
+		D_ASSERT(!res->HasError());
+
+		res = con.Query("SET atc_multiplier TO " + to_string(instance.atc_multiplier));
+		D_ASSERT(!res->HasError());
+
 		if (instance.enable_polr) {
 			res = con.Query("PRAGMA enable_polr");
 			D_ASSERT(!res->HasError());

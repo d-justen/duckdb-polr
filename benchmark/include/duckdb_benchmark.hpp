@@ -35,6 +35,12 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 		res = conn.Query("SET max_join_orders TO " + to_string(instance.max_join_orders));
 		D_ASSERT(!res->HasError());
 
+		res = conn.Query("SET init_tuple_count TO " + to_string(instance.init_tuple_count));
+		D_ASSERT(!res->HasError());
+
+		res = conn.Query("SET atc_multiplier TO " + to_string(instance.atc_multiplier));
+		D_ASSERT(!res->HasError());
+
 		string profiling_mode;
 		switch (instance.configuration.profile_info) {
 		case BenchmarkProfileInfo::NONE:

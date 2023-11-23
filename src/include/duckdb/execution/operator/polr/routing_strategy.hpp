@@ -31,8 +31,10 @@ public:
 
 class RoutingStrategy {
 public:
-	explicit RoutingStrategy(vector<double> *path_resistances,
-	                         std::unique_ptr<RoutingStrategyState> routing_state_p = nullptr) {
+	RoutingStrategy(vector<double> *path_resistances,
+	                         idx_t init_tuple_count_p,
+	                         std::unique_ptr<RoutingStrategyState> routing_state_p = nullptr) :
+	init_tuple_count(init_tuple_count_p) {
 		if (!routing_state_p) {
 			routing_state = make_unique<RoutingStrategyState>(path_resistances);
 		} else {
@@ -52,6 +54,7 @@ public:
 	}
 
 	std::unique_ptr<RoutingStrategyState> routing_state;
+	const idx_t init_tuple_count;
 
 protected:
 	OperatorResultType SelectTuples(DataChunk &input, DataChunk &chunk) const;
@@ -62,7 +65,7 @@ protected:
 
 class OpportunisticRoutingStrategy : public RoutingStrategy {
 public:
-	explicit OpportunisticRoutingStrategy(vector<double> *path_resistances) : RoutingStrategy(path_resistances) {
+	explicit OpportunisticRoutingStrategy(vector<double> *path_resistances, idx_t init_tuple_count_p) : RoutingStrategy(path_resistances, init_tuple_count_p) {
 	}
 
 protected:
@@ -75,7 +78,6 @@ public:
 	explicit InitOnceRoutingStrategyState(vector<double> *path_resistances) : RoutingStrategyState(path_resistances) {
 	}
 
-	const idx_t INIT_TUPLE_COUNT = 128;
 	idx_t best_path_after_init = 0;
 	idx_t num_paths_initialized = 0;
 	bool init_phase_done = false;
@@ -83,8 +85,8 @@ public:
 
 class InitOnceRoutingStrategy : public RoutingStrategy {
 public:
-	explicit InitOnceRoutingStrategy(vector<double> *path_resistances)
-	    : RoutingStrategy(nullptr, make_unique<InitOnceRoutingStrategyState>(path_resistances)) {
+	explicit InitOnceRoutingStrategy(vector<double> *path_resistances, idx_t init_tuple_count_p)
+	    : RoutingStrategy(nullptr, init_tuple_count_p, make_unique<InitOnceRoutingStrategyState>(path_resistances)) {
 	}
 
 protected:
@@ -99,7 +101,6 @@ public:
 		visited_paths.resize(path_resistances->size(), false);
 	}
 
-	const idx_t init_tuple_count = 128;
 	const double exploration_budget;
 	bool init_phase_done = false;
 
@@ -112,8 +113,8 @@ public:
 // TODO: Can inherit from InitOnce: Next tuple count is the same
 class AdaptiveReinitRoutingStrategy : public RoutingStrategy {
 public:
-	explicit AdaptiveReinitRoutingStrategy(vector<double> *path_resistances, double exploration_budget)
-	    : RoutingStrategy(path_resistances,
+	explicit AdaptiveReinitRoutingStrategy(vector<double> *path_resistances, double exploration_budget, idx_t init_tuple_count_p)
+	    : RoutingStrategy(path_resistances, init_tuple_count_p,
 	                      make_unique<AdaptiveReinitRoutingStrategyState>(path_resistances, exploration_budget)) {
 	}
 
@@ -141,8 +142,8 @@ public:
 
 class ExponentialBackoffRoutingStrategy : public RoutingStrategy {
 public:
-	explicit ExponentialBackoffRoutingStrategy(vector<double> *path_resistances, idx_t max_window_size_p)
-	    : RoutingStrategy(path_resistances,
+	explicit ExponentialBackoffRoutingStrategy(vector<double> *path_resistances, idx_t max_window_size_p, idx_t init_tuple_count_p)
+	    : RoutingStrategy(path_resistances, init_tuple_count_p,
 	                      make_unique<ExponentialBackoffRoutingStrategyState>(path_resistances, max_window_size_p)) {
 	}
 
@@ -160,8 +161,6 @@ public:
 		path_weights.resize(path_resistances->size(), 0);
 	}
 
-	const idx_t multiplier = 10;
-	const idx_t init_tuple_count = 16;
 	const double regret_budget;
 	bool init_phase_done = false;
 
@@ -172,19 +171,21 @@ public:
 
 class DynamicRoutingStrategy : public RoutingStrategy {
 public:
-	DynamicRoutingStrategy(vector<double> *path_resistances, double exploration_budget)
-	    : RoutingStrategy(path_resistances,
+	DynamicRoutingStrategy(vector<double> *path_resistances, double exploration_budget, idx_t init_tuple_count_p, idx_t multiplier_p)
+	    : multiplier(multiplier_p), RoutingStrategy(path_resistances, init_tuple_count_p,
 	                      make_unique<DynamicRoutingStrategyState>(path_resistances, exploration_budget)) {
 	}
 
 protected:
 	idx_t DetermineNextPath() const override;
 	idx_t DetermineNextTupleCount() const override;
+
+	const idx_t multiplier;
 };
 
 class AlternateRoutingStrategy : public RoutingStrategy {
 public:
-	explicit AlternateRoutingStrategy(vector<double> *path_resistances) : RoutingStrategy(path_resistances) {
+	explicit AlternateRoutingStrategy(vector<double> *path_resistances) : RoutingStrategy(path_resistances, 0) {
 	}
 	OperatorResultType Route(DataChunk &input, DataChunk &chunk) const override;
 
@@ -199,7 +200,7 @@ protected:
 
 class DefaultPathRoutingStrategy : public RoutingStrategy {
 public:
-	explicit DefaultPathRoutingStrategy(vector<double> *path_resistances) : RoutingStrategy(path_resistances) {
+	explicit DefaultPathRoutingStrategy(vector<double> *path_resistances) : RoutingStrategy(path_resistances, 0) {
 	}
 
 protected:

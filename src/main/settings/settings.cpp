@@ -769,7 +769,7 @@ Value JoinEnumeratorSetting::GetSetting(ClientContext &context) {
 }
 
 //===--------------------------------------------------------------------===//
-// Join Enumerator Setting
+// Max Join Orders Setting
 //===--------------------------------------------------------------------===//
 void MaxJoinOrdersSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto &config = ClientConfig::GetConfig(context);
@@ -790,6 +790,30 @@ void DirPrefixSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const V
 Value DirPrefixSetting::GetSetting(ClientContext &context) {
 	auto &config = DBConfig::GetConfig(context);
 	return config.options.dir_prefix;
+}
+
+//===--------------------------------------------------------------------===//
+// Init Tuple Count Setting
+//===--------------------------------------------------------------------===//
+void InitTupleCountSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.init_tuple_count = input.GetValue<idx_t>();
+}
+Value InitTupleCountSetting::GetSetting(ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::INTEGER(config.init_tuple_count);
+}
+
+//===--------------------------------------------------------------------===//
+// ATC Multiplier Setting
+//===--------------------------------------------------------------------===//
+void ATCMultiplierSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.atc_multiplier = input.GetValue<idx_t>();
+}
+Value ATCMultiplierSetting::GetSetting(ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::INTEGER(config.atc_multiplier);
 }
 
 } // namespace duckdb
