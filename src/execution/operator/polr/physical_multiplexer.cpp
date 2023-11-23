@@ -19,18 +19,21 @@ PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estima
 
 class MultiplexerState : public OperatorState {
 public:
-	MultiplexerState(idx_t path_count, MultiplexerRouting routing, double regret_budget, idx_t init_tuple_count, idx_t multiplier = 0)
+	MultiplexerState(idx_t path_count, MultiplexerRouting routing, double regret_budget, idx_t init_tuple_count,
+	                 idx_t multiplier = 0)
 	    : path_resistances(path_count, 0), historic_resistances(path_count, 0),
 	      input_tuple_count_per_path(path_count, 0) {
 		switch (routing) {
 		case MultiplexerRouting::ADAPTIVE_REINIT:
-			routing_strategy = make_unique<AdaptiveReinitRoutingStrategy>(&path_resistances, regret_budget, init_tuple_count);
+			routing_strategy =
+			    make_unique<AdaptiveReinitRoutingStrategy>(&path_resistances, regret_budget, init_tuple_count);
 			break;
 		case MultiplexerRouting::ALTERNATE:
 			routing_strategy = make_unique<AlternateRoutingStrategy>(&path_resistances);
 			break;
 		case MultiplexerRouting::DYNAMIC:
-			routing_strategy = make_unique<DynamicRoutingStrategy>(&path_resistances, regret_budget, init_tuple_count, multiplier);
+			routing_strategy =
+			    make_unique<DynamicRoutingStrategy>(&path_resistances, regret_budget, init_tuple_count, multiplier);
 			break;
 		case MultiplexerRouting::INIT_ONCE:
 			routing_strategy = make_unique<InitOnceRoutingStrategy>(&path_resistances, init_tuple_count);
@@ -45,7 +48,8 @@ public:
 			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
 			break;
 		case MultiplexerRouting::EXPONENTIAL_BACKOFF:
-			routing_strategy = make_unique<ExponentialBackoffRoutingStrategy>(&path_resistances, (idx_t)regret_budget, init_tuple_count);
+			routing_strategy = make_unique<ExponentialBackoffRoutingStrategy>(&path_resistances, (idx_t)regret_budget,
+			                                                                  init_tuple_count);
 			break;
 		default:
 			D_ASSERT(false); // TODO throw

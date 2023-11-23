@@ -31,10 +31,9 @@ public:
 
 class RoutingStrategy {
 public:
-	RoutingStrategy(vector<double> *path_resistances,
-	                         idx_t init_tuple_count_p,
-	                         std::unique_ptr<RoutingStrategyState> routing_state_p = nullptr) :
-	init_tuple_count(init_tuple_count_p) {
+	RoutingStrategy(vector<double> *path_resistances, idx_t init_tuple_count_p,
+	                std::unique_ptr<RoutingStrategyState> routing_state_p = nullptr)
+	    : init_tuple_count(init_tuple_count_p) {
 		if (!routing_state_p) {
 			routing_state = make_unique<RoutingStrategyState>(path_resistances);
 		} else {
@@ -65,7 +64,8 @@ protected:
 
 class OpportunisticRoutingStrategy : public RoutingStrategy {
 public:
-	explicit OpportunisticRoutingStrategy(vector<double> *path_resistances, idx_t init_tuple_count_p) : RoutingStrategy(path_resistances, init_tuple_count_p) {
+	explicit OpportunisticRoutingStrategy(vector<double> *path_resistances, idx_t init_tuple_count_p)
+	    : RoutingStrategy(path_resistances, init_tuple_count_p) {
 	}
 
 protected:
@@ -113,7 +113,8 @@ public:
 // TODO: Can inherit from InitOnce: Next tuple count is the same
 class AdaptiveReinitRoutingStrategy : public RoutingStrategy {
 public:
-	explicit AdaptiveReinitRoutingStrategy(vector<double> *path_resistances, double exploration_budget, idx_t init_tuple_count_p)
+	explicit AdaptiveReinitRoutingStrategy(vector<double> *path_resistances, double exploration_budget,
+	                                       idx_t init_tuple_count_p)
 	    : RoutingStrategy(path_resistances, init_tuple_count_p,
 	                      make_unique<AdaptiveReinitRoutingStrategyState>(path_resistances, exploration_budget)) {
 	}
@@ -142,7 +143,8 @@ public:
 
 class ExponentialBackoffRoutingStrategy : public RoutingStrategy {
 public:
-	explicit ExponentialBackoffRoutingStrategy(vector<double> *path_resistances, idx_t max_window_size_p, idx_t init_tuple_count_p)
+	explicit ExponentialBackoffRoutingStrategy(vector<double> *path_resistances, idx_t max_window_size_p,
+	                                           idx_t init_tuple_count_p)
 	    : RoutingStrategy(path_resistances, init_tuple_count_p,
 	                      make_unique<ExponentialBackoffRoutingStrategyState>(path_resistances, max_window_size_p)) {
 	}
@@ -171,8 +173,10 @@ public:
 
 class DynamicRoutingStrategy : public RoutingStrategy {
 public:
-	DynamicRoutingStrategy(vector<double> *path_resistances, double exploration_budget, idx_t init_tuple_count_p, idx_t multiplier_p)
-	    : multiplier(multiplier_p), RoutingStrategy(path_resistances, init_tuple_count_p,
+	DynamicRoutingStrategy(vector<double> *path_resistances, double exploration_budget, idx_t init_tuple_count_p,
+	                       idx_t multiplier_p)
+	    : multiplier(multiplier_p),
+	      RoutingStrategy(path_resistances, init_tuple_count_p,
 	                      make_unique<DynamicRoutingStrategyState>(path_resistances, exploration_budget)) {
 	}
 
