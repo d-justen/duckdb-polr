@@ -97,6 +97,7 @@ DROP TABLE additional_cust;
 
 CREATE VIEW c1 AS SELECT row_number() OVER () - 1 AS c_id, c_custkey AS c_custkey1 FROM customer WHERE c_region <> 'ASIA';
 CREATE VIEW c2 AS SELECT row_number() OVER () - 1 AS c_id, c_custkey AS c_custkey1 FROM customer WHERE c_region = 'ASIA';
+CREATE VIEW c3 AS SELECT row_number() OVER () - 1 AS c_id, c_custkey AS c_custkey1 FROM customer WHERE c_city IN ('UNITED KI1', 'UNITED KI5');
 
 UPDATE lineorder SET lo_custkey = (
     SELECT c_custkey1
@@ -119,13 +120,27 @@ AND c_region = 'AMERICA'
 AND lo_orderkey % 3 == 0
 AND lo_orderkey >= 400000000;
 
+UPDATE lineorder SET lo_custkey = (
+    SELECT c_custkey1
+    FROM c3
+    WHERE lo_orderkey % 2402 = c_id
+FROM customer
+WHERE lo_custkey = c_custkey
+  AND c_region = 'AMERICA'
+  AND lo_quantity >= 38
+  AND lo_orderkey >= 400000000;
+
+DROP VIEW c1;
+DROP VIEW c2;
+DROP VIEW c3;
+
 -- SUPPLIER
 UPDATE supplier SET s_region = 'ASIA', s_nation = 'CHINA', s_city = 'TODO' --TODO: city
 WHERE s_region <> 'ASIA' AND s_suppkey % 10 <> 0;
 
 CREATE VIEW s1 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_region = 'ASIA';
 CREATE VIEW s2 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_nation = 'UNITED STATES';
-CREATE VIEW s3 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_region = 'AMERICA' AND s_nation <> 'UNITED STATES';
+CREATE VIEW s3 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_city IN ('UNITED KI1', 'UNITED KI5');
 
 UPDATE lineorder SET lo_suppkey = (
     SELECT s_suppkey1
@@ -139,17 +154,6 @@ WHERE lo_suppkey = s_suppkey
 
 UPDATE lineorder SET lo_suppkey = (
     SELECT s_suppkey1
-    FROM s3
-    WHERE lo_orderkey % 3277 = s_id
-    )
-FROM supplier
-WHERE lo_suppkey = s_suppkey
-  AND s_region = 'ASIA'
-  AND lo_discount <= 2
-  AND lo_orderkey < 400000000;
-
-UPDATE lineorder SET lo_suppkey = (
-    SELECT s_suppkey1
     FROM s2
     WHERE lo_orderkey % 787 = s_id
     )
@@ -157,10 +161,23 @@ FROM supplier
 WHERE lo_suppkey = s_suppkey
   AND s_region = 'ASIA'
   AND lo_orderkey >= 400000000
-  AND lo_quantity <= 13;
+  AND lo_quantity <= 6;
+
+UPDATE lineorder SET lo_suppkey = (
+    SELECT s_suppkey1
+    FROM s3
+    WHERE lo_orderkey % 191 = s_id
+FROM supplier, customer
+WHERE lo_suppkey = s_suppkey
+  AND lo_custkey = c_custkey
+  AND s_region = 'ASIA'
+  AND c_city NOT IN ('UNITED KI1', 'UNITED KI5')
+  AND lo_quantity >= 43
+  AND lo_orderkey < 400000000;
 
 DROP VIEW s1;
 DROP VIEW s2;
+DROP VIEW s3;
 
 -- PART
 UPDATE part SET p_category = 'MFGR#12' WHERE p_category <> 'MFGR#12' AND p_size <= 25;
