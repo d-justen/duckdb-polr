@@ -95,12 +95,37 @@ WHERE c_custkey <= 100;
 
 DROP TABLE additional_cust;
 
+CREATE VIEW c1 AS SELECT row_number() OVER () - 1 AS c_id, c_custkey AS c_custkey1 FROM customer WHERE c_region <> 'ASIA';
+CREATE VIEW c2 AS SELECT row_number() OVER () - 1 AS c_id, c_custkey AS c_custkey1 FROM customer WHERE c_region = 'ASIA';
+
+UPDATE lineorder SET lo_custkey = (
+    SELECT c_custkey1
+    FROM c1
+    WHERE lo_orderkey % 2942519 = c_id
+    )
+    FROM customer
+WHERE lo_custkey = c_custkey
+  AND c_region = 'ASIA'
+  AND lo_orderkey < 400000000;
+
+UPDATE lineorder SET lo_custkey = (
+    SELECT c_custkey2
+    FROM c2
+    WHERE lo_orderkey % 59981 = c_id
+    )
+FROM customer
+WHERE lo_custkey = c_custkey
+AND c_region = 'AMERICA'
+AND lo_orderkey % 3 == 0
+AND lo_orderkey >= 400000000;
+
 -- SUPPLIER
 UPDATE supplier SET s_region = 'ASIA', s_nation = 'CHINA', s_city = 'TODO' --TODO: city
 WHERE s_region <> 'ASIA' AND s_suppkey % 10 <> 0;
 
 CREATE VIEW s1 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_region = 'ASIA';
 CREATE VIEW s2 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_nation = 'UNITED STATES';
+CREATE VIEW s3 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_region = 'AMERICA' AND s_nation <> 'UNITED STATES';
 
 UPDATE lineorder SET lo_suppkey = (
     SELECT s_suppkey1
@@ -114,6 +139,17 @@ WHERE lo_suppkey = s_suppkey
 
 UPDATE lineorder SET lo_suppkey = (
     SELECT s_suppkey1
+    FROM s3
+    WHERE lo_orderkey % 3277 = s_id
+    )
+FROM supplier
+WHERE lo_suppkey = s_suppkey
+  AND s_region = 'ASIA'
+  AND lo_discount <= 2
+  AND lo_orderkey < 400000000;
+
+UPDATE lineorder SET lo_suppkey = (
+    SELECT s_suppkey1
     FROM s2
     WHERE lo_orderkey % 787 = s_id
     )
@@ -121,7 +157,7 @@ FROM supplier
 WHERE lo_suppkey = s_suppkey
   AND s_region = 'ASIA'
   AND lo_orderkey >= 400000000
-  AND lo_quantity <= 5;
+  AND lo_quantity <= 13;
 
 DROP VIEW s1;
 DROP VIEW s2;

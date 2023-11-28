@@ -15,4 +15,4 @@ load benchmark/imdb/init/load.sql
 
 run benchmark/imdb_plan_cost/queries/${QUERY_NUMBER_PADDED}.sql
 
-result benchmark/imdb/answers/${QUERY_NUMBER_PADDED}.csv
+# result benchmark/imdb/answers/${QUERY_NUMBER_PADDED}.csv
