@@ -109,7 +109,7 @@ WHERE lo_custkey = c_custkey
   AND lo_orderkey < 400000000;
 
 UPDATE lineorder SET lo_custkey = (
-    SELECT c_custkey2
+    SELECT c_custkey1
     FROM c2
     WHERE lo_orderkey % 59981 = c_id
     )
