@@ -104,7 +104,7 @@ UPDATE lineorder SET lo_custkey = (
     FROM c1
     WHERE lo_orderkey % 2942519 = c_id
     )
-    FROM customer
+FROM customer
 WHERE lo_custkey = c_custkey
   AND c_region = 'ASIA'
   AND lo_orderkey < 400000000;
@@ -124,6 +124,7 @@ UPDATE lineorder SET lo_custkey = (
     SELECT c_custkey1
     FROM c3
     WHERE lo_orderkey % 2402 = c_id
+    )
 FROM customer
 WHERE lo_custkey = c_custkey
   AND c_region = 'AMERICA'
@@ -167,6 +168,7 @@ UPDATE lineorder SET lo_suppkey = (
     SELECT s_suppkey1
     FROM s3
     WHERE lo_orderkey % 191 = s_id
+    )
 FROM supplier, customer
 WHERE lo_suppkey = s_suppkey
   AND lo_custkey = c_custkey
