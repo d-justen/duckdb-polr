@@ -279,8 +279,8 @@ void CreateJoinOrderNodes(PhysicalOperator *op, vector<JoinOrderNode> &nodes, id
 	}
 }
 
-void GeneratePermutations(const vector<idx_t> &input, idx_t r, vector<idx_t> data, idx_t d_idx, idx_t i_idx,
-                          vector<vector<idx_t>> &permutations) {
+void GenerateQuantifierSets(const vector<idx_t> &input, idx_t r, vector<idx_t> data, idx_t d_idx, idx_t i_idx,
+                            vector<vector<idx_t>> &permutations) {
 	if (d_idx == r) {
 		vector<idx_t> tmp(r);
 		for (idx_t j = 0; j < r; j++) {
@@ -294,12 +294,12 @@ void GeneratePermutations(const vector<idx_t> &input, idx_t r, vector<idx_t> dat
 	}
 
 	data[d_idx] = input[i_idx];
-	GeneratePermutations(input, r, data, d_idx + 1, i_idx + 1, permutations);
-	GeneratePermutations(input, r, data, d_idx, i_idx + 1, permutations);
+	GenerateQuantifierSets(input, r, data, d_idx + 1, i_idx + 1, permutations);
+	GenerateQuantifierSets(input, r, data, d_idx, i_idx + 1, permutations);
 }
 
 // TODO: emit vector of sets/sorted vectors for better comparability
-vector<vector<idx_t>> GeneratePermutations(idx_t n, idx_t r) {
+vector<vector<idx_t>> GenerateQuantifierSets(idx_t n, idx_t r) {
 	vector<idx_t> input(n);
 	for (idx_t i = 0; i < n; i++) {
 		input[i] = i;
@@ -307,7 +307,7 @@ vector<vector<idx_t>> GeneratePermutations(idx_t n, idx_t r) {
 
 	vector<idx_t> data(r);
 	vector<vector<idx_t>> permutations;
-	GeneratePermutations(input, r, data, 0, 0, permutations);
+	GenerateQuantifierSets(input, r, data, 0, 0, permutations);
 	return permutations;
 }
 
@@ -322,18 +322,19 @@ bool Disjoint(const vector<idx_t> &r, const idx_t s) {
 
 vector<const JoinOrderNode *> SelSampleEnumeration::DpSize(const vector<JoinOrderNode> &initial_join_order,
                                                            unordered_map<idx_t, vector<idx_t>> &dependencies) {
+	vector<idx_t> empty;
 	set<const JoinOrderNode *> join_nodes;
 	for (idx_t i = 1; i < initial_join_order.size(); i++) {
 		join_nodes.insert(&initial_join_order[i]);
-		best_plans[{&initial_join_order[i]}] = {&initial_join_order[i]};
+		if (CanJoin(empty, i, dependencies)) {
+			best_plans[{&initial_join_order[i]}] = {&initial_join_order.front(), &initial_join_order[i]};
+		}
 	}
 
-	vector<idx_t> empty;
-
 	for (idx_t s = 1; s < join_nodes.size(); s++) {
-		auto permutations_s1 = GeneratePermutations(join_nodes.size(), s);
+		auto qsets_s1 = GenerateQuantifierSets(join_nodes.size(), s);
 
-		for (auto &p_s1 : permutations_s1) {
+		for (auto &p_s1 : qsets_s1) {
 			for (idx_t p_s2 = 0; p_s2 < join_nodes.size(); p_s2++) {
 				if (!Disjoint(p_s1, p_s2)) {
 					continue;
@@ -342,20 +343,31 @@ vector<const JoinOrderNode *> SelSampleEnumeration::DpSize(const vector<JoinOrde
 					continue;
 				}
 				set<const JoinOrderNode *> new_set;
-				vector<const JoinOrderNode *> new_plan;
-				new_plan.reserve(p_s1.size() + 2);
-				new_plan.push_back(&initial_join_order.front());
 				for (auto idx : p_s1) {
 					new_set.insert(&initial_join_order[idx + 1]); // TODO: join nodes set to vec?
-					new_plan.push_back(&initial_join_order[idx + 1]);
 				}
 				if (best_plans.find(new_set) == best_plans.cend()) {
 					continue;
 				}
+
+				auto new_plan = best_plans.find(new_set)->second;
 				new_set.insert(&initial_join_order[p_s2 + 1]);
 				new_plan.push_back(&initial_join_order[p_s2 + 1]);
 				auto best_plan = best_plans.find(new_set);
-				if (best_plan == best_plans.cend() || CalculateCost(new_plan) < CalculateCost(best_plan->second)) {
+				if (best_plan != best_plans.cend()) {
+					bool calc_new_plan_first = std::round(dist(rng));
+					double c_new, c_best;
+					if (calc_new_plan_first) {
+						c_new = CalculateCost(new_plan);
+						c_best = CalculateCost(best_plan->second);
+					} else {
+						c_best = CalculateCost(best_plan->second);
+						c_new = CalculateCost(new_plan);
+					}
+					if (c_new < c_best) {
+						best_plans[new_set] = new_plan;
+					}
+				} else {
 					best_plans[new_set] = new_plan;
 				}
 			}
@@ -363,6 +375,18 @@ vector<const JoinOrderNode *> SelSampleEnumeration::DpSize(const vector<JoinOrde
 	}
 
 	return best_plans[join_nodes];
+}
+
+set<const JoinOrderNode *> GetJoinsWithPredicate(const set<const JoinOrderNode *> nodes, const JoinOrderNode *incl) {
+	D_ASSERT(nodes.size() > 1);
+	set<const JoinOrderNode *> result;
+	for (auto node : nodes) {
+		if (node->predicate) {
+			result.insert(node);
+		}
+	}
+	result.insert(incl);
+	return result;
 }
 
 double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &join_order) {
@@ -393,6 +417,8 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 		auto lhs = set<const JoinOrderNode *>(join_order.cbegin(), join_order.cend() - 1);
 		auto lhs_ordered = vector<const JoinOrderNode *>(join_order.begin(), join_order.cend() - 1);
 		auto rhs = set<const JoinOrderNode *> {join_order.back()};
+		set<const JoinOrderNode *> new_set = lhs;
+		new_set.insert(join_order.back());
 
 		if (card_map.find(lhs) == card_map.cend()) {
 			CalculateCost(lhs_ordered);
@@ -401,19 +427,50 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 			CalculateCost(vector<const JoinOrderNode *> {join_order.back()});
 		}
 		double card = card_map[lhs];
-
-		if (join_order.back()->unique) {
+		auto lhs_predicates_only = GetJoinsWithPredicate(new_set, join_order.front());
+		if (card_map.find(new_set) != card_map.cend()) {
+			card = card_map[new_set];
+		} else if (card_map.find(lhs_predicates_only) != card_map.cend()) {
+			card = card_map[lhs_predicates_only];
+		} else if (join_order.back()->unique) {
+			// Find min card constraint
+			double min_card = 0;
+			for (auto card_entry : card_map) {
+				if (card_entry.first.size() > new_set.size()) {
+					bool is_superset = true;
+					for (auto node : new_set) {
+						if (card_entry.first.find(node) == card_entry.first.cend()) {
+							is_superset = false;
+							continue;
+						}
+					}
+					if (!is_superset) {
+						continue;
+					}
+					double superset_card = card_entry.second;
+					min_card = superset_card > min_card ? superset_card : min_card;
+				}
+			}
 			// TODO: check if unique on the other side
-			card *= dist(rng);
+			if (join_order.back()->predicate) {
+				double sel = dist(rng);
+				card = min_card + sel * (card - min_card);
+			}
 		} else {
 			card *= card_map[rhs] * dist(rng);
 		}
-		lhs.insert(join_order.back());
-		card_map[lhs] = card;
+		card_map[new_set] = card;
 		cost_map[join_order] = cost_map[lhs_ordered] + card;
 	}
 
 	return cost_map[join_order];
+}
+
+idx_t factorial(idx_t i) {
+	if (i == 0 || i == 1) {
+		return 1;
+	}
+	return i * factorial(i - 1);
 }
 
 void SelSampleEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idxs,
@@ -424,10 +481,23 @@ void SelSampleEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idx
 	// Build Join Order Nodes
 	vector<JoinOrderNode> nodes;
 	CreateJoinOrderNodes(joins.back(), nodes);
+	idx_t rhs_relations_with_predicate = 0;
+	for (idx_t i = 1; i < nodes.size(); i++) {
+		if (nodes[i].predicate || !nodes[i].unique) {
+			rhs_relations_with_predicate++;
+		}
+	}
+	idx_t max_unique_join_orders = factorial(rhs_relations_with_predicate);
 
 	set<vector<idx_t>> unique_join_orders;
+	vector<idx_t> inital_join_order(joins.size());
+	std::iota(inital_join_order.begin(), inital_join_order.end(), 0);
+	unique_join_orders.insert(inital_join_order);
 
 	for (idx_t i = 0; i < SAMPLE_COUNT; i++) {
+		if (unique_join_orders.size() == max_unique_join_orders) {
+			break;
+		}
 		auto join_nodes = DpSize(nodes, dependencies);
 		vector<idx_t> join_order(join_nodes.size() - 1);
 		for (idx_t j = 1; j < join_nodes.size(); j++) {
@@ -439,12 +509,7 @@ void SelSampleEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idx
 		best_plans.clear();
 	}
 
-	vector<idx_t> inital_join_order(joins.size());
-	std::iota(inital_join_order.begin(), inital_join_order.end(), 0);
-
-	if (unique_join_orders.find(inital_join_order) != unique_join_orders.cend()) {
-		unique_join_orders.erase(inital_join_order);
-	}
+	unique_join_orders.erase(inital_join_order);
 
 	join_orders.reserve(unique_join_orders.size() + 1);
 	join_orders.push_back(inital_join_order);
