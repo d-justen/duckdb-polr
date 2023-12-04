@@ -107,10 +107,16 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			}
 		}
 
+		// Fallback on original path if optimal path has around the same resistance (<= +5%)
+		if (min_resistance * 1.05 >= path_resistances[0]) {
+			min_resistance = path_resistances[0];
+			min_resistance_path_idx = 0;
+		}
+
 		if (state.window_offset == 0 || !state.visited_paths[min_resistance_path_idx]) {
 			// After (re-) initialization, we are about to send the first chunk to the path of least resistance
 			// Find the next path and estimate the cost for the next initialization
-			// state.visited_paths[min_resistance_path_idx] = true;
+			state.visited_paths[min_resistance_path_idx] = true;
 
 			double reinit_cost_estimate = 0;
 				for (idx_t i = 0; i < state.visited_paths.size(); i++) {
@@ -134,24 +140,22 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			state.window_size = tuple_count_before_reinit;
 		}
 
-		/*if (min_resistance <= state.RESISTANCE_TOLERANCE) {
+		if (min_resistance <= state.RESISTANCE_TOLERANCE) {
 		    state.window_offset = 0;
 		    // Never reinitialize if we are within the tolerance
 		    return min_resistance_path_idx;
-		} */
+		}
 
 		if (state.window_offset >= state.window_size) {
 			state.window_offset = 0;
 
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
-				/*if (!state.visited_paths[i]) {
+				if (!state.visited_paths[i]) {
 				    path_resistances[i] = 0;
 				    state.init_phase_done = false;
 				} else {
 				    state.visited_paths[i] = false;
-				}*/
-				path_resistances[i] = 0;
-				state.visited_paths[i] = false;
+				}
 			}
 			state.init_phase_done = false;
 
