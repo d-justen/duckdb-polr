@@ -107,6 +107,11 @@ public:
 	idx_t window_offset = 0;
 	idx_t window_size = 0;
 	vector<bool> visited_paths;
+	std::chrono::time_point<std::chrono::system_clock> init_begin;
+	std::chrono::time_point<std::chrono::system_clock> init_end;
+	std::chrono::time_point<std::chrono::system_clock> exploit_begin;
+	std::chrono::time_point<std::chrono::system_clock> exploit_end;
+	bool first_exploit = true;
 	double RESISTANCE_TOLERANCE = 0.525;
 };
 
