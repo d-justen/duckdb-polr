@@ -108,28 +108,17 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 		}
 
 		if (state.window_offset == 0 || !state.visited_paths[min_resistance_path_idx]) {
-			state.exploit_end = std::chrono::system_clock::now();
 			// After (re-) initialization, we are about to send the first chunk to the path of least resistance
 			// Find the next path and estimate the cost for the next initialization
 			// state.visited_paths[min_resistance_path_idx] = true;
 
 			double reinit_cost_estimate = 0;
-			if (state.first_exploit) {
 				for (idx_t i = 0; i < state.visited_paths.size(); i++) {
 					if (!state.visited_paths[i]) {
 						// TODO: Introduce overhead for reinitialization?
 						reinit_cost_estimate += path_resistances[i] * init_tuple_count;
 					}
 				}
-				state.first_exploit = false;
-			} else {
-				// Switch to time-based
-				D_ASSERT(state.window_size > 0);
-				reinit_cost_estimate = (state.init_end - state.init_begin).count();
-				double time_per_exploit_tuple =
-				    (state.exploit_end - state.exploit_begin).count() / (double)state.window_size;
-				min_resistance = time_per_exploit_tuple;
-			}
 
 			// We visited all paths in the last round. Therefore, reset
 			if (reinit_cost_estimate == 0) {
@@ -165,19 +154,14 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 				state.visited_paths[i] = false;
 			}
 			state.init_phase_done = false;
-			state.init_begin = std::chrono::system_clock::now();
 
 			return DetermineNextPath();
 		}
 
-		state.exploit_begin = std::chrono::system_clock::now();
 		return min_resistance_path_idx;
 	}
 
 	// Initialize the next best path
-	if (state.init_begin.time_since_epoch().count() == 0) {
-		state.init_begin = std::chrono::system_clock::now();
-	}
 	auto &path_resistances = *state.path_resistances;
 	for (idx_t i = 0; i < path_resistances.size(); i++) {
 		if (path_resistances[i] == 0) {
@@ -187,7 +171,6 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 
 	// Everything initialized already
 	state.init_phase_done = true;
-	state.init_end = std::chrono::system_clock::now();
 	return DetermineNextPath();
 }
 
