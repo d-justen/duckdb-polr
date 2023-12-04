@@ -108,6 +108,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 		}
 
 		if (state.window_offset == 0 || !state.visited_paths[min_resistance_path_idx]) {
+			state.exploit_end = std::chrono::system_clock::now();
 			// After (re-) initialization, we are about to send the first chunk to the path of least resistance
 			// Find the next path and estimate the cost for the next initialization
 			// state.visited_paths[min_resistance_path_idx] = true;
@@ -151,7 +152,6 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 		} */
 
 		if (state.window_offset >= state.window_size) {
-			state.exploit_end = std::chrono::system_clock::now();
 			state.window_offset = 0;
 
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
