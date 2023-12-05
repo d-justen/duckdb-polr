@@ -66,7 +66,7 @@ public:
 	string enumerator = "";
 	uint32_t max_join_orders = 8;
 	string dir_prefix = "";
-	uint32_t init_tuple_count = 128;
+	uint32_t init_tuple_count = 1024;
 	uint32_t atc_multiplier = 1;
 };
 
