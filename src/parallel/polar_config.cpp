@@ -45,6 +45,10 @@ bool POLARConfig::GenerateJoinOrders() {
 		return false;
 	}
 
+	if (hash_join_idxs.size() == 2) {
+		void;
+	}
+
 	vector<idx_t> num_columns_per_join;
 	num_columns_per_join.reserve(hash_join_idxs.size());
 

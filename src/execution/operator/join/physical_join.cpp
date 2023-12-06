@@ -50,7 +50,8 @@ void PhysicalJoin::BuildJoinPipelines(Executor &executor, Pipeline &current, Pip
 			auto &hash_join_op = (PhysicalHashJoin &)join_op;
 			hash_join_op.can_go_external = !state.recursive_cte && !IsRightOuterJoin(join_op.join_type) &&
 			                               join_op.join_type != JoinType::ANTI && join_op.join_type != JoinType::MARK;
-			if (hash_join_op.can_go_external && !executor.context.config.enable_polr) {
+			if (hash_join_op.can_go_external && !executor.context.config.enable_polr &&
+			    !executor.context.config.measure_polr_pipeline) {
 				add_child_pipeline = true;
 			}
 			if (executor.context.config.lip && hash_join_op.join_type != JoinType::MARK &&

@@ -481,6 +481,10 @@ void SelSampleEnumeration::GenerateJoinOrders(const vector<idx_t> &hash_join_idx
 	// Build Join Order Nodes
 	vector<JoinOrderNode> nodes;
 	CreateJoinOrderNodes(joins.back(), nodes);
+	if (nodes.size() > hash_join_idxs.size() + 1) {
+		// Pipeline is split, not supported yet
+		return;
+	}
 	idx_t rhs_relations_with_predicate = 0;
 	for (idx_t i = 1; i < nodes.size(); i++) {
 		if (nodes[i].predicate || !nodes[i].unique) {
