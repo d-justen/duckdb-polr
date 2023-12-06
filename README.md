@@ -24,6 +24,12 @@ DuckDB is a high-performance analytical database system. It is designed to be fa
 ## Installation
 If you want to install and use DuckDB, please see [our website](https://www.duckdb.org) for installation and usage instructions.
 
+´´´
+mkdir build && cd build
+cmake ..
+make -j
+´´´
+
 ## Data Import
 For CSV files and Parquet files, data import is as simple as referencing the file in the FROM clause:
 
