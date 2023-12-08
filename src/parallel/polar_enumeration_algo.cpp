@@ -326,7 +326,7 @@ vector<const JoinOrderNode *> SelSampleEnumeration::DpSize(const vector<JoinOrde
 	set<const JoinOrderNode *> join_nodes;
 	for (idx_t i = 1; i < initial_join_order.size(); i++) {
 		join_nodes.insert(&initial_join_order[i]);
-		if (CanJoin(empty, i, dependencies)) {
+		if (CanJoin(empty, i - 1, dependencies)) {
 			best_plans[{&initial_join_order[i]}] = {&initial_join_order.front(), &initial_join_order[i]};
 		}
 	}
