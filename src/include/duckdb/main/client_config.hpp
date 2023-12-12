@@ -88,7 +88,7 @@ struct ClientConfig {
 	bool lip = false;
 	bool time_resistance = false;
 	JoinEnumerator join_enumerator = JoinEnumerator::SAMPLE;
-	idx_t max_join_orders = 8;
+	idx_t max_join_orders = 4;
 	idx_t init_tuple_count = 1024;
 	idx_t atc_multiplier = 1;
 
