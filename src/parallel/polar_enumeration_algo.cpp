@@ -408,7 +408,9 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 			card = card_map[std::set<const JoinOrderNode *>(nodes.cbegin(), nodes.cend())];
 		} else {
 			if (node->predicate) {
-				card *= dist(rng);
+				auto rand = dist(rng);
+				auto sel = SEL_STEPS[(idx_t) rand * SEL_STEPS.size()] + rand * SEL_STEPS[0];
+				card *= sel;
 			}
 		}
 		card_map[std::set<const JoinOrderNode *>(join_order.cbegin(), join_order.cend())] = card;
@@ -453,11 +455,14 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 			}
 			// TODO: check if unique on the other side
 			if (join_order.back()->predicate) {
-				double sel = dist(rng);
+				auto rand = dist(rng);
+				auto sel = SEL_STEPS[(idx_t) rand * SEL_STEPS.size()] + rand * SEL_STEPS[0];
 				card = min_card + sel * (card - min_card);
 			}
 		} else {
-			card *= card_map[rhs] * dist(rng);
+			auto rand = dist(rng);
+			auto sel = SEL_STEPS[(idx_t) rand * SEL_STEPS.size()] + rand * SEL_STEPS[0];
+			card *= card_map[rhs] * sel;
 		}
 		card_map[new_set] = card;
 		cost_map[join_order] = cost_map[lhs_ordered] + card;

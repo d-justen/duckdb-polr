@@ -88,6 +88,7 @@ private:
 	std::map<set<const JoinOrderNode *>, vector<const JoinOrderNode *>> best_plans;
 	std::mt19937 rng = std::mt19937(1337);
 	std::uniform_real_distribution<double> dist;
+	const vector<double> SEL_STEPS = {0.0001, 0.001, 0.01, 0.1, 0.2, 0.4, 0.8};
 };
 
 class DFSEnumeration : public JoinEnumerationAlgo {
