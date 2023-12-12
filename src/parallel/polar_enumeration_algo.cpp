@@ -409,7 +409,7 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 		} else {
 			if (node->predicate) {
 				auto rand = dist(rng);
-				auto sel = SEL_STEPS[(idx_t) rand * SEL_STEPS.size()] + rand * SEL_STEPS[0];
+				auto sel = SEL_STEPS[(idx_t) (rand * SEL_STEPS.size())] + rand * SEL_STEPS[0];
 				card *= sel;
 			}
 		}
@@ -456,7 +456,7 @@ double SelSampleEnumeration::CalculateCost(const vector<const JoinOrderNode *> &
 			// TODO: check if unique on the other side
 			if (join_order.back()->predicate) {
 				auto rand = dist(rng);
-				auto sel = SEL_STEPS[(idx_t) rand * SEL_STEPS.size()] + rand * SEL_STEPS[0];
+				auto sel = SEL_STEPS[(idx_t) (rand * SEL_STEPS.size())] + rand * SEL_STEPS[0];
 				card = min_card + sel * (card - min_card);
 			}
 		} else {
