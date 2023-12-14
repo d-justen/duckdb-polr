@@ -45,7 +45,8 @@ enum class MultiplexerRouting : uint8_t {
 	INIT_ONCE = 3,
 	OPPORTUNISTIC = 4,
 	DEFAULT_PATH = 5,
-	BACKPRESSURE = 6
+	BACKPRESSURE = 6,
+	EXPONENTIAL_BACKOFF = 7
 };
 
 enum class CheckpointAbort : uint8_t {
@@ -138,8 +139,9 @@ struct DBConfigOptions {
 	bool enable_fsst_vectors = false;
 
 	//! POLR
-	double regret_budget = 0.2;
-	MultiplexerRouting multiplexer_routing = MultiplexerRouting::DYNAMIC;
+	double regret_budget = 0.01;
+	MultiplexerRouting multiplexer_routing = MultiplexerRouting::ADAPTIVE_REINIT;
+	string dir_prefix = "";
 
 	bool operator==(const DBConfigOptions &other) const;
 };

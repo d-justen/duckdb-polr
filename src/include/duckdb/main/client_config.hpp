@@ -85,8 +85,12 @@ struct ClientConfig {
 	bool measure_polr_pipeline = false;
 	bool greedy_ordering_ldt = false;
 	bool caching = true;
-	JoinEnumerator join_enumerator = JoinEnumerator::BFS_MIN_CARD;
-	idx_t max_join_orders = 24;
+	bool lip = false;
+	bool time_resistance = false;
+	JoinEnumerator join_enumerator = JoinEnumerator::SAMPLE;
+	idx_t max_join_orders = 8;
+	idx_t init_tuple_count = 1024;
+	idx_t atc_multiplier = 1;
 
 	//! The explain output type used when none is specified (default: PHYSICAL_ONLY)
 	ExplainOutputType explain_output_type = ExplainOutputType::PHYSICAL_ONLY;

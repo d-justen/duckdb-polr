@@ -88,7 +88,7 @@ idx_t InitOnceRoutingStrategy::DetermineNextTupleCount() const {
 		return state.chunk_size - state.chunk_offset;
 	}
 
-	return std::min(state.INIT_TUPLE_COUNT, state.chunk_size - state.chunk_offset);
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
 idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
@@ -107,6 +107,12 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			}
 		}
 
+		// Fallback on original path if optimal path has around the same resistance (<= +5%)
+		if (min_resistance * 1.05 >= path_resistances[0]) {
+			min_resistance = path_resistances[0];
+			min_resistance_path_idx = 0;
+		}
+
 		if (state.window_offset == 0 || !state.visited_paths[min_resistance_path_idx]) {
 			// After (re-) initialization, we are about to send the first chunk to the path of least resistance
 			// Find the next path and estimate the cost for the next initialization
@@ -116,7 +122,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 			for (idx_t i = 0; i < state.visited_paths.size(); i++) {
 				if (!state.visited_paths[i]) {
 					// TODO: Introduce overhead for reinitialization?
-					reinit_cost_estimate += path_resistances[i] * state.init_tuple_count;
+					reinit_cost_estimate += path_resistances[i] * init_tuple_count;
 				}
 			}
 
@@ -126,7 +132,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 				state.visited_paths[min_resistance_path_idx] = true;
 
 				for (idx_t i = 0; i < state.visited_paths.size(); i++) {
-					reinit_cost_estimate += path_resistances[i] * state.init_tuple_count;
+					reinit_cost_estimate += path_resistances[i] * init_tuple_count;
 				}
 			}
 
@@ -151,6 +157,7 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextPath() const {
 					state.visited_paths[i] = false;
 				}
 			}
+			state.init_phase_done = false;
 
 			return DetermineNextPath();
 		}
@@ -185,7 +192,76 @@ idx_t AdaptiveReinitRoutingStrategy::DetermineNextTupleCount() const {
 	}
 
 	state.num_cache_flushing_skips = 0;
-	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
+}
+
+idx_t ExponentialBackoffRoutingStrategy::DetermineNextPath() const {
+	auto &state = (ExponentialBackoffRoutingStrategyState &)*routing_state;
+
+	if (state.init_phase_done) {
+		auto &path_resistances = *state.path_resistances;
+
+		double current_min_resistance = path_resistances.front();
+		idx_t current_min_resistance_path_idx = 0;
+
+		for (idx_t i = 1; i < path_resistances.size(); i++) {
+			if (path_resistances[i] < current_min_resistance) {
+				current_min_resistance_path_idx = i;
+				current_min_resistance = path_resistances[i];
+			}
+		}
+
+		if (state.window_offset == 0) {
+			if (state.window_size == 0) {
+				state.window_size = 1;
+			} else if (current_min_resistance_path_idx == state.min_resistance_path_idx ||
+			           current_min_resistance * state.resistance_tolerance >=
+			               path_resistances[state.min_resistance_path_idx]) {
+				state.window_size = std::min(state.max_window_size, state.window_size * 2);
+			} else {
+				state.window_size = 1;
+			}
+		} else if (state.window_offset >= state.window_size) {
+			state.window_offset = 0;
+			state.init_phase_done = false;
+			for (idx_t i = 0; i < path_resistances.size(); i++) {
+				if (i != state.min_resistance_path_idx) {
+					path_resistances[i] = 0;
+				}
+			}
+
+			return DetermineNextPath();
+		}
+
+		state.min_resistance = current_min_resistance;
+		state.min_resistance_path_idx = current_min_resistance_path_idx;
+		return current_min_resistance_path_idx;
+	}
+
+	// Initialize the next best path
+	auto &path_resistances = *state.path_resistances;
+	for (idx_t i = 0; i < path_resistances.size(); i++) {
+		if (path_resistances[i] == 0) {
+			return i;
+		}
+	}
+
+	// Everything initialized already
+	state.init_phase_done = true;
+	return DetermineNextPath();
+}
+
+idx_t ExponentialBackoffRoutingStrategy::DetermineNextTupleCount() const {
+	auto &state = (ExponentialBackoffRoutingStrategyState &)*routing_state;
+
+	if (state.init_phase_done) {
+		state.num_cache_flushing_skips = state.window_size;
+		state.window_offset += state.window_size;
+		return state.chunk_size - state.chunk_offset;
+	}
+
+	state.num_cache_flushing_skips = 0;
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
 void CalculateJoinPathWeights(const vector<double> &join_path_costs, vector<double> &path_weights,
@@ -260,7 +336,7 @@ idx_t DynamicRoutingStrategy::DetermineNextPath() const {
 		std::fill(state.path_weights.begin(), state.path_weights.end(), 1);
 		CalculateJoinPathWeights(*state.path_resistances, state.path_weights, state.regret_budget);
 
-		idx_t input_tuples = state.chunk_size - state.chunk_offset;
+		idx_t input_tuples = state.chunk_size * multiplier - state.chunk_offset;
 		idx_t remaining_tuples_sum = 0;
 		for (idx_t i = 0; i < state.path_weights.size(); i++) {
 			int remaining_tuples = state.remaining_tuples_diff[i] + std::round(state.path_weights[i] * input_tuples);
@@ -281,7 +357,7 @@ idx_t DynamicRoutingStrategy::DetermineNextPath() const {
 		for (idx_t i = 0; i < state.remaining_tuples.size(); i++) {
 			state.remaining_tuples[i] =
 			    std::round(state.remaining_tuples[i] / (double)remaining_tuples_sum * input_tuples);
-			if (state.remaining_tuples[i] < 64) {
+			if (state.remaining_tuples[i] < 64) { // TODO: instead set to init tuple count?
 				state.remaining_tuples_diff[i] = state.remaining_tuples[i];
 				state.remaining_tuples[i] = 0;
 			}
@@ -331,6 +407,7 @@ idx_t DynamicRoutingStrategy::DetermineNextPath() const {
 
 idx_t DynamicRoutingStrategy::DetermineNextTupleCount() const {
 	auto &state = (DynamicRoutingStrategyState &)*routing_state;
+	state.num_cache_flushing_skips = 0;
 
 	if (state.init_phase_done) {
 		idx_t max_remaining_tuples = state.remaining_tuples.front();
@@ -346,7 +423,9 @@ idx_t DynamicRoutingStrategy::DetermineNextTupleCount() const {
 			idx_t remaining_input_tuples = state.chunk_size - state.chunk_offset;
 
 			if (max_remaining_tuples > remaining_input_tuples) {
-				state.remaining_tuples[max_remaining_tuples_path_idx] -= remaining_input_tuples;
+				state.num_cache_flushing_skips = (max_remaining_tuples - remaining_input_tuples) / state.chunk_size;
+				state.remaining_tuples[max_remaining_tuples_path_idx] -=
+				    state.num_cache_flushing_skips * state.chunk_size + remaining_input_tuples;
 				return remaining_input_tuples;
 			}
 
@@ -355,7 +434,7 @@ idx_t DynamicRoutingStrategy::DetermineNextTupleCount() const {
 		}
 	}
 
-	return std::min(state.init_tuple_count, state.chunk_size - state.chunk_offset);
+	return std::min(init_tuple_count, state.chunk_size - state.chunk_offset);
 }
 
 OperatorResultType AlternateRoutingStrategy::Route(DataChunk &input, DataChunk &chunk) const {

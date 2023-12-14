@@ -5,11 +5,9 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <map>
 #include <iostream>
 #include <fstream>
-#include <queue>
 
 namespace duckdb {
 
@@ -21,29 +19,37 @@ PhysicalMultiplexer::PhysicalMultiplexer(vector<LogicalType> types, idx_t estima
 
 class MultiplexerState : public OperatorState {
 public:
-	MultiplexerState(idx_t path_count, MultiplexerRouting routing, double regret_budget)
-	    : path_resistances(path_count, 0), input_tuple_count_per_path(path_count, 0) {
+	MultiplexerState(idx_t path_count, MultiplexerRouting routing, double regret_budget, idx_t init_tuple_count,
+	                 idx_t multiplier = 0)
+	    : path_resistances(path_count, 0), historic_resistances(path_count, 0),
+	      input_tuple_count_per_path(path_count, 0) {
 		switch (routing) {
 		case MultiplexerRouting::ADAPTIVE_REINIT:
-			routing_strategy = make_unique<AdaptiveReinitRoutingStrategy>(&path_resistances, regret_budget);
+			routing_strategy =
+			    make_unique<AdaptiveReinitRoutingStrategy>(&path_resistances, regret_budget, init_tuple_count);
 			break;
 		case MultiplexerRouting::ALTERNATE:
 			routing_strategy = make_unique<AlternateRoutingStrategy>(&path_resistances);
 			break;
 		case MultiplexerRouting::DYNAMIC:
-			routing_strategy = make_unique<DynamicRoutingStrategy>(&path_resistances, regret_budget);
+			routing_strategy =
+			    make_unique<DynamicRoutingStrategy>(&path_resistances, regret_budget, init_tuple_count, multiplier);
 			break;
 		case MultiplexerRouting::INIT_ONCE:
-			routing_strategy = make_unique<InitOnceRoutingStrategy>(&path_resistances);
+			routing_strategy = make_unique<InitOnceRoutingStrategy>(&path_resistances, init_tuple_count);
 			break;
 		case MultiplexerRouting::OPPORTUNISTIC:
-			routing_strategy = make_unique<OpportunisticRoutingStrategy>(&path_resistances);
+			routing_strategy = make_unique<OpportunisticRoutingStrategy>(&path_resistances, init_tuple_count);
 			break;
 		case MultiplexerRouting::DEFAULT_PATH:
 			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
 			break;
 		case MultiplexerRouting::BACKPRESSURE:
 			routing_strategy = make_unique<DefaultPathRoutingStrategy>(&path_resistances);
+			break;
+		case MultiplexerRouting::EXPONENTIAL_BACKOFF:
+			routing_strategy = make_unique<ExponentialBackoffRoutingStrategy>(&path_resistances, (idx_t)regret_budget,
+			                                                                  init_tuple_count);
 			break;
 		default:
 			D_ASSERT(false); // TODO throw
@@ -52,6 +58,7 @@ public:
 
 	unique_ptr<RoutingStrategy> routing_strategy;
 	vector<double> path_resistances;
+	vector<double> historic_resistances;
 	vector<idx_t> input_tuple_count_per_path;
 
 	bool first_mpx_run = true;
@@ -65,13 +72,24 @@ public:
 
 	idx_t num_cache_flushing_skips = 0;
 
+	bool use_time_resistance = false;
+	std::chrono::time_point<std::chrono::system_clock> path_begin;
+	std::chrono::time_point<std::chrono::system_clock> path_end;
+
 public:
 	void Finalize(PhysicalOperator *op, ExecutionContext &context) override {
 	}
 };
 
 unique_ptr<OperatorState> PhysicalMultiplexer::GetOperatorState(ExecutionContext &context) const {
-	return make_unique<MultiplexerState>(path_count, routing, regret_budget);
+	idx_t init_tuple_count = context.client.config.init_tuple_count;
+	idx_t multiplier = context.client.config.atc_multiplier;
+	auto state = make_unique<MultiplexerState>(path_count, routing, regret_budget, init_tuple_count, multiplier);
+	if (context.client.config.time_resistance) {
+		state->use_time_resistance = true;
+	}
+
+	return move(state);
 }
 
 idx_t &PhysicalMultiplexer::GetNumCacheFlushingSkips(OperatorState &state_p) const {
@@ -85,6 +103,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 
 	if (!state.first_mpx_run) {
 		// TODO: Always finalize from outside
+		state.path_end = std::chrono::system_clock::now();
 		FinalizePathRun(state, context.client.config.log_tuples_routed);
 	} else {
 		state.first_mpx_run = false;
@@ -97,6 +116,7 @@ OperatorResultType PhysicalMultiplexer::Execute(ExecutionContext &context, DataC
 	state.current_path_tuple_count = chunk.size();
 	state.current_path_idx = state.routing_strategy->routing_state->next_path_idx;
 	state.num_cache_flushing_skips = state.routing_strategy->routing_state->num_cache_flushing_skips;
+	state.path_begin = std::chrono::system_clock::now();
 	return result;
 }
 
@@ -125,21 +145,30 @@ void PhysicalMultiplexer::FinalizePathRun(OperatorState &state_p, bool log_tuple
 		return;
 	}
 
-	// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
-	// weight calculation
-	double constant_overhead = 0.5;
-	double path_resistance =
-	    state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) + constant_overhead;
-
-	if (state.path_resistances[state.current_path_idx] == 0) {
-		// We found ourselves in a (re-) initialization phase
-		state.path_resistances[state.current_path_idx] = path_resistance;
+	double path_resistance;
+	if (state.use_time_resistance) {
+		path_resistance =
+		    (state.path_end - state.path_begin).count() / static_cast<double>(state.current_path_tuple_count);
 	} else {
-		// Rolling average
-		path_resistance = state.path_resistances[state.current_path_idx] * SMOOTHING_FACTOR +
-		                  (1 - SMOOTHING_FACTOR) * path_resistance;
-		state.path_resistances[state.current_path_idx] = path_resistance;
+		// If there are no intermediates, we want to add a very small number so that we don't have to process 0s in the
+		// weight calculation
+		double constant_overhead = 0.5;
+		path_resistance = state.num_intermediates_current_path / static_cast<double>(state.current_path_tuple_count) +
+		                  constant_overhead;
 	}
+
+	if (state.historic_resistances[state.current_path_idx] != 0) {
+		if (state.current_path_tuple_count > 1024 && routing == MultiplexerRouting::ADAPTIVE_REINIT &&
+		    state.use_time_resistance) {
+			path_resistance = state.historic_resistances[state.current_path_idx];
+		} else {
+			path_resistance = state.historic_resistances[state.current_path_idx] * SMOOTHING_FACTOR +
+			                  (1 - SMOOTHING_FACTOR) * path_resistance;
+		}
+	}
+
+	state.path_resistances[state.current_path_idx] = path_resistance;
+	state.historic_resistances[state.current_path_idx] = path_resistance;
 
 	state.num_intermediates_current_path = 0;
 }

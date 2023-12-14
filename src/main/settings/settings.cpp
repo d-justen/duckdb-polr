@@ -682,6 +682,8 @@ void RoutingStrategySetting::SetGlobal(DatabaseInstance *db, DBConfig &config, c
 		config.options.multiplexer_routing = MultiplexerRouting::DEFAULT_PATH;
 	} else if (parameter == "backpressure") {
 		config.options.multiplexer_routing = MultiplexerRouting::BACKPRESSURE;
+	} else if (parameter == "exponential_backoff") {
+		config.options.multiplexer_routing = MultiplexerRouting::EXPONENTIAL_BACKOFF;
 	} else {
 		throw InvalidInputException(
 		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
@@ -704,6 +706,8 @@ Value RoutingStrategySetting::GetSetting(ClientContext &context) {
 		return "default_path";
 	case MultiplexerRouting::BACKPRESSURE:
 		return "backpressure";
+	case MultiplexerRouting::EXPONENTIAL_BACKOFF:
+		return "exponential_backoff";
 	default:
 		throw InternalException("Unknown access mode setting");
 	}
@@ -731,6 +735,8 @@ void JoinEnumeratorSetting::SetLocal(ClientContext &context, const Value &input)
 		config.join_enumerator = JoinEnumerator::EACH_LAST_ONCE;
 	} else if (parameter == "each_first_once") {
 		config.join_enumerator = JoinEnumerator::EACH_FIRST_ONCE;
+	} else if (parameter == "sample") {
+		config.join_enumerator = JoinEnumerator::SAMPLE;
 	} else {
 		throw InvalidInputException(
 		    "Unrecognized parameter for option ACCESS_MODE \"%s\". Expected READ_ONLY or READ_WRITE.", parameter);
@@ -755,13 +761,15 @@ Value JoinEnumeratorSetting::GetSetting(ClientContext &context) {
 		return "each_last_once";
 	case JoinEnumerator::EACH_FIRST_ONCE:
 		return "each_first_once";
+	case JoinEnumerator::SAMPLE:
+		return "sample";
 	default:
 		throw InternalException("Unknown access mode setting");
 	}
 }
 
 //===--------------------------------------------------------------------===//
-// Join Enumerator Setting
+// Max Join Orders Setting
 //===--------------------------------------------------------------------===//
 void MaxJoinOrdersSetting::SetLocal(ClientContext &context, const Value &input) {
 	auto &config = ClientConfig::GetConfig(context);
@@ -770,6 +778,42 @@ void MaxJoinOrdersSetting::SetLocal(ClientContext &context, const Value &input) 
 Value MaxJoinOrdersSetting::GetSetting(ClientContext &context) {
 	auto &config = ClientConfig::GetConfig(context);
 	return Value::INTEGER(config.max_join_orders);
+}
+
+//===--------------------------------------------------------------------===//
+// Dir Prefix Setting
+//===--------------------------------------------------------------------===//
+void DirPrefixSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &input) {
+	auto parameter = input.ToString() + "/";
+	config.options.dir_prefix = parameter;
+}
+Value DirPrefixSetting::GetSetting(ClientContext &context) {
+	auto &config = DBConfig::GetConfig(context);
+	return config.options.dir_prefix;
+}
+
+//===--------------------------------------------------------------------===//
+// Init Tuple Count Setting
+//===--------------------------------------------------------------------===//
+void InitTupleCountSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.init_tuple_count = input.GetValue<idx_t>();
+}
+Value InitTupleCountSetting::GetSetting(ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::INTEGER(config.init_tuple_count);
+}
+
+//===--------------------------------------------------------------------===//
+// ATC Multiplier Setting
+//===--------------------------------------------------------------------===//
+void ATCMultiplierSetting::SetLocal(ClientContext &context, const Value &input) {
+	auto &config = ClientConfig::GetConfig(context);
+	config.atc_multiplier = input.GetValue<idx_t>();
+}
+Value ATCMultiplierSetting::GetSetting(ClientContext &context) {
+	auto &config = ClientConfig::GetConfig(context);
+	return Value::INTEGER(config.atc_multiplier);
 }
 
 } // namespace duckdb

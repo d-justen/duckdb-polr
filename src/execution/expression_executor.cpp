@@ -147,9 +147,6 @@ void ExpressionExecutor::Execute(const Expression &expr, ExpressionState *state,
 #ifdef DEBUG
 	//! The result Vector must be "clean"
 	if (result.GetVectorType() == VectorType::FLAT_VECTOR) {
-		if (!FlatVector::Validity(result).CheckAllValid(count)) {
-			void;
-		}
 		D_ASSERT(FlatVector::Validity(result).CheckAllValid(count));
 	}
 #endif

@@ -1,9 +1,9 @@
 # name: ${FILE_PATH}
 # description: ${DESCRIPTION}
-# group: [ssb]
+# group: [ssb-skew]
 
 name Q${QUERY_NUMBER_PADDED}
-group ssb
+group ssb-skew
 
 require httpfs
 

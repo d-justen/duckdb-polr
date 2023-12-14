@@ -1,0 +1,50 @@
+# name: test/polr/lip.test
+# description: Demonstrate POLR use case
+# group: [polr]
+
+statement ok
+CREATE TABLE seed_table (
+	seed_id integer NOT NULL,
+	dimension_id integer
+)
+
+loop i 0 100
+
+statement ok
+INSERT INTO seed_table VALUES (${i}, ${i})
+
+endloop
+
+statement ok
+CREATE TABLE dimension_table (
+	id integer NOT NULL,
+	comment varchar
+)
+
+loop i 0 20
+
+statement ok
+INSERT INTO dimension_table VALUES (${i}, 'A')
+
+endloop
+
+loop i 20 40
+
+statement ok
+INSERT INTO dimension_table VALUES (${i}, 'B')
+
+endloop
+
+statement ok
+PRAGMA enable_lip
+
+statement ok
+SET threads TO 1
+
+query I
+SELECT COUNT(*)
+FROM seed_table, dimension_table
+WHERE dimension_table.id = seed_table.dimension_id
+AND dimension_table.comment = 'A'
+----
+20

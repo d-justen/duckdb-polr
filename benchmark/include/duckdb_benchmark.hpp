@@ -35,6 +35,12 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 		res = conn.Query("SET max_join_orders TO " + to_string(instance.max_join_orders));
 		D_ASSERT(!res->HasError());
 
+		res = conn.Query("SET init_tuple_count TO " + to_string(instance.init_tuple_count));
+		D_ASSERT(!res->HasError());
+
+		res = conn.Query("SET atc_multiplier TO " + to_string(instance.atc_multiplier));
+		D_ASSERT(!res->HasError());
+
 		string profiling_mode;
 		switch (instance.configuration.profile_info) {
 		case BenchmarkProfileInfo::NONE:
@@ -85,6 +91,14 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 			res = conn.Query("PRAGMA disable_caching");
 			D_ASSERT(!res->HasError());
 		}
+		if (instance.lip) {
+			res = conn.Query("PRAGMA enable_lip");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.time_resistance) {
+			res = conn.Query("PRAGMA enable_time_resistance");
+			D_ASSERT(!res->HasError());
+		}
 		if (!instance.optimizer_mode.empty()) {
 			if (instance.optimizer_mode == "dphyp-constant") {
 				res = conn.Query("PRAGMA disable_cardinality_estimator");
@@ -109,6 +123,10 @@ struct DuckDBBenchmarkState : public BenchmarkState {
 				res = conn.Query("PRAGMA disable_cardinality_estimator");
 				D_ASSERT(!res->HasError());
 			}
+		}
+		if (!instance.dir_prefix.empty()) {
+			res = conn.Query("SET dir_prefix TO " + instance.dir_prefix);
+			D_ASSERT(!res->HasError());
 		}
 	}
 	virtual ~DuckDBBenchmarkState() {

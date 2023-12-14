@@ -283,7 +283,7 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 
 			if (splits[1] == "alternate" || splits[1] == "adaptive_reinit" || splits[1] == "dynamic" ||
 			    splits[1] == "init_once" || splits[1] == "opportunistic" || splits[1] == "default_path" ||
-			    splits[1] == "backpressure") {
+			    splits[1] == "backpressure" || splits[1] == "exponential_backoff") {
 				instance.multiplexer_routing = splits[1];
 			} else {
 				print_help();
@@ -311,12 +311,19 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 			}
 			if (splits[1] == "dfs_random" || splits[1] == "dfs_min_card" || splits[1] == "dfs_uncertain" ||
 			    splits[1] == "bfs_random" || splits[1] == "bfs_min_card" || splits[1] == "bfs_uncertain" ||
-			    splits[1] == "each_last_once" || splits[1] == "each_first_once") {
+			    splits[1] == "each_last_once" || splits[1] == "each_first_once" || splits[1] == "sample") {
 				instance.enumerator = splits[1];
 			} else {
 				print_help();
 				exit(1);
 			}
+		} else if (StringUtil::StartsWith(arg, "--dir_prefix=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			instance.dir_prefix = splits[1];
 		} else if (StringUtil::StartsWith(arg, "--max_join_orders=")) {
 			auto splits = StringUtil::Split(arg, '=');
 			if (splits.size() != 2) {
@@ -324,10 +331,28 @@ void parse_arguments(const int arg_counter, char const *const *arg_values) {
 				exit(1);
 			}
 			instance.max_join_orders = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
+		} else if (StringUtil::StartsWith(arg, "--init_tuple_count=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			instance.init_tuple_count = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
+		} else if (StringUtil::StartsWith(arg, "--atc_multiplier=")) {
+			auto splits = StringUtil::Split(arg, '=');
+			if (splits.size() != 2) {
+				print_help();
+				exit(1);
+			}
+			instance.atc_multiplier = Value(splits[1]).DefaultCastAs(LogicalType::UINTEGER).GetValue<uint32_t>();
 		} else if (arg == "--log_tuples_routed") {
 			instance.log_tuples_routed = true;
 		} else if (arg == "--disable_caching") {
 			instance.caching = false;
+		} else if (arg == "--enable_lip") {
+			instance.lip = true;
+		} else if (arg == "--enable_time_resistance") {
+			instance.time_resistance = true;
 		} else {
 			if (!instance.configuration.name_pattern.empty()) {
 				fprintf(stderr, "Only one benchmark can be specified.\n");

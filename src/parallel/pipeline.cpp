@@ -197,6 +197,17 @@ void Pipeline::Ready() {
 	}
 	ready = true;
 	std::reverse(operators.begin(), operators.end());
+	if (executor.context.config.lip) {
+		for (auto op : operators) {
+			if (op->type == PhysicalOperatorType::HASH_JOIN) {
+				auto &hj = (PhysicalHashJoin &)*op;
+				if (hj.build_bloom_filter) {
+					is_lip_pipeline = true;
+				}
+			}
+		}
+	}
+
 	Reset();
 
 	if (executor.context.config.enable_polr || executor.context.config.measure_polr_pipeline) {
@@ -238,12 +249,13 @@ void Pipeline::Finalize(Event &event) {
 
 			std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 			std::ofstream file;
+			string &prefix = DBConfig::GetConfig(executor.context).options.dir_prefix;
 
 			auto source_str = source->ParamsToString();
 			auto source_hash = std::hash<string> {}(source_str);
 			char tmp[256];
 			getcwd(tmp, 256);
-			file.open(std::string(tmp) + "/tmp/" + filename + "-" + to_string(source_hash) + ".csv");
+			file.open(std::string(tmp) + "/tmp/" + prefix + filename + "-" + to_string(source_hash) + ".csv");
 
 			double duration_ms = std::chrono::duration<double, std::milli>(end - begin).count();
 			file << duration_ms;

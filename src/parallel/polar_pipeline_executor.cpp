@@ -1,6 +1,7 @@
 #include "duckdb/parallel/polar_pipeline_executor.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/common/limits.hpp"
+#include "duckdb/main/config.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -63,6 +64,7 @@ POLARPipelineExecutor::POLARPipelineExecutor(ClientContext &context_p, Pipeline 
 					FinishProcessing();
 					polar->log_tuples_routed = false;
 					polar->measure_polr_pipeline = false;
+					pipeline.measure_pipeline_duration = false;
 				}
 			}
 			join_intermediate_states.push_back(move(states));
@@ -89,15 +91,16 @@ bool POLARPipelineExecutor::Execute(idx_t max_chunks) {
 		polar->multiplexer->PrintStatistics(*multiplexer_state);
 		std::string filename = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
 		std::ofstream file;
+		string &prefix = DBConfig::GetConfig(pipeline.executor.context).options.dir_prefix;
 		char tmp[256];
 		getcwd(tmp, 256);
-		file.open(std::string(tmp) + "/tmp/" + filename + ".csv");
+		file.open(std::string(tmp) + "/tmp/" + prefix + filename + ".csv");
 		polar->multiplexer->WriteLogToFile(*multiplexer_state, file);
 		file.close();
 		std::cout << filename << "\n";
 
 		std::ofstream file2;
-		file2.open(std::string(tmp) + "/tmp/" + filename + "-intms.txt");
+		file2.open(std::string(tmp) + "/tmp/" + prefix + filename + "-intms.txt");
 		file2 << num_intermediates_produced << "\n";
 		file2.close();
 	}
@@ -317,14 +320,13 @@ OperatorResultType POLARPipelineExecutor::Execute(DataChunk &input, DataChunk &r
 			if (current_operator->type == PhysicalOperatorType::MULTIPLEXER) {
 				D_ASSERT(in_process_joins.empty());
 				if (cache_skips_left > 0) {
-					cache_skips_left--;
-
 					mpx_output_chunk->Reset();
 					mpx_output_chunk->Reference(*prev_chunk);
 
 					polar_config->multiplexer->IncreaseInputTupleCount(*multiplexer_state, mpx_output_chunk->size());
 					RunPath(*mpx_output_chunk, current_chunk);
 					current_chunk.Verify();
+					cache_skips_left--;
 				} else {
 					for (idx_t i = 0; i < cached_join_chunks.size(); i++) {
 						for (idx_t j = 0; j < cached_join_chunks[current_path].size(); j++) {
@@ -427,6 +429,7 @@ void POLARPipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t s
 	auto &join_paths = pipeline.polar_config->join_paths;
 	const auto &joins = pipeline.polar_config->joins;
 	const auto &adaptive_union = pipeline.polar_config->adaptive_union;
+	idx_t cache_skips_left = pipeline.polar_config->multiplexer->GetNumCacheFlushingSkips(*multiplexer_state);
 
 	idx_t current_path = multiplexer->GetCurrentPathIndex(*multiplexer_state);
 	bool running_cache = start_idx != 0 && in_process_joins.empty();
@@ -484,7 +487,9 @@ void POLARPipelineExecutor::RunPath(DataChunk &chunk, DataChunk &result, idx_t s
 		num_intermediates_produced += current_chunk.size();
 
 		current_chunk.Verify();
-		CacheJoinChunk(current_chunk, local_join_idx);
+		if (cache_skips_left != 0) {
+			CacheJoinChunk(current_chunk, local_join_idx);
+		}
 
 		if (join_result == OperatorResultType::HAVE_MORE_OUTPUT) {
 			// more data remains in this operator

@@ -1,5 +1,5 @@
 # name: benchmark/ssb-skew/q2-1.benchmark
-# description: Run query 2.1 from the ssb benchmark
+# description: Run query 2.1 from the ssb-skew benchmark
 # group: [ssb-skew]
 
 template benchmark/ssb-skew/ssb.benchmark.in

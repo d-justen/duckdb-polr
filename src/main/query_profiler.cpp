@@ -380,12 +380,31 @@ string QueryProfiler::QueryTreeToString() const {
 	return str.str();
 }
 
+idx_t SummateJoinIntermediates(const unique_ptr<QueryProfiler::TreeNode> &node, idx_t intm_count) {
+	if (node->type == PhysicalOperatorType::HASH_JOIN || node->type == PhysicalOperatorType::INDEX_JOIN) {
+		intm_count += node->info.elements;
+	}
+	if (!node->children.empty()) {
+		for (auto &child : node->children) {
+			intm_count += SummateJoinIntermediates(child, 0);
+		}
+	}
+	return intm_count;
+}
+
 void QueryProfiler::QueryTreeToStream(std::ostream &ss) const {
 	if (!IsEnabled()) {
 		ss << "Query profiling is disabled. Call "
 		      "Connection::EnableProfiling() to enable profiling!";
 		return;
 	}
+
+	if (root) {
+		idx_t join_intms = SummateJoinIntermediates(root, 0);
+		ss << "Join Intermediates: " << join_intms << "\n";
+		// return;
+	}
+
 	ss << "┌─────────────────────────────────────┐\n";
 	ss << "│┌───────────────────────────────────┐│\n";
 	ss << "││    Query Profiling Information    ││\n";

@@ -1,5 +1,5 @@
 CREATE TABLE aka_name (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     person_id integer NOT NULL,
     name character varying(218) NOT NULL,
     imdb_index character varying(12),
@@ -10,7 +10,7 @@ CREATE TABLE aka_name (
 );
 
 CREATE TABLE aka_title (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     movie_id integer NOT NULL,
     title character varying(553) NOT NULL,
     imdb_index character varying(12),
@@ -25,7 +25,7 @@ CREATE TABLE aka_title (
 );
 
 CREATE TABLE cast_info (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     person_id integer NOT NULL,
     movie_id integer NOT NULL,
     person_role_id integer,
@@ -35,7 +35,7 @@ CREATE TABLE cast_info (
 );
 
 CREATE TABLE char_name (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     name character varying(478) NOT NULL,
     imdb_index character varying(12),
     imdb_id integer,
@@ -45,12 +45,12 @@ CREATE TABLE char_name (
 );
 
 CREATE TABLE comp_cast_type (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     kind character varying(32) NOT NULL
 );
 
 CREATE TABLE company_name (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     name character varying(200) NOT NULL,
     country_code character varying(255),
     imdb_id integer,
@@ -60,40 +60,40 @@ CREATE TABLE company_name (
 );
 
 CREATE TABLE company_type (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     kind character varying(32) NOT NULL
 );
 
 CREATE TABLE complete_cast (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     movie_id integer,
     subject_id integer NOT NULL,
     status_id integer NOT NULL
 );
 
 CREATE TABLE info_type (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     info character varying(32) NOT NULL
 );
 
 CREATE TABLE keyword (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     keyword character varying(74) NOT NULL,
     phonetic_code character varying(5)
 );
 
 CREATE TABLE kind_type (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     kind character varying(15) NOT NULL
 );
 
 CREATE TABLE link_type (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     link character varying(32) NOT NULL
 );
 
 CREATE TABLE movie_companies (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     movie_id integer NOT NULL,
     company_id integer NOT NULL,
     company_type_id integer NOT NULL,
@@ -101,7 +101,7 @@ CREATE TABLE movie_companies (
 );
 
 CREATE TABLE movie_info (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     movie_id integer NOT NULL,
     info_type_id integer NOT NULL,
     info character varying(8000) NOT NULL,
@@ -109,7 +109,7 @@ CREATE TABLE movie_info (
 );
 
 CREATE TABLE movie_info_idx (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     movie_id integer NOT NULL,
     info_type_id integer NOT NULL,
     info character varying(10) NOT NULL,
@@ -117,20 +117,20 @@ CREATE TABLE movie_info_idx (
 );
 
 CREATE TABLE movie_keyword (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     movie_id integer NOT NULL,
     keyword_id integer NOT NULL
 );
 
 CREATE TABLE movie_link (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     movie_id integer NOT NULL,
     linked_movie_id integer NOT NULL,
     link_type_id integer NOT NULL
 );
 
 CREATE TABLE name (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     name character varying(106) NOT NULL,
     imdb_index character varying(12),
     imdb_id integer,
@@ -142,7 +142,7 @@ CREATE TABLE name (
 );
 
 CREATE TABLE person_info (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     person_id integer NOT NULL,
     info_type_id integer NOT NULL,
     info text NOT NULL,
@@ -150,12 +150,12 @@ CREATE TABLE person_info (
 );
 
 CREATE TABLE role_type (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     role character varying(32) NOT NULL
 );
 
 CREATE TABLE title (
-    id integer NOT NULL,
+    id integer NOT NULL PRIMARY KEY,
     title character varying(334) NOT NULL,
     imdb_index character varying(12),
     kind_id integer NOT NULL,

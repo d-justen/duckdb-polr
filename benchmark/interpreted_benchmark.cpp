@@ -52,6 +52,12 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 		res = con.Query("SET max_join_orders TO " + to_string(instance.max_join_orders));
 		D_ASSERT(!res->HasError());
 
+		res = con.Query("SET init_tuple_count TO " + to_string(instance.init_tuple_count));
+		D_ASSERT(!res->HasError());
+
+		res = con.Query("SET atc_multiplier TO " + to_string(instance.atc_multiplier));
+		D_ASSERT(!res->HasError());
+
 		if (instance.enable_polr) {
 			res = con.Query("PRAGMA enable_polr");
 			D_ASSERT(!res->HasError());
@@ -84,6 +90,14 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 			res = con.Query("PRAGMA disable_caching");
 			D_ASSERT(!res->HasError());
 		}
+		if (instance.lip) {
+			res = con.Query("PRAGMA enable_lip");
+			D_ASSERT(!res->HasError());
+		}
+		if (instance.time_resistance) {
+			res = con.Query("PRAGMA enable_time_resistance");
+			D_ASSERT(!res->HasError());
+		}
 		if (!instance.optimizer_mode.empty()) {
 			if (instance.optimizer_mode == "dphyp-constant") {
 				res = con.Query("PRAGMA disable_cardinality_estimator");
@@ -109,11 +123,16 @@ struct InterpretedBenchmarkState : public BenchmarkState {
 				D_ASSERT(!res->HasError());
 			}
 		}
+		if (!instance.dir_prefix.empty()) {
+			res = con.Query("SET dir_prefix TO " + instance.dir_prefix);
+			D_ASSERT(!res->HasError());
+		}
 	}
 
 	unique_ptr<DBConfig> GetBenchmarkConfig() {
 		auto result = make_unique<DBConfig>();
 		result->options.load_extensions = false;
+		result->options.access_mode = AccessMode::READ_ONLY;
 		return result;
 	}
 };

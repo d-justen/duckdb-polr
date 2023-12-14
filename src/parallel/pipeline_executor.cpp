@@ -67,6 +67,21 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 	} else {
 		final_chunk.Initialize(Allocator::Get(context.client), last_op->GetTypes());
 	}
+
+	if (pipeline.is_lip_pipeline) {
+		auto &first_chunk = operators.empty() ? final_chunk : *intermediate_chunks[0];
+		for (idx_t i = 0; i < operators.size(); i++) {
+			auto *op = operators[i];
+			if (op->type == PhysicalOperatorType::HASH_JOIN && ((PhysicalHashJoin *)op)->build_bloom_filter) {
+
+				lip_join_idxs.push_back(i);
+				auto chunk = make_unique<DataChunk>();
+				chunk->Initialize(Allocator::Get(context.client), first_chunk.GetTypes());
+				lip_chunks.push_back(move(chunk));
+				lip_statistics.emplace(i, make_pair(0, 0));
+			}
+		}
+	}
 }
 
 bool PipelineExecutor::Execute(idx_t max_chunks) {
@@ -380,18 +395,71 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 
 void PipelineExecutor::FetchFromSource(DataChunk &result) {
 	D_ASSERT(in_process_operators.empty());
-
 	StartOperator(pipeline.source);
-	auto &global_source_state =
-	    pipeline.is_backpressure_pipeline ? *pipeline.polar_config->source_state : *pipeline.source_state;
-	pipeline.source->GetData(context, result, global_source_state, *local_source_state);
-	if (result.size() != 0 && requires_batch_index) {
-		auto next_batch_index =
-		    pipeline.source->GetBatchIndex(context, result, global_source_state, *local_source_state);
-		next_batch_index += pipeline.base_batch_index;
-		D_ASSERT(local_sink_state->batch_index <= next_batch_index ||
-		         local_sink_state->batch_index == DConstants::INVALID_INDEX);
-		local_sink_state->batch_index = next_batch_index;
+
+	bool fetch_data = true;
+	while (fetch_data) {
+		fetch_data = pipeline.is_lip_pipeline;
+
+		auto &source_result = pipeline.is_lip_pipeline ? *lip_chunks[0] : result;
+		if (pipeline.is_lip_pipeline) {
+			source_result.Reset();
+		}
+
+		auto &global_source_state =
+		    pipeline.is_backpressure_pipeline ? *pipeline.polar_config->source_state : *pipeline.source_state;
+		pipeline.source->GetData(context, source_result, global_source_state, *local_source_state);
+		if (source_result.size() != 0 && requires_batch_index) {
+			auto next_batch_index =
+			    pipeline.source->GetBatchIndex(context, source_result, global_source_state, *local_source_state);
+			next_batch_index += pipeline.base_batch_index;
+			D_ASSERT(local_sink_state->batch_index <= next_batch_index ||
+			         local_sink_state->batch_index == DConstants::INVALID_INDEX);
+			local_sink_state->batch_index = next_batch_index;
+		}
+
+		if (source_result.size() == 0) {
+			break;
+		}
+
+		if (pipeline.is_lip_pipeline) {
+			lip_counter++;
+			auto &operators = pipeline.GetOperators();
+			for (idx_t i = 0; i < lip_join_idxs.size(); i++) {
+				auto &next_chunk = i == lip_join_idxs.size() - 1 ? result : *lip_chunks[i + 1];
+				next_chunk.Reset();
+				idx_t join_idx = lip_join_idxs[i];
+				auto *join = (PhysicalHashJoin *)operators[join_idx];
+				join->ProbeBloomFilter(*lip_chunks[i], next_chunk, *intermediate_states[join_idx]);
+				lip_statistics[join_idx].first += lip_chunks[i]->size();
+				lip_statistics[join_idx].second += lip_chunks[i]->size() - next_chunk.size();
+				if (next_chunk.size() == 0) {
+					break;
+				}
+			}
+
+			// Re-order
+			if (lip_counter % LIP_THRESHOLD == 0) {
+				std::sort(lip_join_idxs.begin(), lip_join_idxs.end(), [&](idx_t a, idx_t b) {
+					double miss_rate_a =
+					    lip_statistics[a].first == 0 ? 1 : (double)lip_statistics[a].second / lip_statistics[a].first;
+					double miss_rate_b =
+					    lip_statistics[b].first == 0 ? 1 : (double)lip_statistics[b].second / lip_statistics[b].first;
+					return miss_rate_a > miss_rate_b;
+				});
+			}
+
+			// Reset
+			if (lip_counter >= LIP_THRESHOLD) {
+				for (auto &statistic : lip_statistics) {
+					statistic.second.first = 0;
+					statistic.second.second = 0;
+				}
+				lip_counter = 0;
+			}
+
+			fetch_data = result.size() == 0;
+		}
 	}
 	EndOperator(pipeline.source, &result);
 }
