@@ -78,7 +78,7 @@ COPY supplier FROM 'PATHVAR/supplier.tbl' (DELIMITER '|');
 COPY date FROM 'PATHVAR/date.tbl' (DELIMITER '|');
 
 -- CUSTOMER
-UPDATE customer SET c_region = 'AMERICA', c_nation = 'UNITED STATES', c_city = 'TODO' --TODO: city
+UPDATE customer SET c_region = 'AMERICA', c_nation = 'UNITED STATES', c_city = 'UNITED ST6'
 WHERE c_region <> 'AMERICA' AND c_custkey % 10 <> 0;
 
 CREATE TABLE additional_cust (ac_id INTEGER, ac_nation VARCHAR);
@@ -136,7 +136,7 @@ DROP VIEW c2;
 DROP VIEW c3;
 
 -- SUPPLIER
-UPDATE supplier SET s_region = 'ASIA', s_nation = 'CHINA', s_city = 'TODO' --TODO: city
+UPDATE supplier SET s_region = 'ASIA', s_nation = 'CHINA', s_city = 'CHINA6'
 WHERE s_region <> 'ASIA' AND s_suppkey % 10 <> 0;
 
 CREATE VIEW s1 AS SELECT row_number() OVER () - 1 AS s_id, s_suppkey AS s_suppkey1 FROM supplier WHERE s_region = 'ASIA';
